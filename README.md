@@ -141,10 +141,11 @@ off per-request:
 "chat_template_kwargs": {"enable_thinking": false}
 ```
 
-If an agent session starts streaming `!!!!!!` until `max_tokens`, that is
-[sgl-project/sglang#36537](https://github.com/sgl-project/sglang/issues/36537)
-— see [Known quirks](#known-quirks-read-before-filing-a-bug). This recipe keeps
-thinking on.
+The day-0 image could stream `!!!!!!` until `max_tokens` on some agent prompts.
+That was a QSA sparse-decode kernel-path problem, not an incompatibility between
+thinking and tools; this recipe backports
+[sgl-project/sglang#36556](https://github.com/sgl-project/sglang/pull/36556).
+Thinking and structured tools remain enabled.
 
 Images work through the standard `image_url` content part.
 
@@ -251,7 +252,7 @@ the ones you'll actually touch:
 | `CHUNKED_PREFILL_SIZE` | `1024` | Keep ≤1024 for 900k ctx — the QSA indexer logits buffer is `[chunk × history]` fp32 |
 | `MAMBA_FULL_MEMORY_RATIO` | `0.3` | Default 0.9 over-provisions mamba (47% of budget); 0.3 is enough for 14 requests |
 | `SPEC_STEPS` / `SPEC_TOPK` / `SPEC_DRAFT` | `3` / `1` / `4` | NEXTN spec-decode chain |
-| `KERNEL_PATCH` | `1` | Build+use the SM121 QSA fallback image |
+| `KERNEL_PATCH` | `1` | Build+use the image with the upstream SM12x QSA resolver backport |
 | `IMAGE` | *(auto)* | Use a specific image verbatim, skip patching |
 | `DOWNLOAD_MODE` | `rsync` | `direct` = worker pulls from HF itself |
 | `CPUSET` | `5-9,15-19` | GB10 big cores; empty disables pinning |
@@ -259,35 +260,18 @@ the ones you'll actually touch:
 
 ## Known quirks (read before filing a bug)
 
-- **Agent `!!!!!!` loop (thinking + tools)** —
-  [sgl-project/sglang#36537](https://github.com/sgl-project/sglang/issues/36537).
-  This model thinks by default. When a client also sends OpenAI `tools` *and*
-  the server uses `--tool-call-parser qwen3_coder`, SGLang can emit token ID 0
-  in a tight loop. This tokenizer decodes 0 as `!`, so the reply becomes
-  `!!!!!!…` until `max_tokens`. Spec accept rate drops to 0.00; disconnected
-  clients keep generating. **This recipe does not disable thinking.** The only
-  known workaround (until upstream ships a real fix) is to turn thinking off
-  for those sessions:
-
-  Per request (preferred — keeps thinking for everything else):
-
-  ```json
-  "chat_template_kwargs": {"enable_thinking": false}
-  ```
-
-  Or server-wide, then `./start.sh stop && ./start.sh serve`:
-
-  ```bash
-  EXTRA_ARGS='--tool-call-parser qwen3_coder --default-chat-template-kwargs {"enable_thinking":false}' ./start.sh serve
-  ```
-
-  (`EXTRA_ARGS` is appended last; if `.env` already sets `EXTRA_ARGS`, merge
-  into that line — no spaces inside the JSON.) Do **not** opt thinking back on
-  in the same request that sends `tools`. Without the parser, thinking works
-  but tool calls leak as `<tool_call>` XML in `content` instead of
-  `message.tool_calls`. There is no day-0 flag that gives thinking *and*
-  structured tools together. Cap agent temperature at ≤ 0.7 if you use the
-  workaround; a residual loop has been seen at temp 1.0.
+- **Agent `!!!!!!` loop on the day-0 image** — the symptom is recorded in
+  [sglang#36537](https://github.com/sgl-project/sglang/issues/36537), but our
+  kernel A/B test did not support its thinking/tool-parser diagnosis. On SM12x,
+  QSA incorrectly rejected its working FlashInfer TRTLLM sparse-decode path and
+  fell through to an incompatible or numerically unstable varlen-attention
+  path. Tool-heavy `xhigh` prompts exposed the corruption; they did not cause
+  it. This recipe backports the resolver fix from
+  [sglang#36556](https://github.com/sgl-project/sglang/pull/36556), which enables
+  TRTLLM sparse decode on SM120/SM121. The unchanged 9,441-token reproduction
+  completes with thinking and structured `qwen3_coder` tools enabled. If the
+  loop returns, confirm `KERNEL_PATCH=1`, rebuild the derivative image, and
+  verify the server image contains the SM12x resolver gate.
 
 - **TileLang data-race warning at JIT time** —
   `Logits(bx, position) is written by multiple threads in loop (token,)` from

@@ -66,17 +66,15 @@
 #  .cache/triton for later boots) and CUDA-graph capture. Default readiness
 #  timeout is 90 minutes (WAIT_TIMEOUT_MIN).
 #
-#  SM121 kernel work (DSpark patch, validated on this cluster):
+#  SM121 kernel work (backport of sgl-project/sglang#36556):
 #    The stock lmsysorg/sglang:qwen38flashnext CANNOT serve this model on
-#    GB10: the QSA (Qwen sparse attention) backend resolves its packed
-#    varlen attention to flash-attn-4's CuTe-DLS kernels, which fail MLIR
-#    compilation on SM121. This script builds a derivative image
-#    (qwen38-flashnext-dspark:local) that swaps in a Triton
-#    FlashDecoding-style fallback — CUDA-graph-safe (cu_seqlens are read
-#    on-device, so graph replay works). Validated end-to-end: single-node
-#    and 2-node TP2 dummy boots with prefill, decode CUDA graphs and NEXTN
-#    speculative decoding. KERNEL_PATCH=0 disables the patch (the stock
-#    image then dies at warmup with an MLIRError).
+#    GB10: QSA's working FlashInfer TRTLLM sparse-decode path is incorrectly
+#    gated to SM100, so SM121 falls through to flash-attn-4's CuTe kernel,
+#    which fails MLIR compilation. This script builds a derivative image
+#    (qwen38-flashnext-dspark:local) that enables the existing TRTLLM path
+#    on SM12x and uses SGLang's architecture-owned FA4 dispatcher as its
+#    fallback. KERNEL_PATCH=0 disables the backport (the stock image then
+#    dies at warmup with an MLIRError).
 #
 #  GB10 WARNING — never probe this model with --load-format dummy:
 #    initialize_dummy_weights() materializes an fp16 COPY of the ~26 GB/rank
@@ -409,8 +407,10 @@ ensure_base_image() {
   fi
 }
 
-# SM121 QSA fallback kernel (see header). Written as a docker build context
-# under .patch/ and built identically on both nodes.
+# SM121 QSA resolver backport (see header). Written as a docker build context
+# under .patch/ and built identically on both nodes. The legacy fallback source
+# is still generated below for bisecting, but the upstream resolver patch does
+# not copy or use it.
 write_patch_context() {
   mkdir -p "${SCRIPT_DIR}/.patch"
   cat > "${SCRIPT_DIR}/.patch/qsa_fa_fallback.py" <<'QSA_EOF'
@@ -613,21 +613,43 @@ QSA_EOF
 # See start.sh header for the full story.
 FROM ${BASE_IMAGE}
 
-COPY qsa_fa_fallback.py /sgl-workspace/sglang/python/sglang/srt/layers/attention/qsa_fa_fallback.py
+# Backport https://github.com/sgl-project/sglang/pull/36556. The helper named
+# is_sm120_supported checks compute-capability major == 12, so it includes
+# both SM120 and SM121.
 RUN python3 - <<'PYEOF'
 p = "/sgl-workspace/sglang/python/sglang/srt/layers/attention/qwen_sparse_attn_backend.py"
 s = open(p).read()
-anchor = "    try:\n        from flash_attn import flash_attn_varlen_func"
-patch = (
-    "    from sglang.srt.utils import is_sm100_supported\n"
-    "    if not is_sm100_supported():\n"
-    "        from sglang.srt.layers.attention.qsa_fa_fallback import triton_varlen_attn_func\n"
-    "        return triton_varlen_attn_func\n"
-) + anchor
-assert anchor in s, "anchor not found — upstream image layout changed"
-assert "qsa_fa_fallback" not in s, "already patched"
-open(p, "w").write(s.replace(anchor, patch, 1))
-print("qwen_sparse_attn_backend.py patched for SM121")
+old_gate = """    from sglang.srt.utils import is_sm100_supported
+
+    if not is_sm100_supported():
+"""
+new_gate = """    from sglang.srt.utils import is_sm100_supported, is_sm120_supported
+
+    if not (is_sm100_supported() or is_sm120_supported()):
+"""
+old_fallback = """    Classic flash_attn (FA2, Ampere/Hopper) is preferred when installed;
+    flash-attn-4's cute interface serves the same call shape on Blackwell.
+    \"\"\"
+    try:
+"""
+new_fallback = """    SM120 uses SGLang's architecture-owned FA4 dispatcher. Other platforms
+    prefer classic flash_attn (FA2) before flash-attn-4's cute interface.
+    \"\"\"
+    from sglang.srt.utils import is_sm120_supported
+
+    if is_sm120_supported():
+        from sglang.kernels.ops.attention.flash_attention_v4 import (
+            flash_attn_varlen_func,
+        )
+
+        return flash_attn_varlen_func
+    try:
+"""
+assert s.count(old_gate) == 1, "TRTLLM resolver gate changed upstream"
+assert s.count(old_fallback) == 1, "varlen fallback resolver changed upstream"
+s = s.replace(old_gate, new_gate, 1).replace(old_fallback, new_fallback, 1)
+open(p, "w").write(s)
+print("qwen_sparse_attn_backend.py patched with sglang#36556 for SM12x")
 PYEOF
 DKR_EOF
 }
@@ -636,7 +658,7 @@ ensure_patched_image() {
   header "SM121 kernel patch → ${PATCHED_IMAGE}"
   write_patch_context
   local stamp
-  stamp="$(cat "${SCRIPT_DIR}/.patch/qsa_fa_fallback.py" "${SCRIPT_DIR}/.patch/Dockerfile" | sha256sum | cut -d' ' -f1)"
+  stamp="$(sha256sum "${SCRIPT_DIR}/.patch/Dockerfile" | cut -d' ' -f1)"
 
   if docker image inspect "${PATCHED_IMAGE}" >/dev/null 2>&1 \
      && [[ "$(cat "${SCRIPT_DIR}/.patch/.stamp" 2>/dev/null)" == "${stamp}" ]]; then
