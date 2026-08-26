@@ -30,8 +30,8 @@ Spark (GB10 / SM121)** nodes in tensor parallel over a direct ConnectX-7
 - Self-healing and idempotent: rerun after a failure and it resumes the
   download, reuses caches, and replaces stale containers
 
-Measured on this cluster (2× GB10, TP=2): **4 × 80-token parallel completions
-in 3.6 s (~90 tok/s aggregate)**, ~40 tok/s single-stream with reasoning on,
+Measured on this cluster (2× GB10, TP=2): **64 tok/s single-stream decode,
+117 tok/s aggregate at ×2 concurrency** with NEXTN speculative decoding;
 vision input working (`text` + `image`).
 
 ## Why it needed kernel work
@@ -276,6 +276,22 @@ start.sh          # everything: download, sync, image build, launch, ops
 .sglang.log       # head container log
 .sglang-worker.log# worker container log
 ```
+
+## Performance (decode, structural)
+
+Benchmarked with `sglang bench_serving` on the live 2-node cluster:
+
+| Streams | TTFT | Aggregate tok/s | Per-stream tok/s |
+|---|---|---|---|
+| ×1 | 117 ms | 64.4 | 64.4 |
+| ×2 | 169 ms | 116.8 | 60.3 |
+| ×4 | 517 ms | 114.1 | 33.2 |
+
+NEXTN speculative decoding (`3/1/4`) is the primary throughput driver — each
+decode step verifies 4 draft tokens in a single forward pass. Aggregate
+throughput peaks at ×2 streams (117 tok/s) and plateaus beyond that as the
+QSA indexer prefill workspace and mamba cache contend for the same ~17 GB of
+free GPU memory.
 
 ## Credits
 
