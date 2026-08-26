@@ -104,13 +104,18 @@ Prereqs (head node, a.k.a. spark1):
 
 - Docker + the `hf` CLI (`pip install hf`), an HF token in `~/.bashrc` if the
   repo needs auth
-- Passwordless `ssh` to the worker under the alias `spark2`
-  (`WORKER_SSH=spark2` is the default; put yours in `.env`)
+- Passwordless `ssh` to the worker node
+  - Default assumes a `~/.ssh/config` alias `spark2` (override with
+    `WORKER_HOST`/`WORKER_SSH` in `.env` — see `.env.example`)
+  - The worker login user defaults to the **same user** you run `start.sh`
+    as on the head; set `WORKER_USER` in `.env` only if the worker uses a
+    different account
 - Both nodes: the ConnectX-7 ports cabled **directly** (no switch) and
   `rocep1s0f1/enp1s0f1np1` ↔ `rocep1s0f0/enp1s0f0np0` up
 
 ```bash
 git clone <this-repo> && cd <this-repo>
+cp .env.example .env       # then edit HEAD_CX7_IP / WORKER_CX7_IP / WORKER_HOST
 ./start.sh doctor      # fabric / GPU / RAM / disk / ssh preflight
 ./start.sh download    # ~135 GB → head, then rsync → worker (resumable)
 ./start.sh serve       # builds patched image (both nodes), boots TP2, waits
@@ -222,12 +227,17 @@ The number that matters is `available_gpu_mem` in the SGLang log (or `free -h`'s
 
 ## Key tunables
 
-Set via shell env or a `.env` next to `start.sh` (shell env wins). Full list in
-the script header; the ones you'll actually touch:
+Set via shell env or a `.env` next to `start.sh` (shell env wins; see
+`.env.example` for a ready-to-edit template). Full list in the script header;
+the ones you'll actually touch:
 
 | Variable | Default | Notes |
 |---|---|---|
-| `WORKER_SSH` | `spark2` | ssh alias of the worker node |
+| `HEAD_CX7_IP` | `10.0.22.1` | head's CX7 RoCE IP (rendezvous + NCCL rail) |
+| `WORKER_CX7_IP` | `10.0.22.2` | worker's CX7 RoCE IP |
+| `WORKER_HOST` | `spark2` | worker hostname/IP or `~/.ssh/config` alias for ssh |
+| `WORKER_USER` | *(empty)* | empty = reuse the head login user (most setups); set only if the worker uses a different account |
+| `WORKER_SSH` | *(derived)* | full `user@host` override if you need it |
 | `PORT` | `8888` | API port, bound on all interfaces |
 | `MEM_FRACTION_STATIC` | `0.82` | Budget for unified DRAM; 0.82 leaves ~17 GB free for prefill transients |
 | `PLE_OFFLOAD` | *(auto)* | Empty = auto-rule (recommended on GB10); `1`/`0` to force |
@@ -271,6 +281,8 @@ the script header; the ones you'll actually touch:
 
 ```
 start.sh          # everything: download, sync, image build, launch, ops
+.env.example      # copy to .env and edit (cluster IPs, worker ssh, recipe)
+.env              # your local config (gitignored — create from .env.example)
 .patch/           # (generated) SM121 kernel-patch Docker build context
 .serve.log        # launcher output
 .sglang.log       # head container log

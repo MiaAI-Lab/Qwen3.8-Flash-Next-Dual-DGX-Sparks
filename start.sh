@@ -55,9 +55,11 @@
 #     ~/nccl-2.30.7 on BOTH nodes by default (set 0 to use the bundled one).
 #
 #  Cluster assumed (matches this pair of Sparks):
-#    head    spark1  mia   10.0.22.1  (CX7 rocep1s0f1 / enp1s0f1np1)  ← run here
-#    worker  spark2  zurih 10.0.22.2  (CX7 rocep1s0f0 / enp1s0f0np0)
-#  SSH to the worker goes through the ~/.ssh/config alias in WORKER_SSH.
+#    head    spark1  10.0.22.1  (CX7 rocep1s0f1 / enp1s0f1np1)  ← run here
+#    worker  spark2  10.0.22.2  (CX7 rocep1s0f0 / enp1s0f0np0)
+#  All of HEAD_CX7_IP, WORKER_CX7_IP and the worker ssh target are overridable
+#  via .env (see .env.example). The worker login user defaults to the SAME user
+#  as the head; set WORKER_USER only if the worker uses a different account.
 #
 #  First boot takes a while: 135 GB download (head) + rsync to the worker,
 #  weight load on both nodes, QSA/GDN Triton JIT compilation (cached under
@@ -98,7 +100,13 @@
 #    IMAGE=<name>               use this image verbatim (no patch build)
 #    PLE_OFFLOAD=               empty = auto (offload; recommended on GB10)
 #                               1 = --ple-offload-embedding, 0 = GPU-resident
-#    WORKER_SSH=spark2          ssh alias for the worker node
+#    WORKER_SSH=spark2          ssh target for the worker (user@host form).
+#                               Defaults to WORKER_HOST (alias) under the head
+#                               user; set WORKER_USER only for a different login.
+#    WORKER_USER=                empty = reuse the head login user (most setups)
+#    WORKER_HOST=spark2          worker hostname/IP for ssh (or a ~/.ssh/config alias)
+#    HEAD_CX7_IP=10.0.22.1       head's CX7 RoCE IP (rendezvous + NCCL rail)
+#    WORKER_CX7_IP=10.0.22.2     worker's CX7 RoCE IP
 #    HF_HOME=~/.cache/huggingface        head-side HF cache
 #    WORKER_HF_HOME=<auto>      worker-side HF cache (default $HOME/.cache/…)
 #    DIST_PORT=26400            2-node rendezvous port on the head
@@ -168,7 +176,20 @@ WORKER_CX7_IB="${WORKER_CX7_IB:-rocep1s0f0}"
 # wired on this pair; to use it set e.g.:
 #   HEAD_CX7_IB="rocep1s0f1,roceP2p1s0f1" WORKER_CX7_IB="rocep1s0f0,roceP2p1s0f0" NCCL_CROSS_NIC=1
 
-WORKER_SSH="${WORKER_SSH:-spark2}"
+# Worker SSH target. Most setups run the SAME user on both nodes, so the
+# worker user is optional — leave WORKER_USER empty to reuse the head login
+# user (ssh's own default). Set WORKER_HOST to the worker's hostname/IP for
+# ssh; leave it at the alias "spark2" if you have a ~/.ssh/config entry.
+# WORKER_SSH, if set explicitly, overrides everything (use user@host form).
+WORKER_USER="${WORKER_USER:-}"
+WORKER_HOST="${WORKER_HOST:-spark2}"
+if [[ -n "${WORKER_SSH:-}" ]]; then
+  : # explicit override wins
+elif [[ -n "${WORKER_USER}" ]]; then
+  WORKER_SSH="${WORKER_USER}@${WORKER_HOST}"
+else
+  WORKER_SSH="${WORKER_HOST}"   # ssh alias — uses the head user by default
+fi
 SSH_OPTS=(-o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o BatchMode=yes)
 
 HEAD_CONTAINER="qwen38-flash-next-head"
