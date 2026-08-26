@@ -1,0 +1,9 @@
+.probe/
+.patch/
+.cache/
+.serve.log
+.sglang.log
+.sglang-worker.log
+.download.log
+.env
+*.bak
