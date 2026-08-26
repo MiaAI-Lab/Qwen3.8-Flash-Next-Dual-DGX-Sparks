@@ -204,14 +204,21 @@ multi-node-TP stability on GB10.
 
 ## Memory layout (per node, TP=2)
 
-| Component | Where | Size |
-|---|---|---|
-| NVFP4 expert weights (sharded) | GPU | ~68 GB |
-| Dense / MTP / vision (bf16, sharded) | GPU | ~6 GB |
-| PLE n-gram table (fp8, vocab-sharded) | **pinned host** | ~26 GB |
-| KV cache (bf16, both pools) | GPU | 9.0 GB → **956,800 tokens** |
-| Mamba/GDN state cache | GPU | ~3.6 GB (73 slots) |
-| CUDA graphs + NCCL workspaces | GPU | ~8 GB |
+| Component | Where | Size | nvidia-smi? |
+|---|---|---|---|
+| NVFP4 expert + dense/MTP/vision weights | GPU device | ~62.5 GB | ✅ `sglang::scheduler_TP0 63971MiB` |
+| PLE n-gram table (fp8, cudaHostAlloc) | **pinned host** | ~11 GB | ❌ host-side, invisible |
+| KV cache (bf16, both pools) | GPU device | 9.0 GB → **956,800 tokens** | ✅ |
+| Mamba/GDN state cache | GPU device | ~3.6 GB (73 slots) | ✅ |
+| CUDA graphs + NCCL/cuBLAS workspaces | GPU device | ~8 GB | ✅ |
+| **Total CUDA-visible** | | **~95.6 GB** | |
+| **Free (avail_gpu_mem)** | | **~17.5 GB** | |
+
+nvidia-smi per-process only shows CUDA device allocations — the pinned PLE
+(`cudaHostAlloc`) lives in host RAM and is invisible to nvidia-smi, but GB10's
+unified memory means it *does* consume from the same 121.7 GB physical DRAM.
+The number that matters is `available_gpu_mem` in the SGLang log (or `free -h`'s
+"available" column), which accounts for everything.
 
 ## Key tunables
 
