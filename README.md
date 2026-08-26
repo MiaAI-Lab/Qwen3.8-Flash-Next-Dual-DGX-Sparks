@@ -66,6 +66,37 @@ derivative Docker image):
 The result: `qwen38-flashnext-dspark:local`, built on both nodes by `start.sh`,
 boots, serves, and captures decode CUDA graphs across both machines.
 
+### NVFP4 KV cache (`NVFP4_KV_CACHE=1`)
+
+The same derivative image adds **NVFP4 KV cache** for the QSA layers — another
+path upstream SGLang never wired for this architecture. Upstream's NVFP4 recipe
+assumes FlashInfer prefill reading an FP8 *dequant workspace* covering the whole
+pool plus TRT-LLM decode consuming native packed FP4 — neither consumer exists
+on the QSA path (and the FP8 workspace alone would eat most of the FP4 savings:
+fp4 + scales + fp8 workspace ≈ 1.56 B/elem vs bf16's 2; without it, 0.5625).
+
+The patch (`qsa_nvfp4_kv.py` + `apply_nvfp4_patches.py`, applied at image
+build):
+
+- an `NVFP4KVCacheMethod` variant declaring **plain BF16 dequant reads** for
+  every backend/phase — the pool allocates packed FP4 + per-block FP8 scales,
+  no FP8 workspace
+- the QSA decode/verify path runs the stock Triton compaction kernel over the
+  packed FP4 buffers and (a second pass) the scale buffers, then dequantizes
+  the gathered rows with flashinfer's `nvfp4_kv_dequantize`
+- the chunked-prefill history gather dequantizes per-request on the way out
+- `--kv-cache-dtype nvfp4` is allowed for QSA hybrids (upstream's MHA
+  allow-list doesn't apply) and the pool-sizing math skips the FP8 workspace
+  share
+
+Enable it with `NVFP4_KV_CACHE=1` in `.env` (or inline: `NVFP4_KV_CACHE=1
+./start.sh serve`); `0` (the default) keeps bf16 KV. All kernels are
+CUDA-graph-safe on SM121 (verified bit-exact replay). Effect:
+**~3.5× KV capacity** (3456 vs 12288 bytes/token for K+V across the 12
+full-attention layers, plus the BF16 QSA index cache) at FP4 KV accuracy
+(~9 % relative K/V error — fine for chat, measure before trusting it on
+long-context retrieval).
+
 ## The GB10 memory cliff (crash post-mortem)
 
 Two of our early boot attempts **hard-froze both machines** — no kernel panic,
@@ -218,7 +249,7 @@ multi-node-TP stability on GB10.
 |---|---|---|---|
 | NVFP4 expert + dense/MTP/vision weights | GPU device | ~62.5 GB | ✅ `sglang::scheduler_TP0 63971MiB` |
 | PLE n-gram table (fp8, cudaHostAlloc) | **pinned host** | ~11 GB | ❌ host-side, invisible |
-| KV cache (bf16, both pools) | GPU device | 9.0 GB → **956,800 tokens** | ✅ |
+| KV cache (bf16, both pools) | GPU device | 9.0 GB → **956,800 tokens** (`NVFP4_KV_CACHE=1`: ~2.6 GB → ~3× tokens) | ✅ |
 | Mamba/GDN state cache | GPU device | ~3.6 GB (73 slots) | ✅ |
 | CUDA graphs + NCCL/cuBLAS workspaces | GPU device | ~8 GB | ✅ |
 | **Total CUDA-visible** | | **~95.6 GB** | |
@@ -246,6 +277,8 @@ the ones you'll actually touch:
 | `PORT` | `8888` | API port, bound on all interfaces |
 | `MEM_FRACTION_STATIC` | `0.82` | Budget for unified DRAM; 0.82 leaves ~17 GB free for prefill transients |
 | `PLE_OFFLOAD` | *(auto)* | Empty = auto-rule (recommended on GB10); `1`/`0` to force |
+| `NVFP4_KV_CACHE` | `0` | `1` = NVFP4 KV cache for the QSA layers (dequant-on-gather, ~3.5× KV tokens, FP4 KV accuracy); `0` = bf16 |
+| `KV_CACHE_DTYPE` | *(empty)* | raw `--kv-cache-dtype` override (e.g. `fp8_e4m3`, untested); must be empty when `NVFP4_KV_CACHE=1` |
 | `CONTEXT_LENGTH` | `900000` | YaRN-scaled (factor 4.0, native 262144); pool is 956,800 tokens |
 | `MAX_RUNNING_REQUESTS` | `16` | Concurrency (capped at 14 by mamba slots at ratio 0.3) |
 | `CHUNKED_PREFILL_SIZE` | `1024` | Keep ≤1024 for 900k ctx — the QSA indexer logits buffer is `[chunk × history]` fp32 |
@@ -319,6 +352,9 @@ start.sh          # everything: download, sync, image build, launch, ops
 .env.example      # copy to .env and edit (cluster IPs, worker ssh, recipe)
 .env              # your local config (gitignored — create from .env.example)
 .patch/           # (generated) SM121 kernel-patch Docker build context
+                  #   qsa_fa_fallback.py     — Triton varlen attention fallback
+                  #   qsa_nvfp4_kv.py        — NVFP4 KV cache for the QSA path
+                  #   apply_nvfp4_patches.py — source patches applied at build
 .serve.log        # launcher output
 .sglang.log       # head container log
 .sglang-worker.log# worker container log

@@ -78,6 +78,14 @@
 #    speculative decoding. KERNEL_PATCH=0 disables the patch (the stock
 #    image then dies at warmup with an MLIRError).
 #
+#    The same derivative image adds NVFP4 KV cache support for the QSA
+#    layers (NVFP4_KV_CACHE=1): the pool stores packed FP4 + per-block
+#    FP8 scales (no FP8 dequant workspace — the QSA path never needed one),
+#    and the QSA gather paths compact the packed rows with the stock Triton
+#    kernel and dequantize via flashinfer's nvfp4_kv_dequantize (validated
+#    CUDA-graph-safe on SM121). ~3.5x KV capacity at FP4 KV accuracy
+#    (~9% relative K/V error).
+#
 #  GB10 WARNING — never probe this model with --load-format dummy:
 #    initialize_dummy_weights() materializes an fp16 COPY of the ~26 GB/rank
 #    fp8 PLE table, which overcommits unified memory and hard-freezes the
@@ -121,7 +129,11 @@
 #    ENABLE_DECODE_GRAPHS=1     0 → --cuda-graph-backend-decode=disabled
 #    CUDA_GRAPH_BS="1 2 3 4 5 6 7 8 10 12 14 16"
 #    ATTENTION_BACKEND=flashinfer
-#    KV_CACHE_DTYPE=            empty = auto (bf16); e.g. fp8_e4m3 (experimental)
+#    NVFP4_KV_CACHE=0            1 = --kv-cache-dtype nvfp4 (the QSA FP4 KV
+#                                path above; ~3.5x KV capacity, FP4 KV
+#                                accuracy) · 0 = bf16 KV
+#    KV_CACHE_DTYPE=            raw --kv-cache-dtype override (e.g. fp8_e4m3);
+#                                must be empty when NVFP4_KV_CACHE=1
 #    FP4_GEMM_BACKEND=          empty = auto (proven on SM121 for the 27B)
 #    LINEAR_ATTN_PREFILL_BACKEND=  empty = default (triton on SM121)
 #    LINEAR_ATTN_DECODE_BACKEND=   empty = default (triton on SM121)
@@ -215,7 +227,8 @@ SPEC_DRAFT="${SPEC_DRAFT:-4}"
 ENABLE_DECODE_GRAPHS="${ENABLE_DECODE_GRAPHS:-1}"
 CUDA_GRAPH_BS="${CUDA_GRAPH_BS:-"1 2 3 4 5 6 7 8 10 12 14 16"}"
 ATTENTION_BACKEND="${ATTENTION_BACKEND:-flashinfer}"
-KV_CACHE_DTYPE="${KV_CACHE_DTYPE:-}"
+NVFP4_KV_CACHE="${NVFP4_KV_CACHE:-0}"   # 1 = NVFP4 FP4 KV cache (see header); 0 = bf16
+KV_CACHE_DTYPE="${KV_CACHE_DTYPE:-}"   # raw override (e.g. fp8_e4m3); must be empty when NVFP4_KV_CACHE=1
 PLE_OFFLOAD="${PLE_OFFLOAD:-}"
 FP4_GEMM_BACKEND="${FP4_GEMM_BACKEND:-}"
 LINEAR_ATTN_PREFILL_BACKEND="${LINEAR_ATTN_PREFILL_BACKEND:-}"
@@ -362,6 +375,14 @@ preflight() { # $1 = action; port checks only matter when serving
   fi
 
   # Config sanity
+  case "${NVFP4_KV_CACHE}" in
+    0|1) ;;
+    *) error "NVFP4_KV_CACHE must be 0 or 1 (got '${NVFP4_KV_CACHE}')"; exit 1 ;;
+  esac
+  if [[ "${NVFP4_KV_CACHE}" == "1" && -n "${KV_CACHE_DTYPE}" ]]; then
+    error "NVFP4_KV_CACHE=1 and KV_CACHE_DTYPE=${KV_CACHE_DTYPE} are both set — pick one"
+    exit 1
+  fi
   if (( CONTEXT_LENGTH > 262144 )); then
     error "CONTEXT_LENGTH=${CONTEXT_LENGTH} exceeds the native 262144 (YaRN for this model is untested here — use EXTRA_ARGS if you want to experiment)"
     exit 1
@@ -382,6 +403,9 @@ preflight() { # $1 = action; port checks only matter when serving
     extra_buffer|extra_buffer_lazy) ;;
     *) error "MAMBA_RADIX_CACHE_STRATEGY must be extra_buffer or extra_buffer_lazy (compressed QSA pins page-size 64; MambaRadixCache needs the extra-buffer strategy)"; exit 1 ;;
   esac
+  if [[ "${NVFP4_KV_CACHE}" == "1" ]]; then
+    ok "NVFP4 KV cache enabled (kv-cache-dtype nvfp4)"
+  fi
   ok "recipe constraints valid (NEXTN ${SPEC_STEPS}/${SPEC_TOPK}/${SPEC_DRAFT}, page 64, track ${MAMBA_TRACK_INTERVAL})"
 }
 
@@ -603,12 +627,569 @@ def triton_varlen_attn_func(
     return out
 QSA_EOF
 
+  cat > "${SCRIPT_DIR}/.patch/qsa_nvfp4_kv.py" <<'NVP4_EOF'
+"""NVFP4 KV cache for the QSA (Qwen4-Exp sparse attention) path on DGX Spark.
+
+Upstream SGLang's NVFP4 KV recipe assumes two consumers that do not exist on
+the QSA path: FlashInfer prefill reading an FP8 *dequant workspace* covering
+the whole pool, and TRT-LLM decode consuming native packed FP4.  The QSA
+backend instead gathers a sparse subset of KV rows with Triton kernels and
+wants dense BF16 rows.  On top of that, the full-size FP8 workspace would eat
+most of the FP4 savings (fp4 data + scales + fp8 workspace is ~1.56 B/elem
+against bf16's 2 B/elem; without the workspace it is 0.5625 B/elem — a 3.6x
+cut, verified CUDA-graph safe on SM121 via flashinfer's nvfp4_kv_* kernels).
+
+This module provides:
+
+* ``QSANVFP4KVCacheMethod`` — an NVFP4 method whose attention-access rules
+  declare PLAIN BF16 reads only (no DEQUANT_WORKSPACE, no NATIVE_FP4), so the
+  pool allocates packed FP4 + per-block FP8 scales and nothing else.  Plain
+  readers (``get_key_buffer``) dequantize on demand through
+  ``dequantize_kv_tensor``.  Quantization, storage layout, per-layer global
+  scales and slot moves are inherited unchanged from the upstream method.
+* ``try_fp4_view`` / ``compact_and_dequant`` / ``gather_history_fp4`` — the
+  gather-dequant helpers the patched ``QwenSparseAttnBackend`` calls on its
+  decode/verify and chunked-prefill paths.  The stock Triton compaction
+  kernel runs over the packed FP4 buffers and (a second time) over the
+  per-block scale buffers — same leading dims, dim/16 — and the compacted
+  rows are dequantized with flashinfer's ``nvfp4_kv_dequantize``.
+
+Wiring (applied by the sibling ``apply_nvfp4_patches.py`` build step):
+
+* ``get_kv_cache_quant_method("nvfp4")`` routes here (this image serves QSA
+  models; non-QSA models should use the stock image for nvfp4 KV).
+* ``_handle_kv4_compatibility`` allows nvfp4 KV for QSA hybrids whose
+  ``--attention-backend`` flag only selects the GDN linear-attn kernels.
+* The pool-configurator cell size skips the FP8 workspace share.
+"""
+
+from __future__ import annotations
+
+from typing import Optional, Tuple
+
+import torch
+
+from sglang.srt.layers.quantization.fp4_kv_cache_quant_method import (
+    KVCacheAttentionAccess,
+    KVCacheAttentionAccessKind,
+    KVCacheAttentionPhase,
+    KVCacheBackendMatcher,
+    NVFP4KVCacheMethod,
+)
+from sglang.srt.layers.quantization.kvfp4_tensor import NVFP4KVQuantizeUtil
+
+_BF16 = torch.bfloat16
+_U8 = torch.uint8
+_FP8 = torch.float8_e4m3fn
+
+
+def _plain_access(phase: KVCacheAttentionPhase) -> KVCacheAttentionAccess:
+    return KVCacheAttentionAccess(
+        phase,
+        KVCacheAttentionAccessKind.PLAIN,
+        KVCacheBackendMatcher(any_backend=True),
+        storage_dtype=_U8,
+        attention_kv_dtype=_BF16,
+        scale_recipe="nvfp4",
+    )
+
+
+class QSANVFP4KVCacheMethod(NVFP4KVCacheMethod):
+    """NVFP4 KV cache as consumed by the QSA backend: plain BF16 dequant reads.
+
+    Differs from the upstream ``NVFP4KVCacheMethod`` only in its declared
+    attention accesses: PLAIN for both phases and every backend.  As a
+    consequence the pool allocates no FP8 dequant workspace
+    (``needs_dequant_workspace()`` is False) and plain readers dequantize
+    packed FP4 + scales on demand.
+    """
+
+    def attention_accesses(self) -> tuple[KVCacheAttentionAccess, ...]:
+        return (
+            _plain_access(KVCacheAttentionPhase.PREFILL),
+            _plain_access(KVCacheAttentionPhase.DECODE),
+        )
+
+    @staticmethod
+    def _layer_global_scale(
+        scales_gpu: torch.Tensor, layer_id: int
+    ) -> torch.Tensor:
+        # The write path indexes k_scales_gpu by the GLOBAL layer id (with
+        # load_scales_from_model resizing the vector to cover global ids);
+        # guard against shorter vectors (all-ones scales) anyway.
+        if 0 <= layer_id < scales_gpu.numel():
+            return scales_gpu[layer_id : layer_id + 1]
+        return torch.ones(1, dtype=torch.float32, device=scales_gpu.device)
+
+    def dequantize_kv_tensor(
+        self,
+        fp4_tensor: torch.Tensor,
+        scales: torch.Tensor,
+        layer_id: int,
+        dtype: Optional[torch.dtype] = None,
+    ) -> torch.Tensor:
+        """Dequantize one packed FP4 KV tensor (whole-pool view) for plain reads."""
+        if scales.dtype != _FP8:
+            scales = scales.view(_FP8)
+        return NVFP4KVQuantizeUtil.dequantize(
+            fp4_tensor.view(_U8),
+            scales,
+            self._layer_global_scale(self.k_scales_gpu, layer_id),
+            dtype=dtype or _BF16,
+        )
+
+
+class QSAFP4KVView:
+    """Packed FP4 + per-block-scale buffers of one QSA full-attention layer."""
+
+    def __init__(self, k_fp4, v_fp4, k_sf, v_sf, k_gs, v_gs):
+        self.k_fp4 = k_fp4  # uint8 [rows, head_num, head_dim // 2]
+        self.v_fp4 = v_fp4
+        self.k_sf = k_sf  # float8_e4m3 view [rows, head_num, head_dim // 16]
+        self.v_sf = v_sf
+        self.k_gs = k_gs  # 1-element fp32 global scale (on device)
+        self.v_gs = v_gs
+        self.head_num = k_fp4.shape[1]
+        self.head_dim = k_fp4.shape[2] * 2
+        self.device = k_fp4.device
+
+    @property
+    def k_sf_u8(self) -> torch.Tensor:
+        return self.k_sf.view(_U8)
+
+    @property
+    def v_sf_u8(self) -> torch.Tensor:
+        return self.v_sf.view(_U8)
+
+    def dequant_rows(self, k_rows, k_sf_rows, v_rows, v_sf_rows):
+        """Dequantize already-gathered packed rows -> (k_bf16, v_bf16)."""
+        k = NVFP4KVQuantizeUtil.dequantize(
+            k_rows, k_sf_rows.view(_FP8), self.k_gs
+        )
+        v = NVFP4KVQuantizeUtil.dequantize(
+            v_rows, v_sf_rows.view(_FP8), self.v_gs
+        )
+        return k, v
+
+
+def try_fp4_view(pool, layer_id: int) -> Optional[QSAFP4KVView]:
+    """Return the layer's FP4 buffers, or None for an unquantized pool.
+
+    On SM100 the stock native-FP4 consumers stay in charge, so the QSA
+    gather-dequant path is SM120/SM121 (DGX Spark) only.
+    """
+    from sglang.srt.utils import is_sm100_supported
+
+    if is_sm100_supported():
+        return None
+    full_pool = getattr(pool, "full_kv_pool", pool)
+    quant_method = getattr(full_pool, "quant_method", None)
+    if quant_method is None or getattr(quant_method, "name", None) != "nvfp4":
+        return None
+    k_fp4, v_fp4, k_sf, v_sf = pool.get_raw_kv_buffer(layer_id)
+    k_gs = quant_method._layer_global_scale(quant_method.k_scales_gpu, layer_id)
+    v_gs = quant_method._layer_global_scale(quant_method.v_scales_gpu, layer_id)
+    return QSAFP4KVView(k_fp4, v_fp4, k_sf, v_sf, k_gs, v_gs)
+
+
+def compact_and_dequant(
+    backend,
+    fp4_kv: QSAFP4KVView,
+    scratch_capacity: int,
+    req_indices,
+    topk_indices,
+    sequence_lens,
+    cu_seqlens_k,
+    batch: int,
+    topk: int,
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    """Sparse gather + dequant for the QSA decode/verify path.
+
+    Runs the stock compaction kernel twice — once over the packed FP4 data,
+    once over the per-block scale buffers — then dequantizes the compacted
+    rows to BF16.  Kernel-only, so CUDA-graph capture/replay is safe (the
+    dequant scratch rows past the packed prefix hold garbage that the varlen
+    attention kernel never reads, exactly like the BF16 path).
+    """
+    from sglang.srt.layers.attention.qsa.sparse_attn import (
+        qwen_sparse_kv_extraction_compact_triton,
+    )
+
+    req_to_token = backend.req_to_token_pool.req_to_token
+    n, d = fp4_kv.head_num, fp4_kv.head_dim
+    # The scratch cache is keyed by (heads, dim, dtype, device), so the FP4
+    # data (dim/2), scale (dim/16) and BF16 (dim) buffers never collide.
+    pk_fp4, pv_fp4 = backend._get_fa2_scratch(
+        scratch_capacity, n, d // 2, _U8, fp4_kv.device
+    )
+    pk_sf, pv_sf = backend._get_fa2_scratch(
+        scratch_capacity, n, d // 16, _U8, fp4_kv.device
+    )
+    qwen_sparse_kv_extraction_compact_triton(
+        fp4_kv.k_fp4,
+        fp4_kv.v_fp4,
+        req_to_token,
+        req_indices,
+        topk_indices,
+        sequence_lens,
+        cu_seqlens_k,
+        pk_fp4,
+        pv_fp4,
+        batch,
+        topk,
+    )
+    qwen_sparse_kv_extraction_compact_triton(
+        fp4_kv.k_sf_u8,
+        fp4_kv.v_sf_u8,
+        req_to_token,
+        req_indices,
+        topk_indices,
+        sequence_lens,
+        cu_seqlens_k,
+        pk_sf,
+        pv_sf,
+        batch,
+        topk,
+    )
+    return fp4_kv.dequant_rows(pk_fp4, pk_sf, pv_fp4, pv_sf)
+
+
+def gather_history_fp4(
+    fp4_kv: QSAFP4KVView, req_to_token, req_indices, sequence_lens
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    """Chunked-prefill history gather: index_select + dequant per request.
+
+    Mirrors the BF16 path's per-request ``index_select`` + ``cat`` (the
+    validated chunk-prefill kernel consumes tightly packed full-context
+    K/V); the only difference is that the gathered packed rows are
+    dequantized to BF16 on the way out.
+    """
+    k_parts = []
+    v_parts = []
+    k_fp4, v_fp4 = fp4_kv.k_fp4, fp4_kv.v_fp4
+    k_sf_u8, v_sf_u8 = fp4_kv.k_sf_u8, fp4_kv.v_sf_u8
+    for i, seq_len in enumerate(sequence_lens):
+        slots = req_to_token[req_indices[i], :seq_len].long()
+        k_parts.append(
+            NVFP4KVQuantizeUtil.dequantize(
+                k_fp4[slots], k_sf_u8[slots].view(_FP8), fp4_kv.k_gs
+            )
+        )
+        v_parts.append(
+            NVFP4KVQuantizeUtil.dequantize(
+                v_fp4[slots], v_sf_u8[slots].view(_FP8), fp4_kv.v_gs
+            )
+        )
+    return torch.cat(k_parts), torch.cat(v_parts)
+NVP4_EOF
+
+  cat > "${SCRIPT_DIR}/.patch/apply_nvfp4_patches.py" <<'APPLY_EOF'
+#!/usr/bin/env python3
+"""Apply the DSpark NVFP4-KV source patches inside the qwen38flashnext image.
+
+All patches are QSA-scoped and inert unless ``--kv-cache-dtype nvfp4`` is set:
+
+1. ``qwen_sparse_attn_backend.py`` — the QSA gather paths (decode/verify and
+   chunked prefill) read the packed FP4 + per-block-scale buffers and
+   dequantize the gathered rows, instead of pulling whole BF16 pool views.
+2. ``fp4_kv_cache_quant_method.py`` — route ``nvfp4`` to the QSA plain-dequant
+   method (no FP8 dequant workspace, no native-FP4 decode path).
+3. ``server_args.py`` — allow nvfp4 KV for QSA hybrid models whose
+   ``--attention-backend`` only selects the GDN linear-attn kernels.
+4. ``pool_configurator.py`` — don't reserve the FP8 workspace share of the
+   FP4 cell size for QSA models (the QSA method allocates none).
+"""
+
+import pathlib
+
+SRT = pathlib.Path("/sgl-workspace/sglang/python/sglang/srt")
+
+MARKER = "qsa_nvfp4_kv"
+
+
+def patch(path, replacements):
+    s = path.read_text()
+    if MARKER in s:
+        print(f"{path.name}: already patched")
+        return
+    for anchor, replacement in replacements:
+        count = s.count(anchor)
+        assert count == 1, f"{path.name}: anchor matched {count} times (want 1):\n{anchor}"
+        s = s.replace(anchor, replacement, 1)
+    path.write_text(s)
+    print(f"{path.name}: patched")
+
+
+# ---------------------------------------------------------------------------
+# 1. QSA attention backend: FP4-aware gather paths
+# ---------------------------------------------------------------------------
+BACKEND = SRT / "layers" / "attention" / "qwen_sparse_attn_backend.py"
+
+IMPORT_ANCHOR = """from sglang.srt.layers.attention.qsa.sparse_attn import (
+    qwen_sparse_fa2_cu_seqlens_triton,
+    qwen_sparse_kv_extraction_compact_triton,
+    qwen_sparse_valid_counts_triton,
+    sparse_gqa_fwd_interface_triton,
+    sparse_gqa_fwd_interface_triton_ck,
+)
+"""
+IMPORT_REPLACEMENT = IMPORT_ANCHOR + (
+    "from sglang.srt.layers.attention import qsa_nvfp4_kv  # dspark: NVFP4 KV cache\n"
+)
+
+PAGED_HEAD_ANCHOR = """        pool = self.token_to_kv_pool
+        k_buffer = pool.get_key_buffer(layer.layer_id)
+        v_buffer = pool.get_value_buffer(layer.layer_id)
+        if not q.is_cuda:
+            metadata = self._resolve_metadata(forward_batch)
+            slots = self._logical_to_physical(topk_indices, metadata)
+            output = qsa_sparse_attention(q, k_buffer, v_buffer, slots, layer.scaling)
+            return output.reshape(q.shape[0], -1)
+"""
+PAGED_HEAD_REPLACEMENT = """        pool = self.token_to_kv_pool
+        fp4_kv = qsa_nvfp4_kv.try_fp4_view(pool, layer.layer_id)
+        if fp4_kv is None:
+            k_buffer = pool.get_key_buffer(layer.layer_id)
+            v_buffer = pool.get_value_buffer(layer.layer_id)
+        else:
+            k_buffer = v_buffer = None
+        if not q.is_cuda:
+            metadata = self._resolve_metadata(forward_batch)
+            if fp4_kv is not None:
+                # Whole-pool plain dequant (slow; CPU fallback only).
+                k_buffer = pool.get_key_buffer(layer.layer_id)
+                v_buffer = pool.get_value_buffer(layer.layer_id)
+            slots = self._logical_to_physical(topk_indices, metadata)
+            output = qsa_sparse_attention(q, k_buffer, v_buffer, slots, layer.scaling)
+            return output.reshape(q.shape[0], -1)
+"""
+
+EXTRACTION_ANCHOR = """        packed_k, packed_v = self._get_fa2_scratch(
+            scratch_capacity,
+            k_buffer.shape[1],
+            k_buffer.shape[2],
+            k_buffer.dtype,
+            k_buffer.device,
+        )
+        qwen_sparse_kv_extraction_compact_triton(
+            k_buffer,
+            v_buffer,
+            self.req_to_token_pool.req_to_token,
+            (
+                metadata.row_req_pool_indices
+                if metadata.row_req_pool_indices is not None
+                else forward_batch.req_pool_indices
+            ),
+            topk_indices,
+            sequence_lens,
+            cu_seqlens_k,
+            packed_k,
+            packed_v,
+            batch,
+            topk,
+        )
+"""
+EXTRACTION_REPLACEMENT = """        if fp4_kv is not None:
+            # dspark NVFP4: compact the packed FP4 rows and the per-block
+            # scale rows, then dequantize the gathered rows to BF16.
+            packed_k, packed_v = qsa_nvfp4_kv.compact_and_dequant(
+                self,
+                fp4_kv,
+                scratch_capacity,
+                (
+                    metadata.row_req_pool_indices
+                    if metadata.row_req_pool_indices is not None
+                    else forward_batch.req_pool_indices
+                ),
+                topk_indices,
+                sequence_lens,
+                cu_seqlens_k,
+                batch,
+                topk,
+            )
+        else:
+            packed_k, packed_v = self._get_fa2_scratch(
+                scratch_capacity,
+                k_buffer.shape[1],
+                k_buffer.shape[2],
+                k_buffer.dtype,
+                k_buffer.device,
+            )
+            qwen_sparse_kv_extraction_compact_triton(
+                k_buffer,
+                v_buffer,
+                self.req_to_token_pool.req_to_token,
+                (
+                    metadata.row_req_pool_indices
+                    if metadata.row_req_pool_indices is not None
+                    else forward_batch.req_pool_indices
+                ),
+                topk_indices,
+                sequence_lens,
+                cu_seqlens_k,
+                packed_k,
+                packed_v,
+                batch,
+                topk,
+            )
+"""
+
+EXTEND_CHUNK_ANCHOR = """        pool = self.token_to_kv_pool
+        k_buffer = pool.get_key_buffer(layer.layer_id)
+        v_buffer = pool.get_value_buffer(layer.layer_id)
+        req_to_token = self.req_to_token_pool.req_to_token
+        req_indices = forward_batch.req_pool_indices.tolist()
+        k_parts = [
+            k_buffer.index_select(
+                0, req_to_token[req_indices[i], : sequence_lens[i]].long()
+            )
+            for i in range(len(sequence_lens))
+        ]
+        v_parts = [
+            v_buffer.index_select(
+                0, req_to_token[req_indices[i], : sequence_lens[i]].long()
+            )
+            for i in range(len(sequence_lens))
+        ]
+"""
+EXTEND_CHUNK_REPLACEMENT = """        pool = self.token_to_kv_pool
+        req_to_token = self.req_to_token_pool.req_to_token
+        req_indices = forward_batch.req_pool_indices.tolist()
+        fp4_kv = qsa_nvfp4_kv.try_fp4_view(pool, layer.layer_id)
+        if fp4_kv is not None:
+            # dspark NVFP4: gather each request's history from the packed
+            # FP4 + scale buffers and dequantize to BF16.
+            k_cat, v_cat = qsa_nvfp4_kv.gather_history_fp4(
+                fp4_kv, req_to_token, req_indices, sequence_lens
+            )
+        else:
+            k_buffer = pool.get_key_buffer(layer.layer_id)
+            v_buffer = pool.get_value_buffer(layer.layer_id)
+            k_parts = [
+                k_buffer.index_select(
+                    0, req_to_token[req_indices[i], : sequence_lens[i]].long()
+                )
+                for i in range(len(sequence_lens))
+            ]
+            v_parts = [
+                v_buffer.index_select(
+                    0, req_to_token[req_indices[i], : sequence_lens[i]].long()
+                )
+                for i in range(len(sequence_lens))
+            ]
+            k_cat = torch.cat(k_parts)
+            v_cat = torch.cat(v_parts)
+"""
+
+EXTEND_CK_ANCHOR = """        output = sparse_gqa_fwd_interface_triton_ck(
+            q.contiguous(),
+            torch.cat(k_parts),
+            torch.cat(v_parts),
+"""
+EXTEND_CK_REPLACEMENT = """        output = sparse_gqa_fwd_interface_triton_ck(
+            q.contiguous(),
+            k_cat,
+            v_cat,
+"""
+
+# ---------------------------------------------------------------------------
+# 2. NVFP4 recipe routing: QSA plain-dequant method
+# ---------------------------------------------------------------------------
+FP4_METHOD = SRT / "layers" / "quantization" / "fp4_kv_cache_quant_method.py"
+
+FP4_METHOD_ANCHOR = """    return KV_CACHE_QUANT_REGISTRY[name](**kwargs)
+"""
+FP4_METHOD_REPLACEMENT = """    if name == "nvfp4":
+        # dspark (DGX Spark / SM121): QSA models consume the NVFP4 pool via
+        # plain BF16 dequant reads — no FP8 dequant workspace, no
+        # native-FP4 decode. See attention/qsa_nvfp4_kv.py.
+        from sglang.srt.layers.attention.qsa_nvfp4_kv import QSANVFP4KVCacheMethod
+
+        return QSANVFP4KVCacheMethod(**kwargs)
+    return KV_CACHE_QUANT_REGISTRY[name](**kwargs)
+"""
+
+# ---------------------------------------------------------------------------
+# 3. server_args: allow nvfp4 KV for QSA hybrid models
+# ---------------------------------------------------------------------------
+SERVER_ARGS = SRT / "server_args.py"
+
+SERVER_ARGS_ANCHOR = """        if is_cuda():
+            if self.kv_cache_dtype == "nvfp4" and not (
+                is_sm100_supported() or is_sm120_supported()
+            ):
+                raise RuntimeError(
+                    "--kv-cache-dtype=nvfp4 requires Blackwell SM100 or SM120. "
+                    "Use --kv-cache-dtype=fp4_mx_block16 for the block-size-16 FP4 recipe."
+                )
+"""
+SERVER_ARGS_REPLACEMENT = SERVER_ARGS_ANCHOR + """            # dspark (DGX Spark / SM121, see qsa_nvfp4_kv): on QSA hybrid
+            # models the full-attention layers read the FP4 pool through the
+            # QSA backend's Triton plain-dequant path; --attention-backend
+            # only selects the GDN linear-attention kernels, so the MHA
+            # allow-list below does not apply.
+            if self.kv_cache_dtype == "nvfp4":
+                try:
+                    from sglang.srt.layers.attention.qsa.config import is_qwen_qsa
+
+                    if is_qwen_qsa(self.get_model_config().hf_config):
+                        return
+                except Exception:
+                    pass
+"""
+
+# ---------------------------------------------------------------------------
+# 4. pool_configurator: no FP8 workspace share for QSA FP4 cell size
+# ---------------------------------------------------------------------------
+POOL_CFG = SRT / "model_executor" / "pool_configurator.py"
+
+POOL_CFG_ANCHOR = """                # FP4 prefill uses one shared FP8 dequant workspace across layers.
+                cell_size += n * k * 2 * kv_size
+"""
+POOL_CFG_REPLACEMENT = """                # FP4 prefill uses one shared FP8 dequant workspace across
+                # layers — except on the QSA path (dspark qsa_nvfp4_kv),
+                # whose method allocates no FP8 workspace.
+                _is_qsa_kv4 = False
+                try:
+                    from sglang.srt.layers.attention.qsa.config import is_qwen_qsa
+
+                    _is_qsa_kv4 = is_qwen_qsa(model_config.hf_config)
+                except Exception:
+                    pass
+                if not _is_qsa_kv4:
+                    cell_size += n * k * 2 * kv_size
+"""
+
+
+def main() -> None:
+    patch(
+        BACKEND,
+        [
+            (IMPORT_ANCHOR, IMPORT_REPLACEMENT),
+            (PAGED_HEAD_ANCHOR, PAGED_HEAD_REPLACEMENT),
+            (EXTRACTION_ANCHOR, EXTRACTION_REPLACEMENT),
+            (EXTEND_CHUNK_ANCHOR, EXTEND_CHUNK_REPLACEMENT),
+            (EXTEND_CK_ANCHOR, EXTEND_CK_REPLACEMENT),
+        ],
+    )
+    patch(FP4_METHOD, [(FP4_METHOD_ANCHOR, FP4_METHOD_REPLACEMENT)])
+    patch(SERVER_ARGS, [(SERVER_ARGS_ANCHOR, SERVER_ARGS_REPLACEMENT)])
+    patch(POOL_CFG, [(POOL_CFG_ANCHOR, POOL_CFG_REPLACEMENT)])
+    print("NVFP4 KV patches applied")
+
+
+if __name__ == "__main__":
+    main()
+APPLY_EOF
+
   cat > "${SCRIPT_DIR}/.patch/Dockerfile" <<DKR_EOF
 # DSpark kernel-work image for Qwen3.8-Flash-Next-NVFP4 on DGX Spark (SM121/GB10).
 # See start.sh header for the full story.
 FROM ${BASE_IMAGE}
 
 COPY qsa_fa_fallback.py /sgl-workspace/sglang/python/sglang/srt/layers/attention/qsa_fa_fallback.py
+COPY qsa_nvfp4_kv.py /sgl-workspace/sglang/python/sglang/srt/layers/attention/qsa_nvfp4_kv.py
+COPY apply_nvfp4_patches.py /tmp/apply_nvfp4_patches.py
 RUN python3 - <<'PYEOF'
 p = "/sgl-workspace/sglang/python/sglang/srt/layers/attention/qwen_sparse_attn_backend.py"
 s = open(p).read()
@@ -624,6 +1205,7 @@ assert "qsa_fa_fallback" not in s, "already patched"
 open(p, "w").write(s.replace(anchor, patch, 1))
 print("qwen_sparse_attn_backend.py patched for SM121")
 PYEOF
+RUN python3 /tmp/apply_nvfp4_patches.py && rm -f /tmp/apply_nvfp4_patches.py
 DKR_EOF
 }
 
@@ -631,7 +1213,7 @@ ensure_patched_image() {
   header "SM121 kernel patch → ${PATCHED_IMAGE}"
   write_patch_context
   local stamp
-  stamp="$(cat "${SCRIPT_DIR}/.patch/qsa_fa_fallback.py" "${SCRIPT_DIR}/.patch/Dockerfile" | sha256sum | cut -d' ' -f1)"
+  stamp="$(cat "${SCRIPT_DIR}/.patch/qsa_fa_fallback.py" "${SCRIPT_DIR}/.patch/qsa_nvfp4_kv.py" "${SCRIPT_DIR}/.patch/apply_nvfp4_patches.py" "${SCRIPT_DIR}/.patch/Dockerfile" | sha256sum | cut -d' ' -f1)"
 
   if docker image inspect "${PATCHED_IMAGE}" >/dev/null 2>&1 \
      && [[ "$(cat "${SCRIPT_DIR}/.patch/.stamp" 2>/dev/null)" == "${stamp}" ]]; then
@@ -642,7 +1224,12 @@ ensure_patched_image() {
     ok "patched image built on head"
   fi
 
-  rsync -a -e "ssh ${SSH_OPTS[*]}" "${SCRIPT_DIR}/.patch/" "${WORKER_SSH}:/tmp/qwen38-dspark-patch/"
+  # .stamp is excluded: it is only written on the worker AFTER a successful
+  # worker-side build. Syncing it here would make the freshness check below
+  # compare the just-synced stamp against itself and keep a stale worker
+  # image when the head rebuilds after a context change (head/worker drift).
+  rsync -a -e "ssh ${SSH_OPTS[*]}" --exclude '.stamp' --exclude '__pycache__' \
+    "${SCRIPT_DIR}/.patch/" "${WORKER_SSH}:/tmp/qwen38-dspark-patch/"
   if worker_docker image inspect "${PATCHED_IMAGE}" >/dev/null 2>&1 \
      && [[ "$(wrun "cat /tmp/qwen38-dspark-patch/.stamp 2>/dev/null")" == "${stamp}" ]]; then
     ok "patched image present on worker (context unchanged)"
@@ -883,7 +1470,11 @@ build_sglang_args() { # $1 = container model path
     --host "${HOST_BIND}"
     --port "${PORT}"
   )
-  [[ -n "${KV_CACHE_DTYPE}" ]]              && SGLANG_ARGS+=(--kv-cache-dtype "${KV_CACHE_DTYPE}")
+  if [[ "${NVFP4_KV_CACHE}" == "1" ]]; then
+    SGLANG_ARGS+=(--kv-cache-dtype nvfp4)
+  elif [[ -n "${KV_CACHE_DTYPE}" ]]; then
+    SGLANG_ARGS+=(--kv-cache-dtype "${KV_CACHE_DTYPE}")
+  fi
   [[ "${PLE_OFFLOAD}" == "1" ]]             && SGLANG_ARGS+=(--ple-offload-embedding)
   [[ "${PLE_OFFLOAD}" == "0" ]]             && SGLANG_ARGS+=(--no-ple-offload-embedding)
   [[ -n "${FP4_GEMM_BACKEND}" ]]            && SGLANG_ARGS+=(--fp4-gemm-backend "${FP4_GEMM_BACKEND}")
