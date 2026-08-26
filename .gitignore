@@ -3,6 +3,7 @@
 .cache/
 .serve.log
 .sglang.log
+.sglang.pid
 .sglang-worker.log
 .download.log
 .env

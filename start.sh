@@ -419,8 +419,8 @@ write_patch_context() {
 Upstream `qwen_sparse_attn_backend._resolve_flash_attn_varlen_func` prefers
 classic FA2 and otherwise falls back to flash-attn-4's CuTe DSL interface.
 FA4's cute kernels do not compile on SM121 (MLIR layout-congruence error),
-so this module provides a drop-in `flash_attn_varlen_func` backed by a Triton
-FlashDecoding-style kernel specialized for the QSA call contract:
+so this module provides a drop-in `flash_attn_varlen_func` backed by SGLang's
+validated Triton sparse-GQA kernel for the QSA call contract:
 
   * every "sequence" has exactly ONE query row (cu_seqlens_q = arange),
   * variable numbers of gathered KV rows per sequence (<= topk),
@@ -574,25 +574,38 @@ def triton_varlen_attn_func(
     q_c = q if q.is_contiguous() else q.contiguous()
     k_c = k if k.is_contiguous() else k.contiguous()
     v_c = v if v.is_contiguous() else v.contiguous()
-    out = torch.empty_like(q_c)
 
-    BLOCK_KV = 64
-    grid = (num_seqs, hq)
-    _varlen_one_q_attn_kernel[grid](
-        q_c, k_c, v_c, out,
+    # Reuse SGLang's production sparse-GQA kernel rather than maintaining a
+    # second attention implementation here. The original bespoke online-
+    # softmax kernel was close on random tensor tests, but diverged on real
+    # NEXTN verification traffic: tool-enabled xhigh prompts collapsed into a
+    # repeated punctuation token while this kernel and the stock shim did not.
+    from sglang.srt.layers.attention.qwen_sparse_attn_backend import (
+        sparse_gqa_fwd_interface_triton_ck,
+    )
+
+    valid_counts = (cu_seqlens_k[1:] - cu_seqlens_k[:-1]).to(torch.int32)
+    topk = int(max_seqlen_k)
+    if topk <= 0:
+        topk = int(valid_counts.max().item())
+    local_indices = torch.arange(topk, dtype=torch.int32, device=q.device)
+    local_indices = local_indices.unsqueeze(0).expand(num_seqs, -1)
+    local_indices = torch.where(
+        local_indices < valid_counts.unsqueeze(1),
+        local_indices,
+        torch.full_like(local_indices, -1),
+    ).contiguous()
+
+    return sparse_gqa_fwd_interface_triton_ck(
+        q_c,
+        k_c,
+        v_c,
+        local_indices,
         cu_seqlens_q,
         cu_seqlens_k,
+        valid_counts,
         softmax_scale,
-        HQ=hq, HKV=hkv,
-        D=d, D_PAD=_next_pow2(d),
-        BLOCK_KV=BLOCK_KV,
-        q_stride_t=q_c.stride(0), q_stride_h=q_c.stride(1),
-        k_stride_t=k_c.stride(0), k_stride_h=k_c.stride(1),
-        v_stride_t=v_c.stride(0), v_stride_h=v_c.stride(1),
-        o_stride_t=out.stride(0), o_stride_h=out.stride(1),
-        num_warps=4,
     )
-    return out
 QSA_EOF
 
   cat > "${SCRIPT_DIR}/.patch/Dockerfile" <<DKR_EOF
