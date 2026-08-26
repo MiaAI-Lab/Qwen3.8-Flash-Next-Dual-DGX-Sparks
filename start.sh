@@ -110,6 +110,8 @@
 #    HF_HOME=~/.cache/huggingface        head-side HF cache
 #    WORKER_HF_HOME=<auto>      worker-side HF cache (default $HOME/.cache/…)
 #    DIST_PORT=26400            2-node rendezvous port on the head
+#    RESTART_POLICY=no          docker restart policy for both containers;
+#                               "unless-stopped" = survive host reboots
 #    DOWNLOAD_MODE=rsync        rsync (head→worker) | direct (worker pulls too)
 #    MEM_FRACTION_STATIC=0.70   GB10 math: 0.70×122 GB GPU + 26 GB pinned PLE
 #                               + OS ≈ 119 of 122 GB — do not raise past ~0.75
@@ -240,6 +242,14 @@ API_KEY="${API_KEY:-}"
 # treats as failure -- without this, wait_ready times out on a healthy server.
 AUTH_CURL=()
 [[ -n "${API_KEY}" ]] && AUTH_CURL=(-H "Authorization: Bearer ${API_KEY}")
+# Docker restart policy for the two serving containers. Default "no" keeps
+# current behavior (a host reboot needs a manual ./start.sh). Set
+# RESTART_POLICY=unless-stopped for boot persistence: after a clean reboot of
+# BOTH hosts the containers relaunch and the TP rendezvous re-forms on its
+# own. Note: on a single-container crash the restarted rank re-enters
+# rendezvous against a peer that never died -- if the pair does not recover,
+# run ./start.sh (idempotent) to relaunch both sides coherently.
+RESTART_POLICY="${RESTART_POLICY:-no}"
 
 # ---- Paths / logs -----------------------------------------------------------
 HF_HOME="${HF_HOME:-${HOME}/.cache/huggingface}"
@@ -994,6 +1004,7 @@ launch() {
   info "starting worker (node-rank 1) on ${WORKER_SSH} …"
   worker_docker run -d \
     --name "${WORKER_CONTAINER}" \
+    --restart "${RESTART_POLICY}" \
     --network host --ipc host --gpus all \
     --shm-size 32g \
     --device /dev/infiniband --cap-add IPC_LOCK \
@@ -1021,6 +1032,7 @@ launch() {
   info "starting head (node-rank 0, API on ${HOST_BIND}:${PORT}) …"
   docker run -d \
     --name "${HEAD_CONTAINER}" \
+    --restart "${RESTART_POLICY}" \
     --network host --ipc host --gpus all \
     --shm-size 32g \
     --device /dev/infiniband --cap-add IPC_LOCK \
