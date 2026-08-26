@@ -141,6 +141,11 @@ off per-request:
 "chat_template_kwargs": {"enable_thinking": false}
 ```
 
+If an agent session starts streaming `!!!!!!` until `max_tokens`, that is
+[sgl-project/sglang#36537](https://github.com/sgl-project/sglang/issues/36537)
+— see [Known quirks](#known-quirks-read-before-filing-a-bug). This recipe keeps
+thinking on.
+
 Images work through the standard `image_url` content part.
 
 Wiring it into a local agent harness (e.g. pi's `~/.pi/agent/models.json`):
@@ -253,6 +258,36 @@ the ones you'll actually touch:
 | `EXTRA_ARGS` | *(empty)* | Appended last — argparse last-wins overrides anything |
 
 ## Known quirks (read before filing a bug)
+
+- **Agent `!!!!!!` loop (thinking + tools)** —
+  [sgl-project/sglang#36537](https://github.com/sgl-project/sglang/issues/36537).
+  This model thinks by default. When a client also sends OpenAI `tools` *and*
+  the server uses `--tool-call-parser qwen3_coder`, SGLang can emit token ID 0
+  in a tight loop. This tokenizer decodes 0 as `!`, so the reply becomes
+  `!!!!!!…` until `max_tokens`. Spec accept rate drops to 0.00; disconnected
+  clients keep generating. **This recipe does not disable thinking.** The only
+  known workaround (until upstream ships a real fix) is to turn thinking off
+  for those sessions:
+
+  Per request (preferred — keeps thinking for everything else):
+
+  ```json
+  "chat_template_kwargs": {"enable_thinking": false}
+  ```
+
+  Or server-wide, then `./start.sh stop && ./start.sh serve`:
+
+  ```bash
+  EXTRA_ARGS='--tool-call-parser qwen3_coder --default-chat-template-kwargs {"enable_thinking":false}' ./start.sh serve
+  ```
+
+  (`EXTRA_ARGS` is appended last; if `.env` already sets `EXTRA_ARGS`, merge
+  into that line — no spaces inside the JSON.) Do **not** opt thinking back on
+  in the same request that sends `tools`. Without the parser, thinking works
+  but tool calls leak as `<tool_call>` XML in `content` instead of
+  `message.tool_calls`. There is no day-0 flag that gives thinking *and*
+  structured tools together. Cap agent temperature at ≤ 0.7 if you use the
+  workaround; a residual loop has been seen at temp 1.0.
 
 - **TileLang data-race warning at JIT time** —
   `Logits(bx, position) is written by multiple threads in loop (token,)` from
