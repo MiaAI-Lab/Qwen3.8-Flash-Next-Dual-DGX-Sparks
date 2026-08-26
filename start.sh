@@ -138,6 +138,8 @@
 #    WAIT_TIMEOUT_MIN=90
 #    NCCL_DEBUG=WARN
 #    EXTRA_ARGS="…"             appended last (argparse last-wins → overrides)
+#    API_KEY=                   optional: serve with --api-key AND authenticate
+#                               this script's own readiness/status/smoke curls
 # =============================================================================
 set -euo pipefail
 
@@ -232,6 +234,12 @@ WAIT_TIMEOUT_MIN="${WAIT_TIMEOUT_MIN:-90}"
 NCCL_DEBUG="${NCCL_DEBUG:-WARN}"
 NCCL_CROSS_NIC="${NCCL_CROSS_NIC:-0}"
 EXTRA_ARGS="${EXTRA_ARGS:-}"
+API_KEY="${API_KEY:-}"
+# Auth header for every local readiness/status/smoke curl in this script:
+# with --api-key set, the server answers 401 to bare requests, which curl -f
+# treats as failure -- without this, wait_ready times out on a healthy server.
+AUTH_CURL=()
+[[ -n "${API_KEY}" ]] && AUTH_CURL=(-H "Authorization: Bearer ${API_KEY}")
 
 # ---- Paths / logs -----------------------------------------------------------
 HF_HOME="${HF_HOME:-${HOME}/.cache/huggingface}"
@@ -891,6 +899,7 @@ build_sglang_args() { # $1 = container model path
   else
     SGLANG_ARGS+=(--cuda-graph-backend-decode=disabled)
   fi
+  [[ -n "${API_KEY}" ]] && SGLANG_ARGS+=(--api-key "${API_KEY}")
   # Free-form overrides go last (argparse last-wins).
   read -ra _extra <<< "${EXTRA_ARGS}"
   if [[ ${#_extra[@]} -gt 0 ]]; then SGLANG_ARGS+=("${_extra[@]}"); fi
@@ -1047,7 +1056,7 @@ wait_ready() {
   local deadline=$(( $(date +%s) + WAIT_TIMEOUT_MIN * 60 )) start elapsed heartbeat
   start=$(date +%s); heartbeat=0
   while :; do
-    if curl -fsS "${READY_URL}" >/dev/null 2>&1; then
+    if curl -fsS "${AUTH_CURL[@]}" "${READY_URL}" >/dev/null 2>&1; then
       echo ""
       ok "SGLang is ready at ${READY_URL}"
       return 0
@@ -1087,7 +1096,7 @@ cmd_serve() {
   # Already running → report and exit cleanly (idempotent)
   if docker ps --format '{{.Names}}' | grep -qx "${HEAD_CONTAINER}"; then
     ok "${HEAD_CONTAINER} already running"
-    curl -fsS "${READY_URL}" >/dev/null 2>&1 && ok "API is ready: ${READY_URL}" || info "API not ready yet (still booting?)"
+    curl -fsS "${AUTH_CURL[@]}" "${READY_URL}" >/dev/null 2>&1 && ok "API is ready: ${READY_URL}" || info "API not ready yet (still booting?)"
     info "logs: ./start.sh logs   ·   stop: ./start.sh stop"
     exit 0
   fi
@@ -1150,9 +1159,9 @@ cmd_status() {
   docker ps -a --filter "name=${HEAD_CONTAINER}" --format '  {{.Names}}  {{.Status}}' 2>/dev/null || true
   echo "worker (${WORKER_SSH}):"
   worker_docker ps -a --filter "name=${WORKER_CONTAINER}" --format '  {{.Names}}  {{.Status}}' 2>/dev/null || true
-  if curl -fsS --max-time 3 "${READY_URL}" >/dev/null 2>&1; then
+  if curl -fsS --max-time 3 "${AUTH_CURL[@]}" "${READY_URL}" >/dev/null 2>&1; then
     ok "API ready: ${READY_URL}"
-    curl -fsS --max-time 3 "${READY_URL}" | python3 -c 'import json,sys; d=json.load(sys.stdin); print("  served:", ", ".join(m["id"] for m in d["data"]))' 2>/dev/null || true
+    curl -fsS --max-time 3 "${AUTH_CURL[@]}" "${READY_URL}" | python3 -c 'import json,sys; d=json.load(sys.stdin); print("  served:", ", ".join(m["id"] for m in d["data"]))' 2>/dev/null || true
   else
     info "API not responding on ${READY_URL}"
   fi
@@ -1171,7 +1180,7 @@ cmd_logs() {
 
 cmd_smoke() {
   header "Smoke test"
-  curl -fsS --max-time 300 "http://127.0.0.1:${PORT}/v1/chat/completions" \
+  curl -fsS --max-time 300 "${AUTH_CURL[@]}" "http://127.0.0.1:${PORT}/v1/chat/completions" \
     -H 'Content-Type: application/json' \
     -d "{\"model\": \"${SERVED_MODEL_NAME}\", \"messages\": [{\"role\": \"user\", \"content\": \"Give me three words that rhyme with 'spark', then use one in a sentence.\"}], \"max_tokens\": 300}" \
     | python3 -c '
