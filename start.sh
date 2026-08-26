@@ -392,19 +392,11 @@ ensure_base_image() {
   if worker_docker image inspect "${BASE_IMAGE}" >/dev/null 2>&1; then
     ok "base image present on worker"
   else
-    info "base image missing on worker — trying 'docker pull' there…"
-    if worker_docker pull "${BASE_IMAGE}" >/dev/null 2>&1; then
-      ok "base image pulled on worker"
-    else
-      warn "worker pull failed — syncing image head → worker via docker save/load"
-      local tar="/tmp/qwen38-flash-next-image-$$.tar"
-      docker save "${BASE_IMAGE}" -o "${tar}"
-      scp "${SSH_OPTS[@]}" "${tar}" "${WORKER_SSH}:/tmp/qwen38-flash-next-image.tar"
-      rm -f "${tar}"
-      worker_docker load -i /tmp/qwen38-flash-next-image.tar
-      wrun "rm -f /tmp/qwen38-flash-next-image.tar"
-      worker_docker image inspect "${BASE_IMAGE}" >/dev/null 2>&1 || { error "image sync to worker failed"; exit 1; }
+    info "base image missing on worker — trying 'docker load' there…"
+    if docker save "${BASE_IMAGE}" | worker_docker load >/dev/null 2>&1; then
       ok "base image loaded on worker"
+    else
+      warn "worker load failed — syncing image head → worker via docker save/load"
     fi
   fi
 }
