@@ -21,6 +21,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import random
 import re
 import sys
@@ -96,6 +97,11 @@ def _color(enabled: bool, code: str, text: str) -> str:
     return f"\033[{code}m{text}\033[0m"
 
 
+# Populated from --api-key / $API_KEY before the first request. A keyed server
+# 401s every probe otherwise, which surfaces as "API not reachable".
+_AUTH_HEADER: dict[str, str] = {}
+
+
 def _http_json(
     url: str,
     *,
@@ -106,7 +112,8 @@ def _http_json(
     req = urllib.request.Request(
         url,
         data=data,
-        headers={"Content-Type": "application/json", "Accept": "application/json"},
+        headers={"Content-Type": "application/json", "Accept": "application/json",
+                 **_AUTH_HEADER},
         method="GET" if payload is None else "POST",
     )
     return urllib.request.urlopen(req, timeout=timeout)
@@ -843,6 +850,8 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
         description="Needle-in-haystack reliability eval for NVFP4 KV cache"
     )
     p.add_argument("--base-url", default="http://127.0.0.1:8888")
+    p.add_argument("--api-key", default=os.environ.get("API_KEY", ""),
+                   help="bearer token for a keyed server (default: $API_KEY)")
     p.add_argument("--model", default="Qwen3.8-Flash-Next-NVFP4")
     p.add_argument("--suite", choices=sorted(SUITES), default="quick")
     p.add_argument("--depths", help="comma-separated token depths, overrides --suite")
@@ -862,7 +871,10 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
 
 
 def main() -> int:
-    return run(parse_args())
+    args = parse_args()
+    if args.api_key:
+        _AUTH_HEADER["Authorization"] = "Bearer " + args.api_key
+    return run(args)
 
 
 if __name__ == "__main__":
