@@ -79,12 +79,12 @@
 #    image then dies at warmup with an MLIRError).
 #
 #    The same derivative image adds NVFP4 KV cache support for the QSA
-#    layers (NVFP4_KV_CACHE=1): the pool stores packed FP4 + per-block
+#    layers (default NVFP4_KV_CACHE=1): the pool stores packed FP4 + per-block
 #    FP8 scales (no FP8 dequant workspace — the QSA path never needed one),
 #    and the QSA gather paths compact the packed rows with the stock Triton
 #    kernel and dequantize via flashinfer's nvfp4_kv_dequantize (validated
-#    CUDA-graph-safe on SM121). ~3.5x KV capacity at FP4 KV accuracy
-#    (~9% relative K/V error).
+#    CUDA-graph-safe on SM121). ~3.1x KV tokens at FP4 KV accuracy
+#    (~9% relative K/V error; 11/11 NIAH through 16k).
 #
 #  GB10 WARNING — never probe this model with --load-format dummy:
 #    initialize_dummy_weights() materializes an fp16 COPY of the ~26 GB/rank
@@ -130,9 +130,9 @@
 #    ENABLE_DECODE_GRAPHS=1     0 → --cuda-graph-backend-decode=disabled
 #    CUDA_GRAPH_BS="1 2 3 4 5 6 7 8 10 12 14 16"
 #    ATTENTION_BACKEND=flashinfer
-#    NVFP4_KV_CACHE=0            1 = --kv-cache-dtype nvfp4 (the QSA FP4 KV
-#                                path above; ~3.5x KV capacity, FP4 KV
-#                                accuracy) · 0 = bf16 KV
+#    NVFP4_KV_CACHE=1            1 = --kv-cache-dtype nvfp4 (the QSA FP4 KV
+#                                path above; ~3.1x KV tokens, FP4 KV
+#                                accuracy; default) · 0 = bf16 KV
 #    KV_CACHE_DTYPE=            raw --kv-cache-dtype override (e.g. fp8_e4m3);
 #                                must be empty when NVFP4_KV_CACHE=1
 #    FP4_GEMM_BACKEND=          empty = auto (proven on SM121 for the 27B)
@@ -228,7 +228,7 @@ SPEC_DRAFT="${SPEC_DRAFT:-4}"
 ENABLE_DECODE_GRAPHS="${ENABLE_DECODE_GRAPHS:-1}"
 CUDA_GRAPH_BS="${CUDA_GRAPH_BS:-"1 2 3 4 5 6 7 8 10 12 14 16"}"
 ATTENTION_BACKEND="${ATTENTION_BACKEND:-flashinfer}"
-NVFP4_KV_CACHE="${NVFP4_KV_CACHE:-0}"   # 1 = NVFP4 FP4 KV cache (see header); 0 = bf16
+NVFP4_KV_CACHE="${NVFP4_KV_CACHE:-1}"   # 1 = NVFP4 FP4 KV cache (see header); 0 = bf16
 KV_CACHE_DTYPE="${KV_CACHE_DTYPE:-}"   # raw override (e.g. fp8_e4m3); must be empty when NVFP4_KV_CACHE=1
 PLE_OFFLOAD="${PLE_OFFLOAD:-}"
 FP4_GEMM_BACKEND="${FP4_GEMM_BACKEND:-}"

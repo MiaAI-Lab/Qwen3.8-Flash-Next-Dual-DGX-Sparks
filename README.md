@@ -89,9 +89,10 @@ build):
   allow-list doesn't apply) and the pool-sizing math skips the FP8 workspace
   share
 
-Enable it with `NVFP4_KV_CACHE=1` in `.env` (or inline: `NVFP4_KV_CACHE=1
-./start.sh serve`); `0` (the default) keeps bf16 KV. `.env` is first-assignment
-wins, so a leftover `NVFP4_KV_CACHE=0` above your `=1` keeps bf16. All kernels
+**On by default** (`NVFP4_KV_CACHE=1`). Opt out with `NVFP4_KV_CACHE=0` in
+`.env` (or inline: `NVFP4_KV_CACHE=0 ./start.sh serve`) to keep bf16 KV.
+`.env` is first-assignment wins, so a leftover `NVFP4_KV_CACHE=0` above a
+later `=1` keeps bf16. All kernels
 are CUDA-graph-safe on SM121 (verified bit-exact replay; decode-graph capture
 needs the on-device `k_scales_gpu` path — a Python `k_scale=1.0` default
 illegal-copied host→CUDA during capture and was patched). Effect:
@@ -306,7 +307,7 @@ the ones you'll actually touch:
 | `PORT` | `8888` | API port, bound on all interfaces |
 | `MEM_FRACTION_STATIC` | `0.82` | Budget for unified DRAM; 0.82 leaves ~17 GB free for prefill transients |
 | `PLE_OFFLOAD` | *(auto)* | Empty = auto-rule (recommended on GB10); `1`/`0` to force |
-| `NVFP4_KV_CACHE` | `0` | `1` = NVFP4 KV cache for the QSA layers (dequant-on-gather, **2,902,208 tokens** measured / ~3.1× vs bf16, 11/11 NIAH PASS); `0` = bf16 |
+| `NVFP4_KV_CACHE` | `1` | `1` = NVFP4 KV cache for the QSA layers (dequant-on-gather, **2,902,208 tokens** measured / ~3.1× vs bf16, 11/11 NIAH PASS); `0` = bf16 |
 | `KV_CACHE_DTYPE` | *(empty)* | raw `--kv-cache-dtype` override (e.g. `fp8_e4m3`, untested); must be empty when `NVFP4_KV_CACHE=1` |
 | `CONTEXT_LENGTH` | `900000` | YaRN-scaled (factor 4.0, native 262144); KV pool is 925,504 (bf16) or **2,902,208** (`NVFP4_KV_CACHE=1`) |
 | `MAX_RUNNING_REQUESTS` | `16` | Concurrency (capped at 14 by mamba slots at ratio 0.3) |
