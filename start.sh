@@ -139,8 +139,11 @@
 #    NVFP4_KV_CACHE=1            1 = --kv-cache-dtype nvfp4 (the QSA FP4 KV
 #                                path above; ~3.1x KV tokens, FP4 KV
 #                                accuracy; default) · 0 = bf16 KV
-#    KV_CACHE_DTYPE=            raw --kv-cache-dtype override (e.g. fp8_e4m3);
-#                                must be empty when NVFP4_KV_CACHE=1
+#    KV_CACHE_DTYPE=            raw --kv-cache-dtype override when
+#                                NVFP4_KV_CACHE=0 (e.g. fp8_e4m3). Must be empty
+#                                when NVFP4_KV_CACHE=1. Empty + NVFP4=0 → bf16.
+#                                QSA Triton fallback requires q/k/v dtypes to
+#                                match; fp8_e4m3 dies at graph capture.
 #    FP4_GEMM_BACKEND=          empty = auto (proven on SM121 for the 27B)
 #    LINEAR_ATTN_PREFILL_BACKEND=  empty = default (triton on SM121)
 #    LINEAR_ATTN_DECODE_BACKEND=   empty = default (triton on SM121)
@@ -241,8 +244,8 @@ SPEC_DRAFT="${SPEC_DRAFT:-4}"
 ENABLE_DECODE_GRAPHS="${ENABLE_DECODE_GRAPHS:-1}"
 CUDA_GRAPH_BS="${CUDA_GRAPH_BS:-"1 2 3 4 5 6 7 8 10 12 14 16"}"
 ATTENTION_BACKEND="${ATTENTION_BACKEND:-flashinfer}"
-NVFP4_KV_CACHE="${NVFP4_KV_CACHE:-1}"   # 1 = NVFP4 FP4 KV cache (see header); 0 = bf16
-KV_CACHE_DTYPE="${KV_CACHE_DTYPE:-}"   # raw override (e.g. fp8_e4m3); must be empty when NVFP4_KV_CACHE=1
+NVFP4_KV_CACHE="${NVFP4_KV_CACHE:-1}"   # 1 = NVFP4 FP4 KV; 0 = bf16
+KV_CACHE_DTYPE="${KV_CACHE_DTYPE:-}"   # override when NVFP4_KV_CACHE=0 (e.g. fp8_e4m3); empty + 0 → bf16
 PLE_OFFLOAD="${PLE_OFFLOAD:-}"
 FP4_GEMM_BACKEND="${FP4_GEMM_BACKEND:-}"
 LINEAR_ATTN_PREFILL_BACKEND="${LINEAR_ATTN_PREFILL_BACKEND:-}"
@@ -545,6 +548,8 @@ preflight() { # $1 = action; port checks only matter when serving
   esac
   if [[ "${NVFP4_KV_CACHE}" == "1" ]]; then
     ok "NVFP4 KV cache enabled (kv-cache-dtype nvfp4)"
+  else
+    ok "KV cache dtype ${KV_CACHE_DTYPE:-bf16} (NVFP4_KV_CACHE=0)"
   fi
   ok "recipe constraints valid (NEXTN ${SPEC_STEPS}/${SPEC_TOPK}/${SPEC_DRAFT}, page 64, track ${MAMBA_TRACK_INTERVAL})"
 }
@@ -1999,6 +2004,6 @@ case "${ACTION}" in
   status)   cmd_status ;;
   logs)     cmd_logs "${2:-head}" ;;
   smoke)    cmd_smoke ;;
-  kv-eval)  shift; exec python3 "${SCRIPT_DIR}/nvfp4_kv_eval.py" --base-url "http://127.0.0.1:${PORT}" --model "${SERVED_MODEL_NAME}" "$@" ;;
+  kv-eval)  shift; exec python3 "${SCRIPT_DIR}/evals/nvfp4_kv_eval.py" --base-url "http://127.0.0.1:${PORT}" --model "${SERVED_MODEL_NAME}" "$@" ;;
   doctor)   cmd_doctor ;;
 esac

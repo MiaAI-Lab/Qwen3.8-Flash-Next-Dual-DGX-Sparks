@@ -10,7 +10,7 @@ All notable changes to this serving recipe.
   Packed FP4 + per-block FP8 scales, no FP8 dequant workspace. QSA gather
   dequantizes on the way out. Measured on 2× GB10 TP2: **2,914,944 tokens /
   11.47 GB** (~3.1× the 925,504-token bf16 pool).
-- `nvfp4_kv_eval.py` / `./start.sh kv-eval` — passkey / needle-in-haystack
+- `evals/nvfp4_kv_eval.py` / `./start.sh kv-eval` — passkey / needle-in-haystack
   reliability check against the live API. Quick suite on this cluster
   (2026-08-27T07:54Z): **11/11 PASS**, verdict **RELIABLE** through 16k
   (0/50/100%) plus a 2-turn radix follow-up (`cache_hit_rate` 0 → 0.970).
@@ -20,7 +20,9 @@ All notable changes to this serving recipe.
 
 ### Changed
 
-- `NVFP4_KV_CACHE` default is **1** (opt out with `0` for bf16 KV).
+- `NVFP4_KV_CACHE` default is **1** (opt out with `0` for bf16 KV). `fp8_e4m3`
+  was tried as the off-path and **does not boot** on QSA (Triton fallback:
+  q=bf16 vs k/v=fp8).
 - `MEM_FRACTION_STATIC` default **0.80**. PLE (~26 GB/rank) is inside GB10's
   unified CUDA budget; **0.70 double-counted it** and starved KV/mamba
   ([issue #8](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Next-Dual-DGX-Sparks/issues/8)).

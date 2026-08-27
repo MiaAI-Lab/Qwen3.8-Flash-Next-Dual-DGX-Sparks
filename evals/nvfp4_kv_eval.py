@@ -11,8 +11,8 @@ Suites
   long   full + 128k (GB10-safe with chunk 1024; do not raise further)
 
 Usage
-  python3 nvfp4_kv_eval.py
-  python3 nvfp4_kv_eval.py --suite full --json kv-eval.json
+  python3 evals/nvfp4_kv_eval.py
+  python3 evals/nvfp4_kv_eval.py --suite full --json kv-eval.json
   ./start.sh kv-eval --suite quick --require-nvfp4
 """
 

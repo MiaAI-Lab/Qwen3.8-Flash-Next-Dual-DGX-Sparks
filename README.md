@@ -90,7 +90,9 @@ build):
   share
 
 **On by default** (`NVFP4_KV_CACHE=1`). Opt out with `NVFP4_KV_CACHE=0` in
-`.env` (or inline: `NVFP4_KV_CACHE=0 ./start.sh serve`) to keep bf16 KV.
+`.env` (or inline: `NVFP4_KV_CACHE=0 ./start.sh serve`) for **bf16** KV.
+`fp8_e4m3` is not the off-path: QSA's Triton fallback requires q/k/v dtypes to
+match and dies at graph capture (`q=bf16`, `k/v=fp8`).
 `.env` is first-assignment wins, so a leftover `NVFP4_KV_CACHE=0` above a
 later `=1` keeps bf16. All kernels
 are CUDA-graph-safe on SM121 (verified bit-exact replay; decode-graph capture
@@ -123,7 +125,7 @@ Re-run:
 ./start.sh kv-eval --suite full --require-nvfp4 --json kv-eval.json   # up to 64k
 ```
 
-`nvfp4_kv_eval.py` plants a unique passkey at 0/50/100% of a synthetic haystack
+`evals/nvfp4_kv_eval.py` plants a unique passkey at 0/50/100% of a synthetic haystack
 and asks for it back (plus a 2-turn radix follow-up). `--suite long` adds 128k —
 do not push past that on GB10 without watching `available_gpu_mem`.
 
@@ -316,8 +318,8 @@ the ones you'll actually touch:
 | `API_KEY` | *(empty)* | Empty = open (LAN-trusted) server. Set = serve with `--api-key` and send `Authorization: Bearer <key>` on the script's own readiness/status/smoke curls |
 | `MEM_FRACTION_STATIC` | `0.80` | Script default. PLE is *inside* this budget on GB10 ([issue #8](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Next-Dual-DGX-Sparks/issues/8) — `0.70` double-counted it). This cluster's 1M YaRN `.env` uses `0.82` + chunk 1024 |
 | `PLE_OFFLOAD` | *(auto)* | Empty = auto-rule (recommended on GB10); `1`/`0` to force |
-| `NVFP4_KV_CACHE` | `1` | `1` = NVFP4 KV cache for the QSA layers (dequant-on-gather, **2,902,208 tokens** measured / ~3.1× vs bf16, 11/11 NIAH PASS); `0` = bf16 |
-| `KV_CACHE_DTYPE` | *(empty)* | raw `--kv-cache-dtype` override (e.g. `fp8_e4m3`, untested); must be empty when `NVFP4_KV_CACHE=1` |
+| `NVFP4_KV_CACHE` | `1` | `1` = NVFP4 KV (dequant-on-gather, **2,911,488 tokens** measured); `0` = **bf16** KV |
+| `KV_CACHE_DTYPE` | *(empty)* | raw `--kv-cache-dtype` when `NVFP4_KV_CACHE=0` (empty → bf16). Must be empty when `NVFP4_KV_CACHE=1`. `fp8_e4m3` does not boot on this QSA path |
 | `CONTEXT_LENGTH` | `1048576` | YaRN 1M default (factor 4.0 × native 262144). Set `262144` for native (no YaRN). KV pool is 925,504 (bf16) or **2,914,944** (`NVFP4_KV_CACHE=1`) |
 | `MAX_RUNNING_REQUESTS` | `28` | Script default = mamba ceiling at 0.80 + default mamba ratio. `CUDA_GRAPH_BS` is extended to match. YaRN `.env` at mamba ratio 0.3 still caps ~14 |
 | `CHUNKED_PREFILL_SIZE` | `1024` | Keep ≤1024 for 1M ctx — the QSA indexer logits buffer is `[chunk × history]` fp32 |
@@ -388,7 +390,8 @@ the ones you'll actually touch:
 
 ```
 start.sh          # everything: download, sync, image build, launch, ops
-nvfp4_kv_eval.py  # live-API passkey/NIAH eval for NVFP4 KV reliability
+evals/            # live-API evals (not required to serve)
+  nvfp4_kv_eval.py  # passkey/NIAH eval for NVFP4 KV reliability
 .env.example      # copy to .env and edit (cluster IPs, worker ssh, recipe)
 .env              # your local config (gitignored — create from .env.example)
 .patch/           # (generated) SM121 kernel-patch Docker build context
