@@ -36,6 +36,11 @@ All notable changes to this serving recipe.
 
 ### Fixed
 
+- 2-node TP=2 hang at `shm_broadcast.wait_until_ready` ([issue #3](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Next-Dual-DGX-Sparks/issues/3) /
+  [PR #9](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Next-Dual-DGX-Sparks/pull/9)): pin
+  `SGLANG_HOST_IP` to the ConnectX-7 IPs so the cross-node ZeroMQ MessageQueue
+  does not advertise Wi-Fi/LAN. NCCL/Gloo/TP were already on CX7; this was the
+  one subsystem still auto-detecting.
 - NVFP4 decode **CUDA-graph capture**: hybrid pool defaulted `k_scale=1.0`
   (Python float), so `quantize()` did `torch.tensor(..., device=cuda)` during
   capture. The nvfp4 write path now uses on-device `k_scales_gpu[layer]`.
