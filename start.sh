@@ -402,7 +402,7 @@ text = sys.stdin.read()
 m = re.search(r"^sglang:max_total_num_tokens\{[^}]*\}\s+(\S+)", text, re.M)
 print(int(float(m.group(1))) if m else 0)
 ' || true)"
-  ctx="$(curl -fsS --max-time 10 "http://127.0.0.1:${PORT}/get_server_info" 2>/dev/null | python3 -c '
+  ctx="$(curl -fsS "${AUTH_CURL[@]}" --max-time 10 "http://127.0.0.1:${PORT}/get_server_info" 2>/dev/null | python3 -c '
 import json, sys
 d = json.load(sys.stdin)
 print(int(d.get("context_length") or 0))
@@ -2078,6 +2078,6 @@ case "${ACTION}" in
   status)   cmd_status ;;
   logs)     cmd_logs "${2:-head}" ;;
   smoke)    cmd_smoke ;;
-  kv-eval)  shift; exec python3 "${SCRIPT_DIR}/evals/nvfp4_kv_eval.py" --base-url "http://127.0.0.1:${PORT}" --model "${SERVED_MODEL_NAME}" "$@" ;;
+  kv-eval)  shift; exec python3 "${SCRIPT_DIR}/evals/nvfp4_kv_eval.py" --base-url "http://127.0.0.1:${PORT}" --model "${SERVED_MODEL_NAME}" --api-key "${EFFECTIVE_API_KEY}" "$@" ;;
   doctor)   cmd_doctor ;;
 esac
