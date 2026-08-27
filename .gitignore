@@ -7,3 +7,8 @@
 .download.log
 .env
 *.bak
+__pycache__/
+.sglang.pid
+
+# Keep the changelog tracked even if markdown is ignored later.
+!CHANGELOG.md

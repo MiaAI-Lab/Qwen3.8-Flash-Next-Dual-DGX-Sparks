@@ -9,7 +9,7 @@
 #  Model: Qwen3.8-Flash-Next (qwen4_exp — Qwen4-architecture preview)
 #    176B total / 6B active · 48 layers (GDN 3 : QSA sparse full-attn 1)
 #    · 512 routed experts (top-10) + shared expert · multimodal (vision tower)
-#    · 262144-token native context · always-thinking.
+#    · 262144-token native context, YaRN-scaled default 1048576 (1M) · always-thinking.
 #    NVFP4 checkpoint = 135.25 GB:
 #      68.0 GB  routed experts, NVFP4 W4A4 (ModelOpt, group 16)
 #      52.0 GB  PLE n-gram embedding tables, FP8-E4M3 (fp8-resident at load)
@@ -123,9 +123,11 @@
 #    MEM_FRACTION_STATIC=0.80   GB10 unified DRAM: PLE (~26 GB/rank) is INSIDE
 #                               --mem-fraction-static (issue #8). 0.70
 #                               double-counted it and starved KV/mamba.
-#                               900k YaRN recipe in .env uses 0.82 + chunk 1024.
-#    CONTEXT_LENGTH=262144      (hard-capped at native 262144; YaRN = EXTRA_ARGS)
-#    CHUNKED_PREFILL_SIZE=4096
+#                               1M YaRN recipe uses 0.82 + chunk 1024 in .env.
+#    CONTEXT_LENGTH=1048576     YaRN 1M default (factor 4.0 × native 262144).
+#                               Set 262144 for native (no YaRN). Hard-capped at 1M.
+#    CHUNKED_PREFILL_SIZE=1024  Keep ≤1024 when context > 262144 (indexer workspace).
+#    MAX_PREFILL_TOKENS=        empty = 2048 under YaRN, else unset
 #    MAX_RUNNING_REQUESTS=28    mamba ceiling at 0.80 + default mamba ratio
 #                               (~141 slots / 5). 16 silently queues past c=16.
 #    ALLOW_AUTO_TRUNCATE=0      1 = --allow-auto-truncate (silent trim). Off so
@@ -223,8 +225,12 @@ NNODES=2
 SERVED_MODEL_NAME="${SERVED_MODEL_NAME:-Qwen3.8-Flash-Next-NVFP4}"
 
 MEM_FRACTION_STATIC="${MEM_FRACTION_STATIC:-0.80}"   # GB10: PLE is inside this budget (issue #8)
-CONTEXT_LENGTH="${CONTEXT_LENGTH:-262144}"
-CHUNKED_PREFILL_SIZE="${CHUNKED_PREFILL_SIZE:-4096}"
+CONTEXT_LENGTH="${CONTEXT_LENGTH:-1048576}"   # YaRN 1M; 262144 = native, no YaRN
+CHUNKED_PREFILL_SIZE="${CHUNKED_PREFILL_SIZE:-1024}"
+MAX_PREFILL_TOKENS="${MAX_PREFILL_TOKENS:-}"  # empty = 2048 when YaRN, else unset
+YARN_NATIVE_CTX=262144
+YARN_MAX_CTX=1048576
+YARN_OVERRIDE_ARGS='{"text_config":{"rope_scaling":{"rope_type":"yarn","factor":4.0,"original_max_position_embeddings":262144},"max_position_embeddings":1048576}}'
 MAX_RUNNING_REQUESTS="${MAX_RUNNING_REQUESTS:-28}"
 ALLOW_AUTO_TRUNCATE="${ALLOW_AUTO_TRUNCATE:-0}"      # 1 = --allow-auto-truncate
 SPEC_STEPS="${SPEC_STEPS:-3}"
@@ -461,9 +467,16 @@ preflight() { # $1 = action; port checks only matter when serving
     error "NVFP4_KV_CACHE=1 and KV_CACHE_DTYPE=${KV_CACHE_DTYPE} are both set — pick one"
     exit 1
   fi
-  if (( CONTEXT_LENGTH > 262144 )); then
-    error "CONTEXT_LENGTH=${CONTEXT_LENGTH} exceeds the native 262144 (YaRN for this model is untested here — use EXTRA_ARGS if you want to experiment)"
+  if (( CONTEXT_LENGTH > YARN_MAX_CTX )); then
+    error "CONTEXT_LENGTH=${CONTEXT_LENGTH} exceeds YaRN 1M (${YARN_MAX_CTX})"
     exit 1
+  fi
+  if (( CONTEXT_LENGTH > YARN_NATIVE_CTX )); then
+    if (( CHUNKED_PREFILL_SIZE > 1024 )); then
+      warn "CHUNKED_PREFILL_SIZE=${CHUNKED_PREFILL_SIZE} with ${CONTEXT_LENGTH} ctx froze GB10 at 300k history — clamping to 1024"
+      CHUNKED_PREFILL_SIZE=1024
+    fi
+    ok "YaRN 1M context (${CONTEXT_LENGTH}; native ${YARN_NATIVE_CTX} × factor 4.0)"
   fi
   if [[ "${SPEC_TOPK}" != "1" ]]; then
     error "SPEC_TOPK must be 1: Qwen4-Exp PLE speculative decoding supports only topk=1"
@@ -1596,6 +1609,12 @@ build_sglang_args() { # $1 = container model path
     SGLANG_ARGS+=(--kv-cache-dtype nvfp4)
   elif [[ -n "${KV_CACHE_DTYPE}" ]]; then
     SGLANG_ARGS+=(--kv-cache-dtype "${KV_CACHE_DTYPE}")
+  fi
+  if (( CONTEXT_LENGTH > YARN_NATIVE_CTX )); then
+    SGLANG_ARGS+=(--json-model-override-args "${YARN_OVERRIDE_ARGS}")
+    SGLANG_ARGS+=(--max-prefill-tokens "${MAX_PREFILL_TOKENS:-2048}")
+  elif [[ -n "${MAX_PREFILL_TOKENS}" ]]; then
+    SGLANG_ARGS+=(--max-prefill-tokens "${MAX_PREFILL_TOKENS}")
   fi
   [[ "${ALLOW_AUTO_TRUNCATE}" == "1" ]]    && SGLANG_ARGS+=(--allow-auto-truncate)
   [[ "${PLE_OFFLOAD}" == "1" ]]             && SGLANG_ARGS+=(--ple-offload-embedding)

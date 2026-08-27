@@ -25,7 +25,7 @@ Spark (GB10 / SM121)** nodes in tensor parallel over a direct ConnectX-7
   kernel-patched container image on *both* nodes, boots the 2-node cluster,
   and waits for readiness
 - **OpenAI-compatible API** on `0.0.0.0:8888` — completions, chat, reasoning
-  (`<think>`) and tool-call parsing, 900k-token context
+  (`<think>`) and tool-call parsing, 1M-token context (YaRN)
 - **NEXTN speculative decoding** (`3/1/4`) with CUDA-graph decode on both nodes
 - Self-healing and idempotent: rerun after a failure and it resumes the
   download, reuses caches, and replaces stale containers
@@ -223,7 +223,7 @@ Wiring it into a local agent harness (e.g. pi's `~/.pi/agent/models.json`):
     "name": "Qwen3.8 Flash Next 176B NVFP4 · SGLang NEXTN · 262k (2×Spark TP2)",
     "reasoning": true,
     "input": ["text", "image"],
-    "contextWindow": 900000,
+    "contextWindow": 1048576,
     "maxTokens": 32768,
     "compat": {
       "supportsDeveloperRole": false,
@@ -305,13 +305,13 @@ the ones you'll actually touch:
 | `WORKER_USER` | *(empty)* | empty = reuse the head login user (most setups); set only if the worker uses a different account |
 | `WORKER_SSH` | *(derived)* | full `user@host` override if you need it |
 | `PORT` | `8888` | API port, bound on all interfaces |
-| `MEM_FRACTION_STATIC` | `0.80` | Script default. PLE is *inside* this budget on GB10 ([issue #8](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Next-Dual-DGX-Sparks/issues/8) — `0.70` double-counted it). This cluster's 900k YaRN `.env` uses `0.82` + chunk 1024 |
+| `MEM_FRACTION_STATIC` | `0.80` | Script default. PLE is *inside* this budget on GB10 ([issue #8](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Next-Dual-DGX-Sparks/issues/8) — `0.70` double-counted it). This cluster's 1M YaRN `.env` uses `0.82` + chunk 1024 |
 | `PLE_OFFLOAD` | *(auto)* | Empty = auto-rule (recommended on GB10); `1`/`0` to force |
 | `NVFP4_KV_CACHE` | `1` | `1` = NVFP4 KV cache for the QSA layers (dequant-on-gather, **2,902,208 tokens** measured / ~3.1× vs bf16, 11/11 NIAH PASS); `0` = bf16 |
 | `KV_CACHE_DTYPE` | *(empty)* | raw `--kv-cache-dtype` override (e.g. `fp8_e4m3`, untested); must be empty when `NVFP4_KV_CACHE=1` |
-| `CONTEXT_LENGTH` | `900000` | YaRN-scaled (factor 4.0, native 262144); KV pool is 925,504 (bf16) or **2,902,208** (`NVFP4_KV_CACHE=1`) |
+| `CONTEXT_LENGTH` | `1048576` | YaRN 1M default (factor 4.0 × native 262144). Set `262144` for native (no YaRN). KV pool is 925,504 (bf16) or **2,914,944** (`NVFP4_KV_CACHE=1`) |
 | `MAX_RUNNING_REQUESTS` | `28` | Script default = mamba ceiling at 0.80 + default mamba ratio. `CUDA_GRAPH_BS` is extended to match. YaRN `.env` at mamba ratio 0.3 still caps ~14 |
-| `CHUNKED_PREFILL_SIZE` | `1024` | Keep ≤1024 for 900k ctx — the QSA indexer logits buffer is `[chunk × history]` fp32 |
+| `CHUNKED_PREFILL_SIZE` | `1024` | Keep ≤1024 for 1M ctx — the QSA indexer logits buffer is `[chunk × history]` fp32 |
 | `MAMBA_FULL_MEMORY_RATIO` | `0.3` | Default 0.9 over-provisions mamba (47% of budget); 0.3 is enough for 14 requests |
 | `SPEC_STEPS` / `SPEC_TOPK` / `SPEC_DRAFT` | `3` / `1` / `4` | NEXTN spec-decode chain |
 | `KERNEL_PATCH` | `1` | Build+use the SM121 QSA fallback image |
