@@ -90,23 +90,30 @@ build):
   share
 
 **On by default** (`NVFP4_KV_CACHE=1`). Opt out with `NVFP4_KV_CACHE=0` in
-`.env` (or inline: `NVFP4_KV_CACHE=0 ./start.sh serve`) for **bf16** KV.
-`fp8_e4m3` is not the off-path: QSA's Triton fallback requires q/k/v dtypes to
-match and dies at graph capture (`q=bf16`, `k/v=fp8`).
+`.env` (or inline: `NVFP4_KV_CACHE=0 ./start.sh serve`) for **fp8_e4m3** KV
+— not bf16. The QSA Triton fallback upcasts fp8 K/V to fp32 in-kernel
+(q stays bf16). Set `KV_CACHE_DTYPE=bf16` only if you actually want bf16.
 `.env` is first-assignment wins, so a leftover `NVFP4_KV_CACHE=0` above a
-later `=1` keeps bf16. All kernels
-are CUDA-graph-safe on SM121 (verified bit-exact replay; decode-graph capture
-needs the on-device `k_scales_gpu` path — a Python `k_scale=1.0` default
-illegal-copied host→CUDA during capture and was patched). Effect:
-**~3.1× KV tokens** at the same mem-fraction (measured **2,902,208** vs
-925,504 bf16) at FP4 KV accuracy (~9 % relative K/V error on the tensors;
-retrieval below).
+later `=1` keeps fp8.
 
-Measured on this cluster (`NVFP4_KV_CACHE=1`, 2026-08-27T07:54Z, `kv-eval`
-quick suite, thinking off, temp 0). Pool `nvfp4`, **2,902,208 tokens /
-11.42 GB**. **11/11 PASS**, verdict **RELIABLE** — every planted passkey
-came back exactly, including 0/50/100% of a 16k haystack and a 2-turn
-radix follow-up (`cache_hit_rate` 0 → 0.970):
+Measured KV pools on this cluster (1M YaRN, `MEM_FRACTION_STATIC=0.82`,
+both QSA + indexer pools):
+
+| KV | Flag | Pool | Memory | vs 1M context |
+|---|---|---:|---:|---:|
+| **NVFP4** | `NVFP4_KV_CACHE=1` | **2,851,328** tokens | 11.22 GB | **2.72×** |
+| **FP8 E4M3** | `NVFP4_KV_CACHE=0` | **1,751,552** tokens | 11.28 GB | **1.67×** |
+| bf16 (earlier boot) | `KV_CACHE_DTYPE=bf16` | 925,504 tokens | ~11.3 GB | 0.88× (under 1M) |
+
+NVFP4 earlier boots landed **2.90–2.91M** at the same recipe (page rounding).
+All kernels are CUDA-graph-safe on SM121 (verified bit-exact replay;
+decode-graph capture needs on-device `k_scales_gpu` — a Python `k_scale=1.0`
+default illegal-copied host→CUDA during capture and was patched). FP4 KV
+accuracy is ~9 % relative K/V error on the tensors; retrieval below.
+
+Measured retrieval (`NVFP4_KV_CACHE=1`, thinking off, temp 0). Verdict
+**RELIABLE through 128k as a single huge prompt** (0/50/100% passkey). 64k
+and 128k runs were 3/3 at every position:
 
 | Case | Prompt tokens | Position | Result |
 |---|---:|---|---|
@@ -115,19 +122,27 @@ radix follow-up (`cache_hit_rate` 0 → 0.970):
 | NIAH 1,024 | 1,102 | 50% | PASS |
 | NIAH 4,096 | 4,134 / 4,136 / 4,136 | 0% / 50% / 100% | PASS ×3 |
 | NIAH 16,384 | 16,296 / 16,294 / 16,293 | 0% / 50% / 100% | PASS ×3 |
+| NIAH 32,768 | ~32,587 | 0% / 50% / 100% | PASS ×3 |
+| NIAH 65,536 | ~65,020 | 0% / 50% / 100% | PASS ×3 |
+| NIAH 131,072 (single huge prompt) | ~130,040 | 0% / 50% / 100% | PASS ×3 |
 | multi-fact binding | 8,229 | 15% | PASS |
-| radix follow-up (4k prefix) | 4,162 | 50% | PASS |
+| radix follow-up | 4k / 128k prefix | 50% | PASS |
+
+At **256k** same-turn 0%/50% hit the token-0 `!!!!!!` loop
+([sglang#36537](https://github.com/sgl-project/sglang/issues/36537)); recency
+(100%) and a two-turn follow-up still retrieved the passkey — so the KV still
+held it. Treat **128k same-turn** as the trusted retrieval depth.
 
 Re-run:
 
 ```bash
 ./start.sh kv-eval --require-nvfp4                  # ≤16k, a few minutes
 ./start.sh kv-eval --suite full --require-nvfp4 --json kv-eval.json   # up to 64k
+./start.sh kv-eval --suite long --require-nvfp4 --json kv-eval.json   # 128k
 ```
 
 `evals/nvfp4_kv_eval.py` plants a unique passkey at 0/50/100% of a synthetic haystack
-and asks for it back (plus a 2-turn radix follow-up). `--suite long` adds 128k —
-do not push past that on GB10 without watching `available_gpu_mem`.
+and asks for it back (plus a 2-turn radix follow-up). `--suite long` is 128k.
 
 ## The GB10 memory cliff (crash post-mortem)
 
@@ -289,7 +304,7 @@ multi-node-TP stability on GB10.
 |---|---|---|---|
 | NVFP4 expert + dense/MTP/vision weights | GPU device | ~62.5 GB | ✅ `sglang::scheduler_TP0 63971MiB` |
 | PLE n-gram table (fp8, cudaHostAlloc) | **pinned host** | ~11 GB | ❌ host-side, invisible |
-| KV cache (both pools) | GPU device | bf16: ~11.3 GB → **925,504 tokens**; `NVFP4_KV_CACHE=1`: **11.42 GB → 2,902,208 tokens** (~3.1×) | ✅ |
+| KV cache (both pools) | GPU device | **NVFP4: 11.22 GB → 2,851,328 tokens**; **FP8: 11.28 GB → 1,751,552 tokens**; bf16: ~11.3 GB → 925,504 | ✅ |
 | Mamba/GDN state cache | GPU device | ~3.6 GB (73 slots) | ✅ |
 | CUDA graphs + NCCL/cuBLAS workspaces | GPU device | ~8 GB | ✅ |
 | **Total CUDA-visible** | | **~95.6 GB** | |
@@ -318,9 +333,9 @@ the ones you'll actually touch:
 | `API_KEY` | *(empty)* | Empty = open (LAN-trusted) server. Set = serve with `--api-key` and send `Authorization: Bearer <key>` on the script's own readiness/status/smoke curls |
 | `MEM_FRACTION_STATIC` | `0.80` | Script default. PLE is *inside* this budget on GB10 ([issue #8](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Next-Dual-DGX-Sparks/issues/8) — `0.70` double-counted it). This cluster's 1M YaRN `.env` uses `0.82` + chunk 1024 |
 | `PLE_OFFLOAD` | *(auto)* | Empty = auto-rule (recommended on GB10); `1`/`0` to force |
-| `NVFP4_KV_CACHE` | `1` | `1` = NVFP4 KV (dequant-on-gather, **2,911,488 tokens** measured); `0` = **bf16** KV |
-| `KV_CACHE_DTYPE` | *(empty)* | raw `--kv-cache-dtype` when `NVFP4_KV_CACHE=0` (empty → bf16). Must be empty when `NVFP4_KV_CACHE=1`. `fp8_e4m3` does not boot on this QSA path |
-| `CONTEXT_LENGTH` | `1048576` | YaRN 1M default (factor 4.0 × native 262144). Set `262144` for native (no YaRN). KV pool is 925,504 (bf16) or **2,914,944** (`NVFP4_KV_CACHE=1`) |
+| `NVFP4_KV_CACHE` | `1` | `1` = NVFP4 KV (**2,851,328 tokens** / 11.22 GB); `0` = **fp8_e4m3** KV (**1,751,552 tokens** / 11.28 GB) |
+| `KV_CACHE_DTYPE` | *(empty)* | raw `--kv-cache-dtype` when `NVFP4_KV_CACHE=0` (empty → `fp8_e4m3`; `bf16` to force bf16). Must be empty when `NVFP4_KV_CACHE=1` |
+| `CONTEXT_LENGTH` | `1048576` | YaRN 1M default (factor 4.0 × native 262144). Set `262144` for native (no YaRN). Pool is **2.85M (NVFP4)** or **1.75M (FP8)** — both > 1M |
 | `MAX_RUNNING_REQUESTS` | `28` | Script default = mamba ceiling at 0.80 + default mamba ratio. `CUDA_GRAPH_BS` is extended to match. YaRN `.env` at mamba ratio 0.3 still caps ~14 |
 | `CHUNKED_PREFILL_SIZE` | `1024` | Keep ≤1024 for 1M ctx — the QSA indexer logits buffer is `[chunk × history]` fp32 |
 | `MAMBA_FULL_MEMORY_RATIO` | `0.3` | Default 0.9 over-provisions mamba (47% of budget); 0.3 is enough for 14 requests |

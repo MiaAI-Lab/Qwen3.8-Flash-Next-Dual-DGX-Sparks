@@ -84,7 +84,7 @@
 #    and the QSA gather paths compact the packed rows with the stock Triton
 #    kernel and dequantize via flashinfer's nvfp4_kv_dequantize (validated
 #    CUDA-graph-safe on SM121). ~3.1x KV tokens at FP4 KV accuracy
-#    (~9% relative K/V error; 11/11 NIAH through 16k).
+#    (~9% relative K/V error; NIAH RELIABLE through 128k as a single huge prompt).
 #
 #  GB10 WARNING — never probe this model with --load-format dummy:
 #    initialize_dummy_weights() materializes an fp16 COPY of the ~26 GB/rank
@@ -138,12 +138,10 @@
 #    ATTENTION_BACKEND=flashinfer
 #    NVFP4_KV_CACHE=1            1 = --kv-cache-dtype nvfp4 (the QSA FP4 KV
 #                                path above; ~3.1x KV tokens, FP4 KV
-#                                accuracy; default) · 0 = bf16 KV
+#                                accuracy; default) · 0 = fp8_e4m3 KV
 #    KV_CACHE_DTYPE=            raw --kv-cache-dtype override when
-#                                NVFP4_KV_CACHE=0 (e.g. fp8_e4m3). Must be empty
-#                                when NVFP4_KV_CACHE=1. Empty + NVFP4=0 → bf16.
-#                                QSA Triton fallback requires q/k/v dtypes to
-#                                match; fp8_e4m3 dies at graph capture.
+#                                NVFP4_KV_CACHE=0 (e.g. bf16). Must be empty
+#                                when NVFP4_KV_CACHE=1. Empty + NVFP4=0 → fp8_e4m3.
 #    FP4_GEMM_BACKEND=          empty = auto (proven on SM121 for the 27B)
 #    LINEAR_ATTN_PREFILL_BACKEND=  empty = default (triton on SM121)
 #    LINEAR_ATTN_DECODE_BACKEND=   empty = default (triton on SM121)
@@ -244,8 +242,8 @@ SPEC_DRAFT="${SPEC_DRAFT:-4}"
 ENABLE_DECODE_GRAPHS="${ENABLE_DECODE_GRAPHS:-1}"
 CUDA_GRAPH_BS="${CUDA_GRAPH_BS:-"1 2 3 4 5 6 7 8 10 12 14 16"}"
 ATTENTION_BACKEND="${ATTENTION_BACKEND:-flashinfer}"
-NVFP4_KV_CACHE="${NVFP4_KV_CACHE:-1}"   # 1 = NVFP4 FP4 KV; 0 = bf16
-KV_CACHE_DTYPE="${KV_CACHE_DTYPE:-}"   # override when NVFP4_KV_CACHE=0 (e.g. fp8_e4m3); empty + 0 → bf16
+NVFP4_KV_CACHE="${NVFP4_KV_CACHE:-1}"   # 1 = NVFP4 FP4 KV; 0 = fp8_e4m3
+KV_CACHE_DTYPE="${KV_CACHE_DTYPE:-}"   # override when NVFP4_KV_CACHE=0 (e.g. bf16); empty + 0 → fp8_e4m3
 PLE_OFFLOAD="${PLE_OFFLOAD:-}"
 FP4_GEMM_BACKEND="${FP4_GEMM_BACKEND:-}"
 LINEAR_ATTN_PREFILL_BACKEND="${LINEAR_ATTN_PREFILL_BACKEND:-}"
@@ -549,7 +547,7 @@ preflight() { # $1 = action; port checks only matter when serving
   if [[ "${NVFP4_KV_CACHE}" == "1" ]]; then
     ok "NVFP4 KV cache enabled (kv-cache-dtype nvfp4)"
   else
-    ok "KV cache dtype ${KV_CACHE_DTYPE:-bf16} (NVFP4_KV_CACHE=0)"
+    ok "KV cache dtype ${KV_CACHE_DTYPE:-fp8_e4m3} (NVFP4_KV_CACHE=0)"
   fi
   ok "recipe constraints valid (NEXTN ${SPEC_STEPS}/${SPEC_TOPK}/${SPEC_DRAFT}, page 64, track ${MAMBA_TRACK_INTERVAL})"
 }
@@ -702,19 +700,23 @@ def triton_varlen_attn_func(
     """Drop-in replacement for flash_attn.flash_attn_varlen_func (QSA calls).
 
     Supports the exact shape the QSA sparse backend issues: one query row per
-    varlen sequence, GQA, matching q/k/v dtypes (bf16/fp16), any head_dim.
+    varlen sequence, GQA, any head_dim. Q is bf16/fp16; K/V may match Q or
+    be fp8 (fp8_e4m3 / fp8_e5m2) — the kernel upcasts loads to fp32, so a
+    fp8 KV cache does not need a host-side dequant (CUDA-graph safe).
     """
     if not q.is_cuda:
         raise RuntimeError("qsa_fa_fallback requires CUDA tensors")
     if q.dim() != 3 or k.dim() != 3 or v.dim() != 3:
         raise RuntimeError(f"expected 3D q/k/v, got {q.shape}/{k.shape}/{v.shape}")
-    if k.dtype != q.dtype or v.dtype != q.dtype:
-        raise RuntimeError(
-            f"qsa_fa_fallback: q/k/v dtypes must match "
-            f"({q.dtype}/{k.dtype}/{v.dtype}); keep KV cache in model dtype"
-        )
     if q.dtype not in (torch.bfloat16, torch.float16):
-        raise RuntimeError(f"qsa_fa_fallback: unsupported dtype {q.dtype}")
+        raise RuntimeError(f"qsa_fa_fallback: unsupported q dtype {q.dtype}")
+    _fp8 = {torch.float8_e4m3fn, torch.float8_e5m2}
+    if k.dtype != v.dtype:
+        raise RuntimeError(f"qsa_fa_fallback: k/v dtypes must match ({k.dtype}/{v.dtype})")
+    if k.dtype != q.dtype and k.dtype not in _fp8:
+        raise RuntimeError(
+            f"qsa_fa_fallback: k/v dtype {k.dtype} is not {q.dtype} or fp8"
+        )
 
     total_q, hq, d = q.shape
     total_k, hkv, dk = k.shape
@@ -1663,6 +1665,8 @@ build_sglang_args() { # $1 = container model path
     SGLANG_ARGS+=(--kv-cache-dtype nvfp4)
   elif [[ -n "${KV_CACHE_DTYPE}" ]]; then
     SGLANG_ARGS+=(--kv-cache-dtype "${KV_CACHE_DTYPE}")
+  else
+    SGLANG_ARGS+=(--kv-cache-dtype fp8_e4m3)
   fi
   if (( CONTEXT_LENGTH > YARN_NATIVE_CTX )); then
     SGLANG_ARGS+=(--json-model-override-args "${YARN_OVERRIDE_ARGS}")

@@ -12,17 +12,19 @@ All notable changes to this serving recipe.
   11.47 GB** (~3.1× the 925,504-token bf16 pool).
 - `evals/nvfp4_kv_eval.py` / `./start.sh kv-eval` — passkey / needle-in-haystack
   reliability check against the live API. Quick suite on this cluster
-  (2026-08-27T07:54Z): **11/11 PASS**, verdict **RELIABLE** through 16k
-  (0/50/100%) plus a 2-turn radix follow-up (`cache_hit_rate` 0 → 0.970).
+  (2026-08-27): **RELIABLE through 128k as a single huge prompt** (0/50/100%).
+  64k and 128k NIAH were 3/3 at every position. 256k same-turn 0%/50% hit
+  the token-0 `!` loop; recency and a two-turn follow-up still retrieved.
 - YaRN **1M context** as the script default (`CONTEXT_LENGTH=1048576`,
   factor 4.0 × native 262144). `start.sh` injects the rope override and
   `--max-prefill-tokens 2048`. Opt out with `CONTEXT_LENGTH=262144`.
 
 ### Changed
 
-- `NVFP4_KV_CACHE` default is **1** (opt out with `0` for bf16 KV). `fp8_e4m3`
-  was tried as the off-path and **does not boot** on QSA (Triton fallback:
-  q=bf16 vs k/v=fp8).
+- `NVFP4_KV_CACHE` default is **1**. `0` selects **fp8_e4m3** KV (not bf16).
+  The QSA Triton fallback now accepts fp8 K/V (upcast to fp32 on load);
+  previously it refused mixed q=bf16 / kv=fp8 at graph capture.
+  `KV_CACHE_DTYPE=bf16` forces bf16.
 - `MEM_FRACTION_STATIC` default **0.80**. PLE (~26 GB/rank) is inside GB10's
   unified CUDA budget; **0.70 double-counted it** and starved KV/mamba
   ([issue #8](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Next-Dual-DGX-Sparks/issues/8)).
