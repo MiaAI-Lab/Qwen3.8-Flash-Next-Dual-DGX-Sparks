@@ -33,8 +33,10 @@ All notable changes to this serving recipe.
 - `MAX_RUNNING_REQUESTS` default **28**. `CUDA_GRAPH_BS` is extended to match
   so decode steps above 16 stay graphed. (This cluster's YaRN `.env` at
   `MAMBA_FULL_MEMORY_RATIO=0.3` still caps at **14** mamba slots.)
-- `CHUNKED_PREFILL_SIZE` default **1024**; clamped to 1024 when context > 262144
-  (chunk 4096 at 300k history froze GB10).
+- `CHUNKED_PREFILL_SIZE` default is now **per context**: **4096** at or below
+  native 262144, **1024** above it. Still clamped to 1024 when
+  context > 262144 (chunk 4096 at 300k history froze GB10). The unconditional
+  1024 cost 15–23% of prefill at native context on 2× GB10 TP2.
 - `--allow-auto-truncate` is **opt-in** (`ALLOW_AUTO_TRUNCATE=1`). Over-length
   prompts return 400 instead of silent trim.
 - After boot, `start.sh` **refuses** if the KV pool cannot hold one advertised

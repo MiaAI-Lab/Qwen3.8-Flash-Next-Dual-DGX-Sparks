@@ -126,7 +126,9 @@
 #                               1M YaRN recipe uses 0.82 + chunk 1024 in .env.
 #    CONTEXT_LENGTH=1048576     YaRN 1M default (factor 4.0 × native 262144).
 #                               Set 262144 for native (no YaRN). Hard-capped at 1M.
-#    CHUNKED_PREFILL_SIZE=1024  Keep ≤1024 when context > 262144 (indexer workspace).
+#    CHUNKED_PREFILL_SIZE=      empty = 4096 at native context, 1024 above it.
+#                               Keep ≤1024 when context > 262144 (indexer
+#                               workspace); >1024 there is clamped with a warn.
 #    MAX_PREFILL_TOKENS=        empty = 2048 under YaRN, else unset
 #    MAX_RUNNING_REQUESTS=28    mamba ceiling at 0.80 + default mamba ratio
 #                               (~141 slots / 5). 16 silently queues past c=16.
@@ -230,10 +232,20 @@ SERVED_MODEL_NAME="${SERVED_MODEL_NAME:-Qwen3.8-Flash-Next-NVFP4}"
 
 MEM_FRACTION_STATIC="${MEM_FRACTION_STATIC:-0.80}"   # GB10: PLE is inside this budget (issue #8)
 CONTEXT_LENGTH="${CONTEXT_LENGTH:-1048576}"   # YaRN 1M; 262144 = native, no YaRN
-CHUNKED_PREFILL_SIZE="${CHUNKED_PREFILL_SIZE:-1024}"
 MAX_PREFILL_TOKENS="${MAX_PREFILL_TOKENS:-}"  # empty = 2048 when YaRN, else unset
 YARN_NATIVE_CTX=262144
 YARN_MAX_CTX=1048576
+# Chunk size is only cheap above native context, where a 4096 chunk at 300k
+# history froze GB10. At or below native it costs real prefill throughput
+# (measured +15…23% for 4096 over 1024 on 2× GB10 TP2), and the model card
+# recipe this script follows uses 4096 at --context-length 262144. So default
+# per context; an explicit CHUNKED_PREFILL_SIZE always wins, and the >native
+# clamp below still applies to it.
+if (( CONTEXT_LENGTH > YARN_NATIVE_CTX )); then
+  CHUNKED_PREFILL_SIZE="${CHUNKED_PREFILL_SIZE:-1024}"
+else
+  CHUNKED_PREFILL_SIZE="${CHUNKED_PREFILL_SIZE:-4096}"
+fi
 YARN_OVERRIDE_ARGS='{"text_config":{"rope_scaling":{"rope_type":"yarn","factor":4.0,"original_max_position_embeddings":262144},"max_position_embeddings":1048576}}'
 MAX_RUNNING_REQUESTS="${MAX_RUNNING_REQUESTS:-28}"
 ALLOW_AUTO_TRUNCATE="${ALLOW_AUTO_TRUNCATE:-0}"      # 1 = --allow-auto-truncate
