@@ -1004,6 +1004,7 @@ launch() {
     -v "${worker_cache_root}/flashinfer-qwen38-flash-next:/root/.cache/flashinfer" \
     "${worker_preload[@]}" \
     $(common_docker_env) \
+    -e SGLANG_HOST_IP="${WORKER_CX7_IP}" \
     -e NCCL_SOCKET_IFNAME="${WORKER_CX7_IF}" \
     -e GLOO_SOCKET_IFNAME="${WORKER_CX7_IF}" \
     -e TP_SOCKET_IFNAME="${WORKER_CX7_IF}" \
@@ -1031,6 +1032,7 @@ launch() {
     -v "${FLASHINFER_CACHE_DIR}:/root/.cache/flashinfer" \
     "${head_preload[@]}" \
     $(common_docker_env) \
+    -e SGLANG_HOST_IP="${HEAD_CX7_IP}" \
     -e NCCL_SOCKET_IFNAME="${HEAD_CX7_IF}" \
     -e GLOO_SOCKET_IFNAME="${HEAD_CX7_IF}" \
     -e TP_SOCKET_IFNAME="${HEAD_CX7_IF}" \
