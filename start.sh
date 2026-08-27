@@ -1959,12 +1959,23 @@ wait_ready() {
 # Subcommands
 # =============================================================================
 cmd_serve() {
-  # Already running → report and exit cleanly (idempotent)
+  # Already running → report and exit cleanly (idempotent). Both ranks must be
+  # up: a TP=2 group is not "running" because rank 0 is. If the head is up and
+  # the worker is gone, rank 0 sits in NCCL rendezvous forever (or against a
+  # stale rank 1), and exiting 0 here reports success for a pair that can never
+  # serve. Recovery is stop-then-start, which the operator must be told to do.
   if docker ps --format '{{.Names}}' | grep -qx "${HEAD_CONTAINER}"; then
-    ok "${HEAD_CONTAINER} already running"
-    curl -fsS "${AUTH_CURL[@]}" "${READY_URL}" >/dev/null 2>&1 && ok "API is ready: ${READY_URL}" || info "API not ready yet (still booting?)"
-    info "logs: ./start.sh logs   ·   stop: ./start.sh stop"
-    exit 0
+    if worker_docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "${WORKER_CONTAINER}"; then
+      ok "${HEAD_CONTAINER} already running"
+      curl -fsS "${AUTH_CURL[@]}" "${READY_URL}" >/dev/null 2>&1 && ok "API is ready: ${READY_URL}" || info "API not ready yet (still booting?)"
+      info "logs: ./start.sh logs   ·   stop: ./start.sh stop"
+      exit 0
+    fi
+    error "half-assembled pair: ${HEAD_CONTAINER} is running on the head but"
+    error "${WORKER_CONTAINER} is NOT running on ${WORKER_SSH}."
+    error "Rank 0 cannot form a TP group alone -- it will wait in rendezvous."
+    error "Recover with:  ./start.sh stop  &&  ./start.sh"
+    exit 1
   fi
 
   preflight serve
