@@ -140,6 +140,8 @@
 #    EXTRA_ARGS="…"             appended last (argparse last-wins → overrides)
 #    API_KEY=                   optional: serve with --api-key AND authenticate
 #                               this script's own readiness/status/smoke curls
+#                               (an --api-key inside EXTRA_ARGS wins for the
+#                               server and is picked up here too, with a warning)
 # =============================================================================
 set -euo pipefail
 
@@ -238,8 +240,11 @@ API_KEY="${API_KEY:-}"
 # Auth header for every local readiness/status/smoke curl in this script:
 # with --api-key set, the server answers 401 to bare requests, which curl -f
 # treats as failure -- without this, wait_ready times out on a healthy server.
-AUTH_CURL=()
-[[ -n "${API_KEY}" ]] && AUTH_CURL=(-H "Authorization: Bearer ${API_KEY}")
+# API_KEY is only the *requested* key: EXTRA_ARGS can carry its own --api-key
+# and argparse is last-wins, so the header is re-derived from the key the
+# server will really enforce by derive_effective_api_key() below.
+EFFECTIVE_API_KEY="${API_KEY}"
+AUTH_CURL=()   # populated by derive_effective_api_key (single owner of this rule)
 
 # ---- Paths / logs -----------------------------------------------------------
 HF_HOME="${HF_HOME:-${HOME}/.cache/huggingface}"
@@ -259,6 +264,42 @@ ok()     { echo -e "${GREEN}[OK]${NC}    $*"; }
 warn()   { echo -e "${YELLOW}[WARN]${NC}  $*"; }
 error()  { echo -e "${RED}[ERROR]${NC} $*" >&2; }
 header() { echo -e "\n${BOLD}${CYAN}━━━ $* ━━━${NC}"; }
+
+# ---- Effective API key ------------------------------------------------------
+# The server enforces the LAST --api-key on its command line. build_sglang_args
+# appends API_KEY first and EXTRA_ARGS last, so an --api-key hidden in
+# EXTRA_ARGS beats API_KEY server-side. Derive that winning key (SGLANG_ARGS
+# when it has been built, EXTRA_ARGS otherwise) and point AUTH_CURL at it, so
+# the script's own curls never 401 against a server it keyed itself.
+derive_effective_api_key() {
+  local -a scan=(); local from_extra=0 key="" a i n
+  if [[ -n "${SGLANG_ARGS+x}" ]]; then
+    scan=("${SGLANG_ARGS[@]}")
+  else
+    read -ra scan <<< "${EXTRA_ARGS}"
+    from_extra=1
+  fi
+  n=${#scan[@]}
+  for (( i = 0; i < n; i++ )); do
+    a="${scan[i]}"
+    if   [[ "${a}" == "--api-key" && $(( i + 1 )) -lt n ]]; then key="${scan[i+1]}"
+    elif [[ "${a}" == --api-key=* ]];                     then key="${a#--api-key=}"
+    fi
+  done
+  EFFECTIVE_API_KEY="${key:-${API_KEY}}"
+  AUTH_CURL=()
+  [[ -n "${EFFECTIVE_API_KEY}" ]] && AUTH_CURL=(-H "Authorization: Bearer ${EFFECTIVE_API_KEY}")
+  # Warn once, from the EXTRA_ARGS pass (the SGLANG_ARGS pass cannot tell which
+  # knob a key came from).
+  if (( from_extra )) && [[ -n "${key}" ]]; then
+    if [[ -z "${API_KEY}" ]]; then
+      warn "EXTRA_ARGS carries --api-key while API_KEY is empty — serving keyed; this script's curls will use the EXTRA_ARGS key. Prefer API_KEY."
+    else
+      warn "API_KEY and EXTRA_ARGS both set --api-key — EXTRA_ARGS wins for the server (argparse last-wins), so that is the key being used."
+    fi
+  fi
+  return 0
+}
 
 # ---- Remote helpers (worker = spark2 via ssh alias) -------------------------
 wrun() { # remote shell snippet
@@ -286,9 +327,17 @@ case "${ACTION}" in
   *) echo "Unknown argument: ${ACTION}"; echo "Usage: $0 [serve|download|stop|status|logs|smoke|doctor]"; exit 1 ;;
 esac
 if [[ "${ACTION}" == "-h" || "${ACTION}" == "--help" ]]; then
-  sed -n '2,120p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+  # Print the whole header comment block — from line 2 until the first line
+  # that is no longer a comment — so tunables documented at its end are not
+  # truncated away (a hardcoded line range silently drops them as it grows).
+  sed -n '2,${/^#/!{/^$/!q;};p;}' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
   exit 0
 fi
+
+# Auth for the readiness/status/smoke curls, before any of them can run
+# (status/smoke never reach build_sglang_args); launch() re-derives from the
+# assembled SGLANG_ARGS.
+derive_effective_api_key
 
 # =============================================================================
 # Preflight
@@ -938,6 +987,9 @@ launch() {
   snap="$(resolve_snapshot)" || { error "weights not resolved on head — run './start.sh download' first"; exit 1; }
   container_model="$(container_path "${snap}")"
   build_sglang_args "${container_model}"
+  # Re-derive from the assembled command line: whatever --api-key ends up last
+  # there is what wait_ready must authenticate with.
+  derive_effective_api_key
 
   # NCCL ≥ 2.30.7 staged on both nodes (house GB10+CX7 cudagraph/TP pin).
   local head_nccl_dir="${NCCL_HOST_DIR:-${HOME}/nccl-2.30.7}"
@@ -1128,7 +1180,17 @@ cmd_serve() {
   echo ""
   echo -e "  ${BOLD}Quick test:${NC}"
   echo "    curl -s http://127.0.0.1:${PORT}/v1/chat/completions -H 'Content-Type: application/json' \\"
+  # Keyed boot → the example needs the header or it 401s. Printed as the
+  # literal placeholder, never the secret itself.
+  if [[ -n "${EFFECTIVE_API_KEY}" ]]; then
+    local _qt_ph='$API_KEY'; [[ -z "${API_KEY}" ]] && _qt_ph='<your-api-key>'
+    # shellcheck disable=SC2016,SC1003  # literal $API_KEY placeholder is intentional
+    echo "      -H \"Authorization: Bearer ${_qt_ph}\" \\"
+  fi
   echo "      -d '{\"model\": \"${SERVED_MODEL_NAME}\", \"messages\": [{\"role\": \"user\", \"content\": \"Hello!\"}]}'"
+  if [[ -n "${EFFECTIVE_API_KEY}" ]]; then
+    echo "    (served with --api-key: every /v1 request needs that Authorization header)"
+  fi
   echo ""
   echo -e "  ${BOLD}Stop:${NC}  ./start.sh stop      ${BOLD}Status:${NC}  ./start.sh status"
   echo ""

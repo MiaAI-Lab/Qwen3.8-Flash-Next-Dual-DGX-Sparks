@@ -128,11 +128,16 @@ Or just `./start.sh` — it runs doctor → download → serve in order.
 ```bash
 curl http://127.0.0.1:8888/v1/chat/completions \
   -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $API_KEY" \
   -d '{
         "model": "Qwen3.8-Flash-Next-NVFP4",
         "messages": [{"role": "user", "content": "Explain RoCEv2 in one paragraph."}]
       }'
 ```
+
+The `Authorization` header is only needed when you set `API_KEY` (see [Key
+tunables](#key-tunables)); on an open server you can drop that line. Keyed
+servers answer bare requests with `401`.
 
 Thinking is on by default (`reasoning_content` streams separately). To turn it
 off per-request:
@@ -174,6 +179,9 @@ Wiring it into a local agent harness (e.g. pi's `~/.pi/agent/models.json`):
   }]
 }
 ```
+
+That block assumes an open server; with `API_KEY` set, put the key in
+`"apiKey"` and flip `"authHeader": true` / `"auth": "bearer"`.
 
 ## Commands
 
@@ -244,6 +252,7 @@ the ones you'll actually touch:
 | `WORKER_USER` | *(empty)* | empty = reuse the head login user (most setups); set only if the worker uses a different account |
 | `WORKER_SSH` | *(derived)* | full `user@host` override if you need it |
 | `PORT` | `8888` | API port, bound on all interfaces |
+| `API_KEY` | *(empty)* | Empty = open (LAN-trusted) server. Set = serve with `--api-key` and send `Authorization: Bearer <key>` on the script's own readiness/status/smoke curls |
 | `MEM_FRACTION_STATIC` | `0.82` | Budget for unified DRAM; 0.82 leaves ~17 GB free for prefill transients |
 | `PLE_OFFLOAD` | *(auto)* | Empty = auto-rule (recommended on GB10); `1`/`0` to force |
 | `CONTEXT_LENGTH` | `900000` | YaRN-scaled (factor 4.0, native 262144); pool is 956,800 tokens |
