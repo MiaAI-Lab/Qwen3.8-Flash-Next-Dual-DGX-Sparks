@@ -98,6 +98,7 @@
 #    ./start.sh status          # containers / API state on both nodes
 #    ./start.sh logs [head|worker]
 #    ./start.sh smoke           # one chat completion against :8888
+#    ./start.sh kv-eval         # NVFP4 KV passkey/NIAH reliability vs live API
 #    ./start.sh doctor          # preflight checks only
 #
 #  Tunables (env or .env in this directory; shell env wins):
@@ -295,8 +296,8 @@ ACTION="${1:-serve}"
 case "${ACTION}" in
   serve|"") ;;
   download|--download-only) ACTION="download" ;;
-  stop|status|logs|smoke|doctor|-h|--help) ;;
-  *) echo "Unknown argument: ${ACTION}"; echo "Usage: $0 [serve|download|stop|status|logs|smoke|doctor]"; exit 1 ;;
+  stop|status|logs|smoke|kv-eval|doctor|-h|--help) ;;
+  *) echo "Unknown argument: ${ACTION}"; echo "Usage: $0 [serve|download|stop|status|logs|smoke|kv-eval|doctor]"; exit 1 ;;
 esac
 if [[ "${ACTION}" == "-h" || "${ACTION}" == "--help" ]]; then
   sed -n '2,120p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
@@ -704,22 +705,27 @@ class QSANVFP4KVCacheMethod(NVFP4KVCacheMethod):
     packed FP4 + scales on demand.
     """
 
+    def __init__(self, num_layers: int, device: str):
+        super().__init__(num_layers, device)
+        # Pre-allocate so the out-of-range fallback never does torch.ones
+        # during CUDA-graph capture.
+        self._ones_scale = torch.ones(1, dtype=torch.float32, device=device)
+
     def attention_accesses(self) -> tuple[KVCacheAttentionAccess, ...]:
         return (
             _plain_access(KVCacheAttentionPhase.PREFILL),
             _plain_access(KVCacheAttentionPhase.DECODE),
         )
 
-    @staticmethod
     def _layer_global_scale(
-        scales_gpu: torch.Tensor, layer_id: int
+        self, scales_gpu: torch.Tensor, layer_id: int
     ) -> torch.Tensor:
         # The write path indexes k_scales_gpu by the GLOBAL layer id (with
         # load_scales_from_model resizing the vector to cover global ids);
         # guard against shorter vectors (all-ones scales) anyway.
         if 0 <= layer_id < scales_gpu.numel():
             return scales_gpu[layer_id : layer_id + 1]
-        return torch.ones(1, dtype=torch.float32, device=scales_gpu.device)
+        return self._ones_scale
 
     def dequantize_kv_tensor(
         self,
@@ -898,6 +904,9 @@ All patches are QSA-scoped and inert unless ``--kv-cache-dtype nvfp4`` is set:
    ``--attention-backend`` only selects the GDN linear-attn kernels.
 4. ``pool_configurator.py`` — don't reserve the FP8 workspace share of the
    FP4 cell size for QSA models (the QSA method allocates none).
+5. ``memory_pool.py`` — NVFP4 write path: ignore hybrid pool's Python
+   ``k_scale=1.0`` default and use on-device ``k_scales_gpu`` (host→CUDA
+   ``torch.tensor`` is illegal during decode CUDA-graph capture).
 """
 
 import pathlib
@@ -1160,6 +1169,42 @@ POOL_CFG_REPLACEMENT = """                # FP4 prefill uses one shared FP8 dequ
                     cell_size += n * k * 2 * kv_size
 """
 
+# ---------------------------------------------------------------------------
+# 5. memory_pool: NVFP4 store must use on-device global scales
+# ---------------------------------------------------------------------------
+POOL = SRT / "mem_cache" / "memory_pool.py"
+
+QUANT_SCALES_ANCHOR = """    def _quantized_scales(self, global_layer_id: int, k_scale, v_scale):
+        if k_scale is None and hasattr(self.quant_method, "k_scales_gpu"):
+            k_scale = self.quant_method.k_scales_gpu[
+                global_layer_id : global_layer_id + 1
+            ]
+            v_scale = self.quant_method.v_scales_gpu[
+                global_layer_id : global_layer_id + 1
+            ]
+        return k_scale, v_scale
+"""
+QUANT_SCALES_REPLACEMENT = """    def _quantized_scales(self, global_layer_id: int, k_scale, v_scale):
+        # dspark qsa_nvfp4_kv: HybridTokenToKVPool.set_kv_buffer defaults
+        # k_scale=v_scale=1.0 (Python floats). That skips the on-device
+        # per-layer NVFP4 global scales, and NVFP4KVQuantizeUtil.quantize
+        # then does torch.tensor(..., device=cuda) — illegal during CUDA
+        # graph capture. Host scalars are treated as unset on nvfp4 only.
+        use_gpu = hasattr(self.quant_method, "k_scales_gpu")
+        nvfp4 = getattr(self.quant_method, "name", None) == "nvfp4"
+        host_scalar = nvfp4 and not (
+            torch.is_tensor(k_scale) and k_scale.is_cuda
+        )
+        if use_gpu and (k_scale is None or host_scalar):
+            k_scale = self.quant_method.k_scales_gpu[
+                global_layer_id : global_layer_id + 1
+            ]
+            v_scale = self.quant_method.v_scales_gpu[
+                global_layer_id : global_layer_id + 1
+            ]
+        return k_scale, v_scale
+"""
+
 
 def main() -> None:
     patch(
@@ -1175,6 +1220,7 @@ def main() -> None:
     patch(FP4_METHOD, [(FP4_METHOD_ANCHOR, FP4_METHOD_REPLACEMENT)])
     patch(SERVER_ARGS, [(SERVER_ARGS_ANCHOR, SERVER_ARGS_REPLACEMENT)])
     patch(POOL_CFG, [(POOL_CFG_ANCHOR, POOL_CFG_REPLACEMENT)])
+    patch(POOL, [(QUANT_SCALES_ANCHOR, QUANT_SCALES_REPLACEMENT)])
     print("NVFP4 KV patches applied")
 
 
@@ -1792,5 +1838,6 @@ case "${ACTION}" in
   status)   cmd_status ;;
   logs)     cmd_logs "${2:-head}" ;;
   smoke)    cmd_smoke ;;
+  kv-eval)  shift; exec python3 "${SCRIPT_DIR}/nvfp4_kv_eval.py" --base-url "http://127.0.0.1:${PORT}" --model "${SERVED_MODEL_NAME}" "$@" ;;
   doctor)   cmd_doctor ;;
 esac

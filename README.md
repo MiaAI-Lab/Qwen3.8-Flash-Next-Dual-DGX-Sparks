@@ -90,12 +90,41 @@ build):
   share
 
 Enable it with `NVFP4_KV_CACHE=1` in `.env` (or inline: `NVFP4_KV_CACHE=1
-./start.sh serve`); `0` (the default) keeps bf16 KV. All kernels are
-CUDA-graph-safe on SM121 (verified bit-exact replay). Effect:
-**~3.5× KV capacity** (3456 vs 12288 bytes/token for K+V across the 12
-full-attention layers, plus the BF16 QSA index cache) at FP4 KV accuracy
-(~9 % relative K/V error — fine for chat, measure before trusting it on
-long-context retrieval).
+./start.sh serve`); `0` (the default) keeps bf16 KV. `.env` is first-assignment
+wins, so a leftover `NVFP4_KV_CACHE=0` above your `=1` keeps bf16. All kernels
+are CUDA-graph-safe on SM121 (verified bit-exact replay; decode-graph capture
+needs the on-device `k_scales_gpu` path — a Python `k_scale=1.0` default
+illegal-copied host→CUDA during capture and was patched). Effect:
+**~3.1× KV tokens** at the same mem-fraction (measured **2,902,208** vs
+925,504 bf16) at FP4 KV accuracy (~9 % relative K/V error on the tensors;
+retrieval below).
+
+Measured on this cluster (`NVFP4_KV_CACHE=1`, 2026-08-27T07:54Z, `kv-eval`
+quick suite, thinking off, temp 0). Pool `nvfp4`, **2,902,208 tokens /
+11.42 GB**. **11/11 PASS**, verdict **RELIABLE** — every planted passkey
+came back exactly, including 0/50/100% of a 16k haystack and a 2-turn
+radix follow-up (`cache_hit_rate` 0 → 0.970):
+
+| Case | Prompt tokens | Position | Result |
+|---|---:|---|---|
+| control / no haystack | 47 | — | PASS |
+| decode / exact copy | 30 | — | PASS |
+| NIAH 1,024 | 1,102 | 50% | PASS |
+| NIAH 4,096 | 4,134 / 4,136 / 4,136 | 0% / 50% / 100% | PASS ×3 |
+| NIAH 16,384 | 16,296 / 16,294 / 16,293 | 0% / 50% / 100% | PASS ×3 |
+| multi-fact binding | 8,229 | 15% | PASS |
+| radix follow-up (4k prefix) | 4,162 | 50% | PASS |
+
+Re-run:
+
+```bash
+./start.sh kv-eval --require-nvfp4                  # ≤16k, a few minutes
+./start.sh kv-eval --suite full --require-nvfp4 --json kv-eval.json   # up to 64k
+```
+
+`nvfp4_kv_eval.py` plants a unique passkey at 0/50/100% of a synthetic haystack
+and asks for it back (plus a 2-turn radix follow-up). `--suite long` adds 128k —
+do not push past that on GB10 without watching `available_gpu_mem`.
 
 ## The GB10 memory cliff (crash post-mortem)
 
@@ -249,7 +278,7 @@ multi-node-TP stability on GB10.
 |---|---|---|---|
 | NVFP4 expert + dense/MTP/vision weights | GPU device | ~62.5 GB | ✅ `sglang::scheduler_TP0 63971MiB` |
 | PLE n-gram table (fp8, cudaHostAlloc) | **pinned host** | ~11 GB | ❌ host-side, invisible |
-| KV cache (bf16, both pools) | GPU device | 9.0 GB → **956,800 tokens** (`NVFP4_KV_CACHE=1`: ~2.6 GB → ~3× tokens) | ✅ |
+| KV cache (both pools) | GPU device | bf16: ~11.3 GB → **925,504 tokens**; `NVFP4_KV_CACHE=1`: **11.42 GB → 2,902,208 tokens** (~3.1×) | ✅ |
 | Mamba/GDN state cache | GPU device | ~3.6 GB (73 slots) | ✅ |
 | CUDA graphs + NCCL/cuBLAS workspaces | GPU device | ~8 GB | ✅ |
 | **Total CUDA-visible** | | **~95.6 GB** | |
@@ -277,9 +306,9 @@ the ones you'll actually touch:
 | `PORT` | `8888` | API port, bound on all interfaces |
 | `MEM_FRACTION_STATIC` | `0.82` | Budget for unified DRAM; 0.82 leaves ~17 GB free for prefill transients |
 | `PLE_OFFLOAD` | *(auto)* | Empty = auto-rule (recommended on GB10); `1`/`0` to force |
-| `NVFP4_KV_CACHE` | `0` | `1` = NVFP4 KV cache for the QSA layers (dequant-on-gather, ~3.5× KV tokens, FP4 KV accuracy); `0` = bf16 |
+| `NVFP4_KV_CACHE` | `0` | `1` = NVFP4 KV cache for the QSA layers (dequant-on-gather, **2,902,208 tokens** measured / ~3.1× vs bf16, 11/11 NIAH PASS); `0` = bf16 |
 | `KV_CACHE_DTYPE` | *(empty)* | raw `--kv-cache-dtype` override (e.g. `fp8_e4m3`, untested); must be empty when `NVFP4_KV_CACHE=1` |
-| `CONTEXT_LENGTH` | `900000` | YaRN-scaled (factor 4.0, native 262144); pool is 956,800 tokens |
+| `CONTEXT_LENGTH` | `900000` | YaRN-scaled (factor 4.0, native 262144); KV pool is 925,504 (bf16) or **2,902,208** (`NVFP4_KV_CACHE=1`) |
 | `MAX_RUNNING_REQUESTS` | `16` | Concurrency (capped at 14 by mamba slots at ratio 0.3) |
 | `CHUNKED_PREFILL_SIZE` | `1024` | Keep ≤1024 for 900k ctx — the QSA indexer logits buffer is `[chunk × history]` fp32 |
 | `MAMBA_FULL_MEMORY_RATIO` | `0.3` | Default 0.9 over-provisions mamba (47% of budget); 0.3 is enough for 14 requests |
@@ -349,6 +378,7 @@ the ones you'll actually touch:
 
 ```
 start.sh          # everything: download, sync, image build, launch, ops
+nvfp4_kv_eval.py  # live-API passkey/NIAH eval for NVFP4 KV reliability
 .env.example      # copy to .env and edit (cluster IPs, worker ssh, recipe)
 .env              # your local config (gitignored — create from .env.example)
 .patch/           # (generated) SM121 kernel-patch Docker build context
