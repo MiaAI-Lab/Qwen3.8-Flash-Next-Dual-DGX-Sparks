@@ -36,6 +36,11 @@ All notable changes to this serving recipe.
 
 ### Fixed
 
+- Keyed-server readiness hang ([PR #7](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Next-Dual-DGX-Sparks/pull/7)): derive the
+  effective `--api-key` (argparse last-wins, including `EXTRA_ARGS`) so
+  `wait_ready` / `status` / `smoke` send `Authorization` instead of looping
+  on 401. `--help` now prints the full header; keyed curl examples use a
+  placeholder, never the secret.
 - 2-node TP=2 hang at `shm_broadcast.wait_until_ready` ([issue #3](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Next-Dual-DGX-Sparks/issues/3) /
   [PR #9](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Next-Dual-DGX-Sparks/pull/9)): pin
   `SGLANG_HOST_IP` to the ConnectX-7 IPs so the cross-node ZeroMQ MessageQueue
