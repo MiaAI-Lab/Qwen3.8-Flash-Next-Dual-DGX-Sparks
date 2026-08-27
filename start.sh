@@ -1842,6 +1842,10 @@ launch() {
   trap cleanup_followers EXIT
 
   : >"${LOG_FILE}"; : >"${WORKER_LOG_FILE}"
+  # The sglang startup banner captured here contains server_args, which embeds
+  # the configured --api-key verbatim. Create the logs owner-only so the key
+  # set is not left world-readable between runs.
+  chmod 600 "${LOG_FILE}" "${WORKER_LOG_FILE}"
   echo "[$(date -Is)] launching ${MODEL_ID} TP=${TP_SIZE} nnodes=${NNODES} image=${IMAGE}" >>"${LOG_FILE}"
 
   # Stale containers from a previous run
