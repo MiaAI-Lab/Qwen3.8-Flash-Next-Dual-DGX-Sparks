@@ -120,15 +120,19 @@
 #    WORKER_HF_HOME=<auto>      worker-side HF cache (default $HOME/.cache/…)
 #    DIST_PORT=26400            2-node rendezvous port on the head
 #    DOWNLOAD_MODE=rsync        rsync (head→worker) | direct (worker pulls too)
-#    MEM_FRACTION_STATIC=0.70   GB10 math: 0.70×122 GB GPU + 26 GB pinned PLE
-#                               + OS ≈ 119 of 122 GB — do not raise past ~0.75
-#                               unless PLE_OFFLOAD=0
+#    MEM_FRACTION_STATIC=0.80   GB10 unified DRAM: PLE (~26 GB/rank) is INSIDE
+#                               --mem-fraction-static (issue #8). 0.70
+#                               double-counted it and starved KV/mamba.
+#                               900k YaRN recipe in .env uses 0.82 + chunk 1024.
 #    CONTEXT_LENGTH=262144      (hard-capped at native 262144; YaRN = EXTRA_ARGS)
 #    CHUNKED_PREFILL_SIZE=4096
-#    MAX_RUNNING_REQUESTS=16
+#    MAX_RUNNING_REQUESTS=28    mamba ceiling at 0.80 + default mamba ratio
+#                               (~141 slots / 5). 16 silently queues past c=16.
+#    ALLOW_AUTO_TRUNCATE=0      1 = --allow-auto-truncate (silent trim). Off so
+#                               over-length prompts 400 instead of shrinking.
 #    SPEC_STEPS=3 SPEC_TOPK=1 SPEC_DRAFT=4     NEXTN chain (draft = steps + 1)
 #    ENABLE_DECODE_GRAPHS=1     0 → --cuda-graph-backend-decode=disabled
-#    CUDA_GRAPH_BS="1 2 3 4 5 6 7 8 10 12 14 16"
+#    CUDA_GRAPH_BS="1 2 3 4 5 6 7 8 10 12 14 16"  extended up to MAX_RUNNING
 #    ATTENTION_BACKEND=flashinfer
 #    NVFP4_KV_CACHE=1            1 = --kv-cache-dtype nvfp4 (the QSA FP4 KV
 #                                path above; ~3.1x KV tokens, FP4 KV
@@ -218,10 +222,11 @@ TP_SIZE=2
 NNODES=2
 SERVED_MODEL_NAME="${SERVED_MODEL_NAME:-Qwen3.8-Flash-Next-NVFP4}"
 
-MEM_FRACTION_STATIC="${MEM_FRACTION_STATIC:-0.70}"   # GB10: leaves DRAM for the ~26 GB/rank pinned PLE table
+MEM_FRACTION_STATIC="${MEM_FRACTION_STATIC:-0.80}"   # GB10: PLE is inside this budget (issue #8)
 CONTEXT_LENGTH="${CONTEXT_LENGTH:-262144}"
 CHUNKED_PREFILL_SIZE="${CHUNKED_PREFILL_SIZE:-4096}"
-MAX_RUNNING_REQUESTS="${MAX_RUNNING_REQUESTS:-16}"
+MAX_RUNNING_REQUESTS="${MAX_RUNNING_REQUESTS:-28}"
+ALLOW_AUTO_TRUNCATE="${ALLOW_AUTO_TRUNCATE:-0}"      # 1 = --allow-auto-truncate
 SPEC_STEPS="${SPEC_STEPS:-3}"
 SPEC_TOPK="${SPEC_TOPK:-1}"
 SPEC_DRAFT="${SPEC_DRAFT:-4}"
@@ -304,6 +309,71 @@ if [[ "${ACTION}" == "-h" || "${ACTION}" == "--help" ]]; then
   exit 0
 fi
 
+# Decode-graph batch list must reach MAX_RUNNING_REQUESTS. The two defaults
+# used to agree at 16; raising admission without extending the list leaves
+# every decode step above 16 ungraphed (issue #8 follow-up).
+sync_cuda_graph_bs() {
+  local n="${MAX_RUNNING_REQUESTS}" top=0 x cand extra=""
+  local -a bs
+  read -ra bs <<< "${CUDA_GRAPH_BS}"
+  for x in "${bs[@]}"; do
+    [[ "${x}" =~ ^[0-9]+$ ]] || continue
+    (( x > top )) && top=$x
+  done
+  if (( top >= n )); then
+    return 0
+  fi
+  warn "CUDA_GRAPH_BS tops at ${top} < MAX_RUNNING_REQUESTS=${n} — extending so c>${top} stays graphed"
+  for cand in 20 24 28 32 40 48; do
+    if (( cand > top && cand < n )); then
+      extra+=" ${cand}"
+    fi
+  done
+  extra+=" ${n}"
+  CUDA_GRAPH_BS="${CUDA_GRAPH_BS}${extra}"
+  info "CUDA_GRAPH_BS=${CUDA_GRAPH_BS}"
+}
+
+# After the API is up: refuse a pool smaller than one advertised context
+# request (that was silent truncation under --allow-auto-truncate).
+boot_health_check() {
+  header "KV pool vs advertised context"
+  local pool=0 ctx=0
+  pool="$(curl -fsS --max-time 10 "http://127.0.0.1:${PORT}/metrics" 2>/dev/null | python3 -c '
+import re, sys
+text = sys.stdin.read()
+m = re.search(r"^sglang:max_total_num_tokens\{[^}]*\}\s+(\S+)", text, re.M)
+print(int(float(m.group(1))) if m else 0)
+' || true)"
+  ctx="$(curl -fsS --max-time 10 "http://127.0.0.1:${PORT}/get_server_info" 2>/dev/null | python3 -c '
+import json, sys
+d = json.load(sys.stdin)
+print(int(d.get("context_length") or 0))
+' || true)"
+  pool="${pool:-0}"; ctx="${ctx:-0}"
+  local cap=""
+  cap="$(grep -E "max_running_requests is capped" "${LOG_FILE}" 2>/dev/null | tail -1 || true)"
+  if (( pool > 0 && ctx > 0 )); then
+    info "KV pool ${pool} tokens · context_length ${ctx} · requested max-running ${MAX_RUNNING_REQUESTS}"
+    if (( pool < ctx )); then
+      error "KV pool (${pool}) is smaller than --context-length (${ctx}) — over-length prompts would truncate silently if --allow-auto-truncate is on (issue #8)"
+      if [[ "${ALLOW_SHORT_KV_POOL:-0}" == "1" ]]; then
+        warn "ALLOW_SHORT_KV_POOL=1 — continuing anyway"
+      else
+        error "refusing to advertise this context. Raise MEM_FRACTION_STATIC (0.80+), or ALLOW_SHORT_KV_POOL=1 to override"
+        exit 1
+      fi
+    else
+      ok "pool holds $(awk -v p="${pool}" -v c="${ctx}" 'BEGIN{printf "%.2f", p/c}')× one context-length request"
+    fi
+  else
+    warn "could not read pool/context from the live API — skip size check"
+  fi
+  if [[ -n "${cap}" ]]; then
+    warn "${cap##*] }"
+  fi
+}
+
 # =============================================================================
 # Preflight
 # =============================================================================
@@ -375,10 +445,17 @@ preflight() { # $1 = action; port checks only matter when serving
     ok "ports ${PORT} (API) and ${DIST_PORT} (rendezvous) free on head"
   fi
 
+  # Decode-graph list must cover MAX_RUNNING_REQUESTS (issue #8 follow-up).
+  sync_cuda_graph_bs
+
   # Config sanity
   case "${NVFP4_KV_CACHE}" in
     0|1) ;;
     *) error "NVFP4_KV_CACHE must be 0 or 1 (got '${NVFP4_KV_CACHE}')"; exit 1 ;;
+  esac
+  case "${ALLOW_AUTO_TRUNCATE}" in
+    0|1) ;;
+    *) error "ALLOW_AUTO_TRUNCATE must be 0 or 1 (got '${ALLOW_AUTO_TRUNCATE}')"; exit 1 ;;
   esac
   if [[ "${NVFP4_KV_CACHE}" == "1" && -n "${KV_CACHE_DTYPE}" ]]; then
     error "NVFP4_KV_CACHE=1 and KV_CACHE_DTYPE=${KV_CACHE_DTYPE} are both set — pick one"
@@ -1507,7 +1584,6 @@ build_sglang_args() { # $1 = container model path
     --speculative-num-draft-tokens "${SPEC_DRAFT}"
     --reasoning-parser "${REASONING_PARSER}"
     --tool-call-parser "${TOOL_CALL_PARSER}"
-    --allow-auto-truncate
     --enable-metrics
     --enable-cache-report
     # SM121 house rule (27B Spark cell / Inkling champion): prefill CUDA
@@ -1521,6 +1597,7 @@ build_sglang_args() { # $1 = container model path
   elif [[ -n "${KV_CACHE_DTYPE}" ]]; then
     SGLANG_ARGS+=(--kv-cache-dtype "${KV_CACHE_DTYPE}")
   fi
+  [[ "${ALLOW_AUTO_TRUNCATE}" == "1" ]]    && SGLANG_ARGS+=(--allow-auto-truncate)
   [[ "${PLE_OFFLOAD}" == "1" ]]             && SGLANG_ARGS+=(--ple-offload-embedding)
   [[ "${PLE_OFFLOAD}" == "0" ]]             && SGLANG_ARGS+=(--no-ple-offload-embedding)
   [[ -n "${FP4_GEMM_BACKEND}" ]]            && SGLANG_ARGS+=(--fp4-gemm-backend "${FP4_GEMM_BACKEND}")
@@ -1746,6 +1823,7 @@ cmd_serve() {
 
   launch
   wait_ready
+  boot_health_check
   cleanup_followers
   trap - EXIT
 
@@ -1760,7 +1838,7 @@ cmd_serve() {
     [[ -n "${ip}" ]] && echo -e "              http://${ip}:${PORT}/v1"
   done <<< "${lan_ips}"
   echo -e "  ${BOLD}Spec:${NC}       thinking always on (reasoning_parser=${REASONING_PARSER}); depth via reasoning_effort"
-  echo -e "  ${BOLD}Context:${NC}    ${CONTEXT_LENGTH} tokens · mem-fraction ${MEM_FRACTION_STATIC} · max-running ${MAX_RUNNING_REQUESTS}"
+  echo -e "  ${BOLD}Context:${NC}    ${CONTEXT_LENGTH} tokens · mem-fraction ${MEM_FRACTION_STATIC} · max-running ${MAX_RUNNING_REQUESTS} (engine may cap via mamba) · graphs ${CUDA_GRAPH_BS}"
   echo -e "  ${BOLD}Logs:${NC}       ${LOG_FILE} (head), ${WORKER_LOG_FILE} (worker)"
   echo ""
   echo -e "  ${BOLD}Quick test:${NC}"

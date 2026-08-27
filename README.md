@@ -305,12 +305,12 @@ the ones you'll actually touch:
 | `WORKER_USER` | *(empty)* | empty = reuse the head login user (most setups); set only if the worker uses a different account |
 | `WORKER_SSH` | *(derived)* | full `user@host` override if you need it |
 | `PORT` | `8888` | API port, bound on all interfaces |
-| `MEM_FRACTION_STATIC` | `0.82` | Budget for unified DRAM; 0.82 leaves ~17 GB free for prefill transients |
+| `MEM_FRACTION_STATIC` | `0.80` | Script default. PLE is *inside* this budget on GB10 ([issue #8](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Next-Dual-DGX-Sparks/issues/8) — `0.70` double-counted it). This cluster's 900k YaRN `.env` uses `0.82` + chunk 1024 |
 | `PLE_OFFLOAD` | *(auto)* | Empty = auto-rule (recommended on GB10); `1`/`0` to force |
 | `NVFP4_KV_CACHE` | `1` | `1` = NVFP4 KV cache for the QSA layers (dequant-on-gather, **2,902,208 tokens** measured / ~3.1× vs bf16, 11/11 NIAH PASS); `0` = bf16 |
 | `KV_CACHE_DTYPE` | *(empty)* | raw `--kv-cache-dtype` override (e.g. `fp8_e4m3`, untested); must be empty when `NVFP4_KV_CACHE=1` |
 | `CONTEXT_LENGTH` | `900000` | YaRN-scaled (factor 4.0, native 262144); KV pool is 925,504 (bf16) or **2,902,208** (`NVFP4_KV_CACHE=1`) |
-| `MAX_RUNNING_REQUESTS` | `16` | Concurrency (capped at 14 by mamba slots at ratio 0.3) |
+| `MAX_RUNNING_REQUESTS` | `28` | Script default = mamba ceiling at 0.80 + default mamba ratio. `CUDA_GRAPH_BS` is extended to match. YaRN `.env` at mamba ratio 0.3 still caps ~14 |
 | `CHUNKED_PREFILL_SIZE` | `1024` | Keep ≤1024 for 900k ctx — the QSA indexer logits buffer is `[chunk × history]` fp32 |
 | `MAMBA_FULL_MEMORY_RATIO` | `0.3` | Default 0.9 over-provisions mamba (47% of budget); 0.3 is enough for 14 requests |
 | `SPEC_STEPS` / `SPEC_TOPK` / `SPEC_DRAFT` | `3` / `1` / `4` | NEXTN spec-decode chain |
