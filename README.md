@@ -91,10 +91,13 @@ build):
 
 **On by default** (`NVFP4_KV_CACHE=1`). Opt out with `NVFP4_KV_CACHE=0` in
 `.env` (or inline: `NVFP4_KV_CACHE=0 ./start.sh serve`) for **fp8_e4m3** KV
-— not bf16. The QSA Triton fallback upcasts fp8 K/V to fp32 in-kernel
-(q stays bf16). Set `KV_CACHE_DTYPE=bf16` only if you actually want bf16.
-`.env` is first-assignment wins, so a leftover `NVFP4_KV_CACHE=0` above a
-later `=1` keeps fp8.
+— not bf16. SM121 Triton cannot `tl.dot` fp8, so two QSA paths upcast K/V
+loads to fp32 in-kernel (q stays bf16): the paged-varlen decode fallback
+**and** the GQA prefill / chunk-prefill kernels. A first FP8 boot captured
+decode graphs then died on the first extend-with-prefix (`Unsupported rhs
+dtype fp8e4nv` in `_sparse_gqa_chunk_prefill`). Set `KV_CACHE_DTYPE=bf16`
+only if you actually want bf16. `.env` is first-assignment wins, so a leftover
+`NVFP4_KV_CACHE=0` above a later `=1` keeps fp8.
 
 Measured KV pools on this cluster (1M YaRN, `MEM_FRACTION_STATIC=0.82`,
 both QSA + indexer pools):

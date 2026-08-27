@@ -22,9 +22,11 @@ All notable changes to this serving recipe.
 ### Changed
 
 - `NVFP4_KV_CACHE` default is **1**. `0` selects **fp8_e4m3** KV (not bf16).
-  The QSA Triton fallback now accepts fp8 K/V (upcast to fp32 on load);
-  previously it refused mixed q=bf16 / kv=fp8 at graph capture.
-  `KV_CACHE_DTYPE=bf16` forces bf16.
+  The QSA Triton varlen fallback **and** the GQA prefill/chunk-prefill
+  kernels (`sparse_gqa_fwd_interface_triton[_ck]`) upcast fp8 K/V to fp32
+  before `tl.dot`. Without the GQA patch, the first extend with a prefix
+  killed the worker (`Unsupported rhs dtype fp8e4nv`). `KV_CACHE_DTYPE=bf16`
+  still forces bf16.
 - `MEM_FRACTION_STATIC` default **0.80**. PLE (~26 GB/rank) is inside GB10's
   unified CUDA budget; **0.70 double-counted it** and starved KV/mamba
   ([issue #8](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Next-Dual-DGX-Sparks/issues/8)).
