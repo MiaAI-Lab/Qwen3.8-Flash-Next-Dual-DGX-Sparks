@@ -2,7 +2,7 @@
 
 All notable changes to this serving recipe.
 
-## [Unreleased] — 2026-08-27
+## [Unreleased] — 2026-08-28
 
 ### Added
 
@@ -42,6 +42,20 @@ All notable changes to this serving recipe.
 
 ### Fixed
 
+- **SM121 QSA decode token-id-0** ([sglang#36537](https://github.com/sgl-project/sglang/issues/36537),
+  [sglang#36806](https://github.com/sgl-project/sglang/pull/36806),
+  [sglang#36845](https://github.com/sgl-project/sglang/pull/36845)). FlashInfer
+  TRT-LLM sparse decode is numerically correct on exact SM120 but silently
+  emits token id 0 (`!`) at long context on SM121/GB10. FA4 CuTe varlen does
+  not compile for QSA's packed one-query shape on GB10. The derivative image
+  now (1) forces `_resolve_trtllm_sparse_decode` to `None` on SM121 even if a
+  newer base image re-enables it, and (2) routes
+  `_resolve_flash_attn_varlen_func` to sglang#36845's Triton packed-varlen
+  kernel (`sm121_varlen.py`, replaces `qsa_fa_fallback.py`). DSpark extra:
+  fp8 K/V is still allowed (upcast in-kernel) so `NVFP4_KV_CACHE=0` works.
+  Upstream validated exact NIAH at 120k/190k/210k on one GB10 with zero
+  token id 0; rebuild the image (`KERNEL_PATCH=1`) before treating 256k as
+  trusted on this cluster.
 - Keyed-server readiness hang ([PR #7](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Next-Dual-DGX-Sparks/pull/7)): derive the
   effective `--api-key` (argparse last-wins, including `EXTRA_ARGS`) so
   `wait_ready` / `status` / `smoke` send `Authorization` instead of looping
@@ -65,5 +79,7 @@ All notable changes to this serving recipe.
   captured `bs=[1…14]`; `allow_auto_truncate=False`.
 - Native-262k 0.70 vs 0.80 A/B was not re-run here; the fail-closed pool
   check is what stops the 137k-token silent-truncate case from shipping.
-- sglang#36556 (TRTLLM sparse decode on SM12x) was **not** taken; the Triton
-  varlen fallback stays.
+- sglang#36556 (TRT-LLM sparse decode on all SM12x) remains **not** taken.
+  sglang#36806 gates that path to SM100 + exact SM120; this recipe additionally
+  hard-excludes SM121. Decode on GB10 uses the #36845 Triton packed-varlen
+  fallback.
