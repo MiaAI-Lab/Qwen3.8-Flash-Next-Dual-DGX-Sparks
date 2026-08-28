@@ -10,6 +10,11 @@ Suites
   full   quick + 32k/64k NIAH (three positions each)
   long   full + 128k (GB10-safe with chunk 1024; do not raise further)
 
+The prefix cache is flushed before every case (POST /flush_cache), so a case
+cannot be answered out of the radix cache instead of out of attention. Pass
+--no-flush to measure with the cache warm; the JSON report records which it was.
+--seed salts the filler, so two seeds share no byte of haystack.
+
 Usage
   python3 evals/nvfp4_kv_eval.py
   python3 evals/nvfp4_kv_eval.py --suite full --json kv-eval.json
@@ -84,6 +89,7 @@ class CaseResult:
     prefill_tps: Optional[float]
     decode_tps: Optional[float]
     cache_hit: Optional[str] = None
+    cache_flushed: Optional[bool] = None
     error: Optional[str] = None
 
 
@@ -209,17 +215,37 @@ def metric_snapshot(base: str) -> dict[str, float]:
         return {}
 
 
+def flush_cache(base: str) -> tuple[bool, str]:
+    """Drop the radix/prefix cache. Single-stream, so nothing is in flight."""
+    try:
+        with _http_json(f"{base}/flush_cache", payload={}, timeout=60) as resp:
+            return True, resp.read().decode(errors="replace").strip()[:200]
+    except Exception as exc:  # noqa: BLE001
+        return False, str(exc)
+
+
 def make_passkey(rng: random.Random) -> str:
     parts = ["".join(rng.choice(ALPHABET) for _ in range(4)) for _ in range(3)]
     return "-".join(parts)
 
 
+# Salt for the filler, drawn from the run's rng in run(). Without it filler_line
+# is a pure function of the line index, so every run at a given depth sends a
+# byte-identical haystack and --seed only moves the needle.
+_FILLER_SALT = ""
+
+
+def set_filler_salt(salt: str) -> None:
+    global _FILLER_SALT
+    _FILLER_SALT = salt
+
+
 def filler_line(i: int) -> str:
-    adj = ADJECTIVES[i % len(ADJECTIVES)]
-    noun = NOUNS[i % len(NOUNS)]
-    serial = hashlib.md5(str(i).encode()).hexdigest()[:8]
+    h = hashlib.md5(f"{_FILLER_SALT}:{i}".encode()).hexdigest()
+    adj = ADJECTIVES[int(h[8:10], 16) % len(ADJECTIVES)]
+    noun = NOUNS[int(h[10:12], 16) % len(NOUNS)]
     return (
-        f"Record {i:06d}: crate {adj}-{noun} serial {serial} sits idle "
+        f"Record {i:06d}: crate {adj}-{noun} serial {h[:8]} sits idle "
         "and is unrelated to any passkey or secret code.\n"
     )
 
@@ -481,6 +507,7 @@ def case_from_chat(
     position: Optional[float],
     extra_text: str = "",
     cache_hit: Optional[str] = None,
+    cache_flushed: Optional[bool] = None,
     error: Optional[str] = None,
 ) -> CaseResult:
     blob = combined_text(result) + (" " + extra_text if extra_text else "")
@@ -500,6 +527,7 @@ def case_from_chat(
         prefill_tps=result.get("prefill_tps"),
         decode_tps=result.get("decode_tps"),
         cache_hit=cache_hit,
+        cache_flushed=cache_flushed,
         error=error,
     )
 
@@ -515,6 +543,25 @@ def run(args: argparse.Namespace) -> int:
         temperature=0.0,
     )
     rng = random.Random(args.seed)
+    # Salt the filler from the same rng: same seed → same prompt (reproducible),
+    # different seed → a haystack that shares no byte with the last one.
+    filler_salt = f"{rng.getrandbits(64):016x}"
+    set_filler_salt(filler_salt)
+
+    flush_on = not args.no_flush
+    flush_state = {"on": flush_on, "count": 0, "failed": 0}
+
+    def flush(label: str) -> Optional[bool]:
+        """Flush the prefix cache before a case, so it is answered by attention."""
+        if not flush_on:
+            return None
+        done, note = flush_cache(client.base)
+        flush_state["count"] += 1
+        if not done:
+            flush_state["failed"] += 1
+            print(_color(color, "1;33",
+                         f"  WARNING: /flush_cache failed before {label}: {note}"))
+        return done
 
     print(_color(color, "1;37", f"NVFP4 KV eval  { _utc() }"))
     print(f"  endpoint  {client.base}")
@@ -530,6 +577,13 @@ def run(args: argparse.Namespace) -> int:
     )
     if pool.context_length:
         print(f"  context   {pool.context_length}")
+    print(f"  seed      {args.seed}  (filler salt {filler_salt})")
+    if flush_on:
+        print("  cache     POST /flush_cache before every case (--no-flush to keep it warm)")
+    else:
+        print(_color(color, "1;33",
+                     "  cache     NOT flushed between cases — a case may be answered "
+                     "from the radix cache rather than from attention"))
     for note in pool.notes:
         print("  note     ", note)
 
@@ -599,6 +653,7 @@ def run(args: argparse.Namespace) -> int:
             print(f"         got      {got}")
 
     # --- control: needle only, no haystack (prompt/setup, not KV depth) ------
+    flushed = flush("control/no-haystack")
     code = make_passkey(rng)
     prompt = (
         f"The magic passkey is {code}.\n"
@@ -609,7 +664,7 @@ def run(args: argparse.Namespace) -> int:
         report(
             case_from_chat(
                 "control/no-haystack", "control", code, r, depth=r.get("prompt_tokens") or 0,
-                position=None,
+                position=None, cache_flushed=flushed,
             )
         )
     except Exception as exc:  # noqa: BLE001
@@ -632,15 +687,18 @@ def run(args: argparse.Namespace) -> int:
             )
         )
         print("control failed — not scoring retrieval (server/prompt issue)")
-        return _finish(args, pool, results, color, setup_failed=True)
+        return _finish(args, pool, results, color, setup_failed=True,
+                       filler_salt=filler_salt, flush=flush_state)
 
     # --- exact copy (decode path) --------------------------------------------
+    flushed = flush("decode/exact-copy")
     token = "NVFP4-OK-" + make_passkey(rng).split("-")[0]
     prompt = (
         f"Reply with exactly this string and nothing else: {token}\n"
     )
     r = client.complete([{"role": "user", "content": prompt}])
-    report(case_from_chat("decode/exact-copy", "decode", token, r, depth=0, position=None))
+    report(case_from_chat("decode/exact-copy", "decode", token, r, depth=0,
+                          position=None, cache_flushed=flushed))
 
     # --- NIAH ----------------------------------------------------------------
     for depth in depths:
@@ -655,11 +713,13 @@ def run(args: argparse.Namespace) -> int:
             code = make_passkey(rng)
             hay = haystack(n_lines, start, code, pos)
             name = f"niah/{depth}@{pos:.0%}"
+            flushed = flush(name)
             try:
                 r = client.complete([{"role": "user", "content": ask_passkey(hay)}])
                 report(
                     case_from_chat(
-                        name, "niah", code, r, depth=depth, position=pos
+                        name, "niah", code, r, depth=depth, position=pos,
+                        cache_flushed=flushed,
                     )
                 )
             except Exception as exc:  # noqa: BLE001
@@ -678,6 +738,7 @@ def run(args: argparse.Namespace) -> int:
                         ttft_s=None,
                         prefill_tps=None,
                         decode_tps=None,
+                        cache_flushed=flushed,
                         error=str(exc),
                     )
                 )
@@ -685,6 +746,7 @@ def run(args: argparse.Namespace) -> int:
     # --- multi-fact binding at ~8k ------------------------------------------
     bind_depth = 8192 if 8192 <= max(depths) or args.suite != "quick" else 4096
     if bind_depth <= max(depths) or args.suite != "quick":
+        flushed = flush("binding/port-kestrel")
         n_lines = est.lines_for(min(bind_depth, max(depths)))
         start = rng.randint(10_000, 80_000)
         lines = [filler_line(start + i) for i in range(n_lines)]
@@ -710,10 +772,15 @@ def run(args: argparse.Namespace) -> int:
                 r,
                 depth=bind_depth,
                 position=0.15,
+                cache_flushed=flushed,
             )
         )
 
     # --- radix follow-up: retrieve on turn 2 after a cached prefix ------------
+    # Flush before turn 1 and NOT between the turns: this case exists to test
+    # retrieval *out of* the cached prefix, so flushing mid-case would delete the
+    # thing under test. Everything before it starts from a cold cache.
+    flushed = flush("radix/follow-up")
     rad_depth = 4096 if 4096 in depths else depths[min(1, len(depths) - 1)]
     n_lines = est.lines_for(rad_depth)
     start = rng.randint(10_000, 80_000)
@@ -753,12 +820,14 @@ def run(args: argparse.Namespace) -> int:
             position=0.5,
             extra_text="",
             cache_hit=cache_note,
+            cache_flushed=flushed,
         )
     )
     if cache_note:
         print(f"         {cache_note}")
 
-    return _finish(args, pool, results, color, setup_failed=False)
+    return _finish(args, pool, results, color, setup_failed=False,
+                   filler_salt=filler_salt, flush=flush_state)
 
 
 def _fmt(v: Optional[float]) -> str:
@@ -776,6 +845,8 @@ def _finish(
     color: bool,
     *,
     setup_failed: bool,
+    filler_salt: str = "",
+    flush: Optional[dict[str, Any]] = None,
 ) -> int:
     niah = [c for c in results if c.kind == "niah"]
     niah_pass = sum(1 for c in niah if c.passed)
@@ -788,6 +859,15 @@ def _finish(
     print(f"  pool     dtype={pool.kv_cache_dtype}  nvfp4={pool.nvfp4}  "
           f"tokens={_fmt(pool.max_total_num_tokens)}  mem={_fmt(pool.kv_cache_memory_gb)} GB")
     print(f"  cases    {sum(c.passed for c in results)}/{len(results)} passed")
+    if flush is not None:
+        if flush["on"]:
+            note = f"flushed before {flush['count']} case(s)"
+            if flush["failed"]:
+                note += f" — {flush['failed']} /flush_cache call(s) FAILED"
+            print(f"  cache    {note}")
+        else:
+            print("  cache    NOT flushed — a case may have been served from the "
+                  "radix cache")
     if niah:
         print(f"  niah     {niah_pass}/{len(niah)} passed")
         for depth in sorted(by_depth):
@@ -833,6 +913,9 @@ def _finish(
         "started": _utc(),
         "endpoint": args.base_url,
         "suite": args.suite,
+        "seed": args.seed,
+        "filler_salt": filler_salt,
+        "cache_flush": flush,
         "pool": asdict(pool),
         "verdict": verdict,
         "why": why,
@@ -858,7 +941,15 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     p.add_argument("--positions", help="comma-separated fractions 0-1 (default 0,0.5,1)")
     p.add_argument("--timeout", type=float, default=1800.0, help="per-request seconds")
     p.add_argument("--max-tokens", type=int, default=64)
-    p.add_argument("--seed", type=int, default=7)
+    p.add_argument("--seed", type=int, default=7,
+                   help="salts the filler and the passkeys; two seeds share no "
+                        "byte of haystack")
+    p.add_argument(
+        "--no-flush",
+        action="store_true",
+        help="do not POST /flush_cache between cases — a case may then be "
+             "answered from the radix cache instead of from attention",
+    )
     p.add_argument("--thinking", action="store_true", help="leave Qwen thinking on")
     p.add_argument(
         "--require-nvfp4",
