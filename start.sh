@@ -337,7 +337,12 @@ derive_effective_api_key() {
 
 # ---- Remote helpers (worker = spark2 via ssh alias) -------------------------
 wrun() { # remote shell snippet
-  ssh "${SSH_OPTS[@]}" "${WORKER_SSH}" "$1"
+  # -n (stdin from /dev/null) belongs HERE and not in SSH_OPTS: scp and rsync -e
+  # share SSH_OPTS, and -n breaks rsync's transport. Without it, ssh inherits the
+  # caller's stdin and silently consumes it -- running any script that calls wrun
+  # from inside `ssh host bash -s <<EOF` swallows the rest of the heredoc, so the
+  # worker step succeeds and every later line vanishes with no error.
+  ssh -n "${SSH_OPTS[@]}" "${WORKER_SSH}" "$1"
 }
 worker_docker() { # docker <argv…> on the worker, each arg shell-quoted
   local q=() a
@@ -478,7 +483,39 @@ preflight() { # $1 = action; port checks only matter when serving
   if ping -c 1 -W 2 "${WORKER_CX7_IP}" >/dev/null 2>&1; then
     ok "CX7 link head ${HEAD_CX7_IP} ↔ worker ${WORKER_CX7_IP} reachable"
   else
-    warn "cannot ping ${WORKER_CX7_IP} — 2-node rendezvous may fail"
+    error "cannot reach ${WORKER_CX7_IP} over the CX7 fabric — TP rendezvous will hang, not fail fast"
+    exit 1
+  fi
+
+  # MTU 9000, asserted end-to-end rather than read from one side. RoCE derives its
+  # IB MTU from the netdev MTU, so a single end left at 1500 silently caps the whole
+  # TP group -- and a default-size ping cannot see it.
+  if ping -c 1 -W 2 -M do -s 8972 "${WORKER_CX7_IP}" >/dev/null 2>&1; then
+    ok "fabric MTU 9000 verified end-to-end (8972B unfragmented)"
+  else
+    error "MTU 9000 not usable head→${WORKER_CX7_IP}: an 8972-byte unfragmented ping failed."
+    error "  check both ends: ip link show ${HEAD_CX7_IF} / ${WORKER_CX7_IF} (expect mtu 9000)"
+    exit 1
+  fi
+  local hmtu; hmtu="$(cat "/sys/class/net/${HEAD_CX7_IF}/mtu" 2>/dev/null || echo 0)"
+  (( hmtu >= 9000 )) || { error "head ${HEAD_CX7_IF} MTU is ${hmtu}, expected 9000"; exit 1; }
+  local wmtu; wmtu="$(wrun "cat /sys/class/net/${WORKER_CX7_IF}/mtu 2>/dev/null || echo 0")"
+  (( wmtu >= 9000 )) || { error "worker ${WORKER_CX7_IF} MTU is ${wmtu}, expected 9000"; exit 1; }
+  ok "netdev MTU head ${hmtu} / worker ${wmtu}"
+
+  # The configured RoCE device must actually exist on each node: NCCL_IB_HCA naming
+  # a device that is not present degrades silently instead of erroring.
+  if ibv_devices 2>/dev/null | grep -qw "${HEAD_CX7_IB}"; then
+    ok "head RoCE device ${HEAD_CX7_IB} present"
+  else
+    error "head RoCE device '${HEAD_CX7_IB}' not in ibv_devices — fix HEAD_CX7_IB"
+    exit 1
+  fi
+  if wrun "ibv_devices 2>/dev/null | grep -qw '${WORKER_CX7_IB}'"; then
+    ok "worker RoCE device ${WORKER_CX7_IB} present"
+  else
+    error "worker RoCE device '${WORKER_CX7_IB}' not in ibv_devices — fix WORKER_CX7_IB"
+    exit 1
   fi
 
   # Disk: needs depend on what is already cached (weights are ~135 GB)
