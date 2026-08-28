@@ -1629,9 +1629,9 @@ resolve_snapshot() { # → absolute host path of the snapshot (or fail)
   return 1
 }
 
-verify_snapshot() { # <snapshot_dir> <label> — byte-size check against the HF API
-  local dir="$1" label="$2"
-  python3 - "${MODEL_ID}" "${dir}" "${label}" <<'PY' || return 1
+# The per-file byte check, kept as a program string so it can run on either
+# node: python3 on the head, and shipped to the worker by verify_snapshot_worker.
+VERIFY_SNAPSHOT_PY="$(cat <<'PY'
 import json, os, sys, urllib.request
 model, snap, label = sys.argv[1], sys.argv[2], sys.argv[3]
 url = f"https://huggingface.co/api/models/{model}?blobs=true"
@@ -1665,6 +1665,67 @@ if missing or bad:
 total = sum(s for _, s in files)
 print(f"[OK]    {label}: all {len(files)} files verified ({total/1e9:.2f} GB)")
 PY
+)"
+
+verify_snapshot() { # <snapshot_dir> <label> — byte-size check against the HF API
+  local dir="$1" label="$2"
+  python3 - "${MODEL_ID}" "${dir}" "${label}" <<<"${VERIFY_SNAPSHOT_PY}" || return 1
+}
+
+verify_snapshot_worker() { # <worker snapshot_dir> <label> — the same check, on the worker
+  local dir="$1" label="$2" b64
+  if ! wrun "command -v python3 >/dev/null 2>&1"; then
+    warn "${label}: no python3 on the worker — skipping the per-file check (the byte total is still compared)"
+    return 0
+  fi
+  # Ship the program as part of the command, never on stdin: wrun's ssh has to
+  # leave stdin alone or it eats a caller's heredoc.
+  b64="$(printf '%s' "${VERIFY_SNAPSHOT_PY}" | base64 | tr -d '\n')"
+  wrun "printf %s '${b64}' | base64 -d | python3 - '${MODEL_ID}' '${dir}' '${label}'" || return 1
+}
+
+# Total logical bytes under a snapshots/ tree. -L dereferences, because a
+# snapshot is a directory of symlinks into ../../blobs/ and the link's own size
+# is meaningless. %.0f not %d: mawk overflows a 135 GB total with %d.
+snapshot_bytes() { # <dir> → bytes
+  find -L "$1" -type f -printf '%s\n' 2>/dev/null \
+    | awk '{t+=$1} END{printf "%.0f\n", t+0}'
+}
+
+worker_snapshot_bytes() { # <worker dir> → bytes
+  wrun "find -L '$1' -type f -printf '%s\n' 2>/dev/null | awk '{t+=\$1} END{printf \"%.0f\n\", t+0}'" \
+    || echo 0
+}
+
+worker_snapshot_dir() { # <worker repo dir> → the snapshot holding config.json (or fail)
+  local wrepo="$1" d=""
+  if [[ -n "${HF_REVISION}" ]] \
+     && wrun "test -f '${wrepo}/snapshots/${HF_REVISION}/config.json'" 2>/dev/null; then
+    echo "${wrepo}/snapshots/${HF_REVISION}"; return 0
+  fi
+  d="$(wrun "find '${wrepo}/snapshots' -maxdepth 2 -name config.json -printf '%h\n' 2>/dev/null | head -1" || true)"
+  [[ -n "${d}" ]] || return 1
+  echo "${d}"
+}
+
+# Byte-level acceptance for the worker copy. A truncated shard keeps the file
+# count intact, so the count check alone accepts it and you find out at weight
+# load — or as garbage output.
+verify_worker_weights() { # <worker repo dir> [head_bytes]
+  local wrepo="$1" head_bytes="${2:-}" wsnap wbytes
+  wsnap="$(worker_snapshot_dir "${wrepo}")" \
+    || { error "worker snapshot has no config.json under ${wrepo}/snapshots"; return 1; }
+  wbytes="$(worker_snapshot_bytes "${wrepo}/snapshots")"
+  if [[ -n "${head_bytes}" ]]; then
+    if [[ "${wbytes}" != "${head_bytes}" ]]; then
+      error "worker bytes ${wbytes} != head ${head_bytes} — truncated or partial shard; rerun to resume"
+      return 1
+    fi
+    ok "worker byte total matches head (${wbytes} bytes)"
+  else
+    info "worker byte total ${wbytes}"
+  fi
+  verify_snapshot_worker "${wsnap}" "worker cache" || return 1
 }
 
 download_on_head() {
@@ -1724,6 +1785,10 @@ sync_weights_to_worker() {
 import glob, sys
 sys.exit(0 if glob.glob('/root/.cache/huggingface/hub/${REPO_CACHE_DIRNAME}/snapshots/*/model.safetensors.index.json') else 1)
 " >/dev/null 2>&1; then
+      verify_worker_weights "${wrepo}" || {
+        error "worker weights failed verification — delete ${wrepo} on the worker and rerun"
+        exit 1
+      }
       ok "weights already on worker"
       return 0
     fi
@@ -1735,6 +1800,10 @@ sys.exit(0 if glob.glob('/root/.cache/huggingface/hub/${REPO_CACHE_DIRNAME}/snap
 from huggingface_hub import snapshot_download
 snapshot_download('${MODEL_ID}', token=None, revision='${HF_REVISION}' or None)
 " || { error "worker download failed — try DOWNLOAD_MODE=rsync"; exit 1; }
+    verify_worker_weights "${wrepo}" || {
+      error "worker download incomplete — rerun (snapshot_download resumes)"
+      exit 1
+    }
     ok "weights downloaded on worker"
     return 0
   fi
@@ -1742,12 +1811,25 @@ snapshot_download('${MODEL_ID}', token=None, revision='${HF_REVISION}' or None)
   # rsync head → worker over the CX7 link (single internet download; resumable)
   # Count under snapshots/ only — .locks lives in the repo dir on the head but
   # is excluded from the rsync, so counting the whole repo would never match.
-  local hcount wcount
+  local hcount wcount hbytes wbytes
   hcount="$(find "$(snapshot_root)/snapshots" \( -type f -o -type l \) 2>/dev/null | wc -l)"
   wcount="$(wrun "find '${wrepo}/snapshots' \( -type f -o -type l \) 2>/dev/null | wc -l" || echo 0)"
-  if [[ "${hcount}" == "${wcount}" ]] && wrun "test -f '${wrepo}/snapshots'/*/config.json" 2>/dev/null; then
-    ok "weights already synced to worker (${wcount} files)"
+  hbytes="$(snapshot_bytes "$(snapshot_root)/snapshots")"
+  wbytes="$(worker_snapshot_bytes "${wrepo}/snapshots")"
+  info "head ${hcount} files / ${hbytes} bytes · worker ${wcount} files / ${wbytes} bytes"
+  if [[ "${hcount}" == "${wcount}" && "${hbytes}" == "${wbytes}" ]] \
+     && wrun "test -f '${wrepo}/snapshots'/*/config.json" 2>/dev/null; then
+    verify_worker_weights "${wrepo}" "${hbytes}" || {
+      error "worker weights failed verification — delete ${wrepo} on the worker and rerun"
+      exit 1
+    }
+    ok "weights already synced to worker (${wcount} files / ${wbytes} bytes)"
     return 0
+  fi
+  # A count match with a byte mismatch is the truncated-shard case: fall through
+  # and let rsync repair it rather than failing here (it resumes).
+  if [[ "${hcount}" == "${wcount}" && "${hbytes}" != "${wbytes}" ]]; then
+    warn "worker file count matches but bytes differ (${wbytes} != ${hbytes}) — re-syncing"
   fi
   info "rsyncing weights head → worker (~135 GB over the CX7 link, resumable) …"
   rsync -a --partial --info=progress2,stats1 --exclude '.locks' \
@@ -1760,7 +1842,11 @@ snapshot_download('${MODEL_ID}', token=None, revision='${HF_REVISION}' or None)
     exit 1
   fi
   wrun "test -f '${wrepo}/snapshots'/*/config.json" 2>/dev/null || { error "worker snapshot incomplete"; exit 1; }
-  ok "weights synced to worker (${wcount} files)"
+  verify_worker_weights "${wrepo}" "${hbytes}" || {
+    error "worker weights failed verification — rerun to resume"
+    exit 1
+  }
+  ok "weights synced to worker (${wcount} files / ${hbytes} bytes)"
 }
 
 # =============================================================================
