@@ -40,9 +40,16 @@ SGLang's message about this model on DGX Spark was blunt: *"We tried two DGX
 Spark but it will need some more kernel work."* This repo contains that work.
 
 The Qwen4Exp architecture routes attention through a **Qwen Sparse Attention
-(QSA)** backend. Its flash-attn resolver prefers classic FA2, and otherwise
-falls back to flash-attn-4's **CuTe DSL** interface — which **fails to compile
-on SM121** with an MLIR layout-congruence error:
+(QSA)** backend. SM120 and SM121 need different decode paths
+([sglang#36537](https://github.com/sgl-project/sglang/issues/36537),
+[#36806](https://github.com/sgl-project/sglang/pull/36806),
+[#36845](https://github.com/sgl-project/sglang/pull/36845)):
+
+- Exact SM120 is numerically correct with FlashInfer's TRT-LLM paged decode.
+- SM121 silently corrupts long-context decode on that path: 120k / 190k /
+  210k prompts return 32/32 token id 0 (`!`) while the server stays HTTP 200.
+- Excluding SM121 from TRT-LLM leaves packed FA4 CuTe varlen, which **fails to
+  compile on GB10** with an MLIR layout-congruence error:
 
 ```
 error: layout #expected and #got are not considered equivalent
@@ -52,16 +59,18 @@ in the layout composition because their non-involved dimension...
 The fix in `.patch/` (embedded in `start.sh`, built automatically into a
 derivative Docker image):
 
-- `qsa_fa_fallback.py` — a Triton **FlashDecoding-style varlen kernel**
-  specialized for the exact QSA call contract:
+- `sm121_varlen.py` — sglang#36845's Triton **packed one-query varlen kernel**
+  for the exact QSA call contract:
   - one query row per varlen sequence (every QSA call shape, prefill included),
   - GQA, any head dim ≤ 256, online softmax,
   - **`cu_seqlens` read on-device** so CUDA-graph replay stays valid when the
-    backend rewrites the sequence table,
-  - host-sync guards disabled during graph capture
-- A Docker build step that patches `qwen_sparse_attn_backend.py` to return the
-  Triton fallback whenever `is_sm100_supported()` is false — i.e. everywhere
-  except B100/B200, so the stock path is untouched on datacenter GPUs
+    backend rewrites the sequence table
+  - DSpark extra: fp8 K/V is allowed (upcast in-kernel) so `NVFP4_KV_CACHE=0`
+    still works
+- A Docker build step that (1) forces `_resolve_trtllm_sparse_decode` to
+  `None` on SM121 (sglang#36806 — even if a newer base image re-enables it)
+  and (2) returns the Triton fallback from `_resolve_flash_attn_varlen_func`
+  when `is_sm121()` is true. SM100/SM120 keep their native paths.
 
 The result: `qwen38-flashnext-dspark:local`, built on both nodes by `start.sh`,
 boots, serves, and captures decode CUDA graphs across both machines.
@@ -131,10 +140,15 @@ and 128k runs were 3/3 at every position:
 | multi-fact binding | 8,229 | 15% | PASS |
 | radix follow-up | 4k / 128k prefix | 50% | PASS |
 
-At **256k** same-turn 0%/50% hit the token-0 `!!!!!!` loop
-([sglang#36537](https://github.com/sgl-project/sglang/issues/36537)); recency
-(100%) and a two-turn follow-up still retrieved the passkey — so the KV still
-held it. Treat **128k same-turn** as the trusted retrieval depth.
+At **256k** same-turn 0%/50% previously hit the token-0 `!!!!!!` loop
+([sglang#36537](https://github.com/sgl-project/sglang/issues/36537)) — that
+was the SM121 TRT-LLM sparse-decode path. This recipe now uses sglang#36845's
+Triton fallback and keeps TRT-LLM off SM121. Upstream validated exact NIAH at
+120k / 190k / 210k on one GB10 with zero token id 0; re-run
+`./start.sh kv-eval --suite long` after rebuilding the image before treating
+256k as trusted. Recency (100%) and a two-turn follow-up still retrieved the
+passkey even on the old path — so the KV still held it. Treat **128k
+same-turn** as the last fully measured retrieval depth on this cluster.
 
 Re-run:
 
@@ -227,10 +241,11 @@ off per-request:
 "chat_template_kwargs": {"enable_thinking": false}
 ```
 
-If an agent session starts streaming `!!!!!!` until `max_tokens`, that is
-[sgl-project/sglang#36537](https://github.com/sgl-project/sglang/issues/36537)
-— see [Known quirks](#known-quirks-read-before-filing-a-bug). This recipe keeps
-thinking on.
+If an agent session starts streaming `!!!!!!` until `max_tokens` *after* a
+rebuild of the patched image, see
+[Known quirks](#known-quirks-read-before-filing-a-bug). The SM121 decode
+path that caused that ([sglang#36537](https://github.com/sgl-project/sglang/issues/36537))
+is the kernel work in this recipe. This recipe keeps thinking on.
 
 Images work through the standard `image_url` content part.
 
@@ -353,13 +368,16 @@ the ones you'll actually touch:
 
 - **Agent `!!!!!!` loop (thinking + tools)** —
   [sgl-project/sglang#36537](https://github.com/sgl-project/sglang/issues/36537).
-  This model thinks by default. When a client also sends OpenAI `tools` *and*
-  the server uses `--tool-call-parser qwen3_coder`, SGLang can emit token ID 0
-  in a tight loop. This tokenizer decodes 0 as `!`, so the reply becomes
-  `!!!!!!…` until `max_tokens`. Spec accept rate drops to 0.00; disconnected
-  clients keep generating. **This recipe does not disable thinking.** The only
-  known workaround (until upstream ships a real fix) is to turn thinking off
-  for those sessions:
+  Two different SM12x bugs produced token ID 0 (`!` after decoding) while the
+  server stayed HTTP 200: FA4 CuTe failing to compile (SM120, or SM121 without
+  a fallback) and FlashInfer TRT-LLM sparse decode silently corrupting long
+  context on SM121. This recipe ports [sglang#36806](https://github.com/sgl-project/sglang/pull/36806)
+  (never TRT-LLM on SM121) and [sglang#36845](https://github.com/sgl-project/sglang/pull/36845)
+  (Triton packed-varlen fallback). Upstream's SM121 validation then passed
+  structured `get_weather({"city": "Paris"})` plus exact NIAH at 120k/190k/210k
+  with zero token id 0. If a client still streams `!!!!!!` until `max_tokens`
+  after you rebuild the patched image, file it — the remaining workaround is
+  still to turn thinking off for those sessions:
 
   Per request (preferred — keeps thinking for everything else):
 
@@ -375,11 +393,10 @@ the ones you'll actually touch:
 
   (`EXTRA_ARGS` is appended last; if `.env` already sets `EXTRA_ARGS`, merge
   into that line — no spaces inside the JSON.) Do **not** opt thinking back on
-  in the same request that sends `tools`. Without the parser, thinking works
-  but tool calls leak as `<tool_call>` XML in `content` instead of
-  `message.tool_calls`. There is no day-0 flag that gives thinking *and*
-  structured tools together. Cap agent temperature at ≤ 0.7 if you use the
-  workaround; a residual loop has been seen at temp 1.0.
+  in the same request that sends `tools` if you use this workaround. Without
+  the parser, thinking works but tool calls leak as `<tool_call>` XML in
+  `content` instead of `message.tool_calls`. Cap agent temperature at ≤ 0.7
+  if you use the workaround; a residual loop has been seen at temp 1.0.
 
 - **TileLang data-race warning at JIT time** —
   `Logits(bx, position) is written by multiple threads in loop (token,)` from
@@ -413,7 +430,7 @@ evals/            # live-API evals (not required to serve)
 .env.example      # copy to .env and edit (cluster IPs, worker ssh, recipe)
 .env              # your local config (gitignored — create from .env.example)
 .patch/           # (generated) SM121 kernel-patch Docker build context
-                  #   qsa_fa_fallback.py     — Triton varlen attention fallback
+                  #   sm121_varlen.py        — sglang#36845 Triton packed-varlen fallback
                   #   qsa_nvfp4_kv.py        — NVFP4 KV cache for the QSA path
                   #   apply_nvfp4_patches.py — source patches applied at build
 .serve.log        # launcher output

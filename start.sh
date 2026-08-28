@@ -66,17 +66,24 @@
 #  .cache/triton for later boots) and CUDA-graph capture. Default readiness
 #  timeout is 90 minutes (WAIT_TIMEOUT_MIN).
 #
-#  SM121 kernel work (DSpark patch, validated on this cluster):
-#    The stock lmsysorg/sglang:qwen38flashnext CANNOT serve this model on
-#    GB10: the QSA (Qwen sparse attention) backend resolves its packed
-#    varlen attention to flash-attn-4's CuTe-DLS kernels, which fail MLIR
-#    compilation on SM121. This script builds a derivative image
-#    (qwen38-flashnext-dspark:local) that swaps in a Triton
-#    FlashDecoding-style fallback — CUDA-graph-safe (cu_seqlens are read
-#    on-device, so graph replay works). Validated end-to-end: single-node
-#    and 2-node TP2 dummy boots with prefill, decode CUDA graphs and NEXTN
-#    speculative decoding. KERNEL_PATCH=0 disables the patch (the stock
-#    image then dies at warmup with an MLIRError).
+#  SM121 kernel work (DSpark patch = sglang#36806 + #36845, plus NVFP4 KV):
+#    SM120 and SM121 need different QSA decode paths (sglang#36537):
+#      * exact SM120 — FlashInfer TRT-LLM paged decode is numerically correct
+#      * SM121 / GB10 — that same kernel silently emits token id 0 (`!`) at
+#        long context (120k–210k) while still returning HTTP 200. sglang#36806
+#        therefore gates TRT-LLM to SM100 + exact SM120 only.
+#      * without TRT-LLM, QSA falls back to FA4 CuTe varlen, which does not
+#        compile on GB10 (MLIR "weakly congruent" layout error). sglang#36845
+#        replaces that fallback on SM121 with a packed one-query Triton kernel.
+#    This script builds a derivative image (qwen38-flashnext-dspark:local)
+#    that (1) forces `_resolve_trtllm_sparse_decode` to None on SM121 even if
+#    a newer base image re-enables it, and (2) routes
+#    `_resolve_flash_attn_varlen_func` to the #36845 Triton kernel. The
+#    kernel reads cu_seqlens on-device so CUDA-graph replay stays valid.
+#    DSpark extra vs upstream: fp8 K/V is allowed (upcast in-kernel) so
+#    NVFP4_KV_CACHE=0 still works. KERNEL_PATCH=0 disables the patch (the
+#    stock image then dies at warmup with an MLIRError, or worse, a silent
+#    token-0 loop if the image has the SM121 TRT-LLM route).
 #
 #    The same derivative image adds NVFP4 KV cache support for the QSA
 #    layers (default NVFP4_KV_CACHE=1): the pool stores packed FP4 + per-block
@@ -330,7 +337,12 @@ derive_effective_api_key() {
 
 # ---- Remote helpers (worker = spark2 via ssh alias) -------------------------
 wrun() { # remote shell snippet
-  ssh "${SSH_OPTS[@]}" "${WORKER_SSH}" "$1"
+  # -n (stdin from /dev/null) belongs HERE and not in SSH_OPTS: scp and rsync -e
+  # share SSH_OPTS, and -n breaks rsync's transport. Without it, ssh inherits the
+  # caller's stdin and silently consumes it -- running any script that calls wrun
+  # from inside `ssh host bash -s <<EOF` swallows the rest of the heredoc, so the
+  # worker step succeeds and every later line vanishes with no error.
+  ssh -n "${SSH_OPTS[@]}" "${WORKER_SSH}" "$1"
 }
 worker_docker() { # docker <argv…> on the worker, each arg shell-quoted
   local q=() a
@@ -471,7 +483,39 @@ preflight() { # $1 = action; port checks only matter when serving
   if ping -c 1 -W 2 "${WORKER_CX7_IP}" >/dev/null 2>&1; then
     ok "CX7 link head ${HEAD_CX7_IP} ↔ worker ${WORKER_CX7_IP} reachable"
   else
-    warn "cannot ping ${WORKER_CX7_IP} — 2-node rendezvous may fail"
+    error "cannot reach ${WORKER_CX7_IP} over the CX7 fabric — TP rendezvous will hang, not fail fast"
+    exit 1
+  fi
+
+  # MTU 9000, asserted end-to-end rather than read from one side. RoCE derives its
+  # IB MTU from the netdev MTU, so a single end left at 1500 silently caps the whole
+  # TP group -- and a default-size ping cannot see it.
+  if ping -c 1 -W 2 -M do -s 8972 "${WORKER_CX7_IP}" >/dev/null 2>&1; then
+    ok "fabric MTU 9000 verified end-to-end (8972B unfragmented)"
+  else
+    error "MTU 9000 not usable head→${WORKER_CX7_IP}: an 8972-byte unfragmented ping failed."
+    error "  check both ends: ip link show ${HEAD_CX7_IF} / ${WORKER_CX7_IF} (expect mtu 9000)"
+    exit 1
+  fi
+  local hmtu; hmtu="$(cat "/sys/class/net/${HEAD_CX7_IF}/mtu" 2>/dev/null || echo 0)"
+  (( hmtu >= 9000 )) || { error "head ${HEAD_CX7_IF} MTU is ${hmtu}, expected 9000"; exit 1; }
+  local wmtu; wmtu="$(wrun "cat /sys/class/net/${WORKER_CX7_IF}/mtu 2>/dev/null || echo 0")"
+  (( wmtu >= 9000 )) || { error "worker ${WORKER_CX7_IF} MTU is ${wmtu}, expected 9000"; exit 1; }
+  ok "netdev MTU head ${hmtu} / worker ${wmtu}"
+
+  # The configured RoCE device must actually exist on each node: NCCL_IB_HCA naming
+  # a device that is not present degrades silently instead of erroring.
+  if ibv_devices 2>/dev/null | grep -qw "${HEAD_CX7_IB}"; then
+    ok "head RoCE device ${HEAD_CX7_IB} present"
+  else
+    error "head RoCE device '${HEAD_CX7_IB}' not in ibv_devices — fix HEAD_CX7_IB"
+    exit 1
+  fi
+  if wrun "ibv_devices 2>/dev/null | grep -qw '${WORKER_CX7_IB}'"; then
+    ok "worker RoCE device ${WORKER_CX7_IB} present"
+  else
+    error "worker RoCE device '${WORKER_CX7_IB}' not in ibv_devices — fix WORKER_CX7_IB"
+    exit 1
   fi
 
   # Disk: needs depend on what is already cached (weights are ~135 GB)
@@ -589,20 +633,21 @@ ensure_base_image() {
 # under .patch/ and built identically on both nodes.
 write_patch_context() {
   mkdir -p "${SCRIPT_DIR}/.patch"
-  cat > "${SCRIPT_DIR}/.patch/qsa_fa_fallback.py" <<'QSA_EOF'
-"""SM121 (DGX Spark / GB10) fallback varlen attention for Qwen sparse attention.
+  # Old name from before sglang#36845; the image context must not keep a stale copy.
+  rm -f "${SCRIPT_DIR}/.patch/qsa_fa_fallback.py"
+  cat > "${SCRIPT_DIR}/.patch/sm121_varlen.py" <<'QSA_EOF'
+"""Packed varlen attention fallback for QSA decode on SM121.
 
-Upstream `qwen_sparse_attn_backend._resolve_flash_attn_varlen_func` prefers
-classic FA2 and otherwise falls back to flash-attn-4's CuTe DSL interface.
-FA4's cute kernels do not compile on SM121 (MLIR layout-congruence error),
-so this module provides a drop-in `flash_attn_varlen_func` backed by a Triton
-FlashDecoding-style kernel specialized for the QSA call contract:
+Port of sgl-project/sglang#36845 (`qsa/sm121_varlen.py`). The QSA backend
+compacts each request's selected KV rows into a packed buffer and issues one
+query row per request. FlashAttention-4's CuTe varlen kernel does not compile
+for this call shape on SM121, while FlashInfer's TRT-LLM decode kernel is not
+numerically safe there (sglang#36806 / #36537: silent token-id-0 at long
+context). This module implements only the narrow packed contract needed by QSA.
 
-  * every "sequence" has exactly ONE query row (cu_seqlens_q = arange),
-  * variable numbers of gathered KV rows per sequence (<= topk),
-  * GQA (num_q_heads a multiple of num_kv_heads),
-  * cu_seqlens_* are read on-device, so the kernel is CUDA-graph replay safe
-    (the QSA backend rewrites cu_seqlens_k contents during graph replay).
+DSpark extra vs upstream: K/V may be fp8 (fp8_e4m3 / fp8_e5m2). The kernel
+already upcasts loads to fp32, so ``NVFP4_KV_CACHE=0`` does not need a
+host-side dequant (CUDA-graph safe).
 """
 
 from __future__ import annotations
@@ -613,80 +658,88 @@ import triton.language as tl
 
 
 @triton.jit
-def _varlen_one_q_attn_kernel(
-    q_ptr, k_ptr, v_ptr, o_ptr,
-    cu_seqlens_q_ptr, cu_seqlens_k_ptr,
-    sm_scale,
-    HQ: tl.constexpr, HKV: tl.constexpr,
-    D: tl.constexpr, D_PAD: tl.constexpr,
+def _qsa_one_query_varlen_kernel(
+    q_ptr,
+    k_ptr,
+    v_ptr,
+    out_ptr,
+    cu_seqlens_q_ptr,
+    cu_seqlens_k_ptr,
+    softmax_scale,
+    NUM_Q_HEADS: tl.constexpr,
+    NUM_KV_HEADS: tl.constexpr,
+    HEAD_DIM: tl.constexpr,
+    PADDED_HEAD_DIM: tl.constexpr,
     BLOCK_KV: tl.constexpr,
-    q_stride_t: tl.constexpr, q_stride_h: tl.constexpr,
-    k_stride_t: tl.constexpr, k_stride_h: tl.constexpr,
-    v_stride_t: tl.constexpr, v_stride_h: tl.constexpr,
-    o_stride_t: tl.constexpr, o_stride_h: tl.constexpr,
+    q_stride_t: tl.constexpr,
+    q_stride_h: tl.constexpr,
+    k_stride_t: tl.constexpr,
+    k_stride_h: tl.constexpr,
+    v_stride_t: tl.constexpr,
+    v_stride_h: tl.constexpr,
+    out_stride_t: tl.constexpr,
+    out_stride_h: tl.constexpr,
 ):
-    """One program per (query row, q head): online-softmax attention over the
-    gathered KV rows of that query, 1-token query, causal is a no-op."""
-    row = tl.program_id(0)
-    head = tl.program_id(1)
+    sequence_idx = tl.program_id(0)
+    query_head_idx = tl.program_id(1)
 
-    # QSA always emits one query per varlen sequence.
-    q_start = tl.load(cu_seqlens_q_ptr + row)
-    k_start = tl.load(cu_seqlens_k_ptr + row)
-    k_end = tl.load(cu_seqlens_k_ptr + row + 1)
+    query_idx = tl.load(cu_seqlens_q_ptr + sequence_idx)
+    kv_start = tl.load(cu_seqlens_k_ptr + sequence_idx)
+    kv_end = tl.load(cu_seqlens_k_ptr + sequence_idx + 1)
 
-    offs_d = tl.arange(0, D_PAD)
-    mask_d = offs_d < D
-
-    q = tl.load(
-        q_ptr + (q_start * q_stride_t) + (head * q_stride_h) + offs_d,
-        mask=mask_d, other=0.0,
+    dim_offsets = tl.arange(0, PADDED_HEAD_DIM)
+    dim_mask = dim_offsets < HEAD_DIM
+    query = tl.load(
+        q_ptr + query_idx * q_stride_t + query_head_idx * q_stride_h + dim_offsets,
+        mask=dim_mask,
+        other=0.0,
     ).to(tl.float32)
 
-    kh = head // (HQ // HKV)
+    queries_per_kv = NUM_Q_HEADS // NUM_KV_HEADS
+    kv_head_idx = query_head_idx // queries_per_kv
+    running_max = -float("inf")
+    running_sum = 0.0
+    accumulator = tl.zeros([PADDED_HEAD_DIM], dtype=tl.float32)
 
-    m_i = -float("inf")
-    l_i = 0.0
-    acc = tl.zeros([D_PAD], dtype=tl.float32)
-
-    for k0 in range(k_start, k_end, BLOCK_KV):
-        offs_kv = k0 + tl.arange(0, BLOCK_KV)
-        mask_kv = offs_kv < k_end
-        kv_ptrs = (offs_kv * k_stride_t) + (kh * k_stride_h)
-        k_blk = tl.load(
-            k_ptr + kv_ptrs[:, None] + offs_d[None, :],
-            mask=mask_kv[:, None] & mask_d[None, :], other=0.0,
+    for block_start in range(kv_start, kv_end, BLOCK_KV):
+        kv_offsets = block_start + tl.arange(0, BLOCK_KV)
+        kv_mask = kv_offsets < kv_end
+        key_offsets = kv_offsets * k_stride_t + kv_head_idx * k_stride_h
+        keys = tl.load(
+            k_ptr + key_offsets[:, None] + dim_offsets[None, :],
+            mask=kv_mask[:, None] & dim_mask[None, :],
+            other=0.0,
         ).to(tl.float32)
-        scores = tl.sum(q[None, :] * k_blk, axis=1) * sm_scale
-        scores = tl.where(mask_kv, scores, -float("inf"))
+        scores = tl.sum(query[None, :] * keys, axis=1) * softmax_scale
+        scores = tl.where(kv_mask, scores, -float("inf"))
 
-        m_new = tl.maximum(m_i, tl.max(scores, axis=0))
-        alpha = tl.exp(m_i - m_new)
-        p = tl.exp(scores - m_new)
-        l_i = l_i * alpha + tl.sum(p, axis=0)
-        acc = acc * alpha
+        new_max = tl.maximum(running_max, tl.max(scores, axis=0))
+        old_scale = tl.exp(running_max - new_max)
+        probabilities = tl.exp(scores - new_max)
+        running_sum = running_sum * old_scale + tl.sum(probabilities, axis=0)
+        accumulator *= old_scale
 
-        v_ptrs = (offs_kv * v_stride_t) + (kh * v_stride_h)
-        v_blk = tl.load(
-            v_ptr + v_ptrs[:, None] + offs_d[None, :],
-            mask=mask_kv[:, None] & mask_d[None, :], other=0.0,
+        value_offsets = kv_offsets * v_stride_t + kv_head_idx * v_stride_h
+        values = tl.load(
+            v_ptr + value_offsets[:, None] + dim_offsets[None, :],
+            mask=kv_mask[:, None] & dim_mask[None, :],
+            other=0.0,
         ).to(tl.float32)
-        acc += tl.sum(p[:, None] * v_blk, axis=0)
-        m_i = m_new
+        accumulator += tl.sum(probabilities[:, None] * values, axis=0)
+        running_max = new_max
 
-    out = acc / tl.where(l_i > 0.0, l_i, 1.0)
+    output = accumulator / tl.where(running_sum > 0.0, running_sum, 1.0)
     tl.store(
-        o_ptr + (row * o_stride_t) + (head * o_stride_h) + offs_d,
-        out.to(o_ptr.dtype.element_ty),
-        mask=mask_d,
+        out_ptr
+        + query_idx * out_stride_t
+        + query_head_idx * out_stride_h
+        + dim_offsets,
+        output.to(out_ptr.dtype.element_ty),
+        mask=dim_mask,
     )
 
 
-def _next_pow2(n: int) -> int:
-    return triton.next_power_of_2(max(n, 16))
-
-
-def triton_varlen_attn_func(
+def qsa_sm121_varlen_attention(
     q: torch.Tensor,
     k: torch.Tensor,
     v: torch.Tensor,
@@ -696,83 +749,80 @@ def triton_varlen_attn_func(
     max_seqlen_k: int = 0,
     softmax_scale: float = 1.0,
     causal: bool = True,
-    **kwargs,
+    **_: object,
 ) -> torch.Tensor:
-    """Drop-in replacement for flash_attn.flash_attn_varlen_func (QSA calls).
+    """Run the one-query packed-varlen attention contract emitted by QSA."""
 
-    Supports the exact shape the QSA sparse backend issues: one query row per
-    varlen sequence, GQA, any head_dim. Q is bf16/fp16; K/V may match Q or
-    be fp8 (fp8_e4m3 / fp8_e5m2) — the kernel upcasts loads to fp32, so a
-    fp8 KV cache does not need a host-side dequant (CUDA-graph safe).
-    """
-    if not q.is_cuda:
-        raise RuntimeError("qsa_fa_fallback requires CUDA tensors")
-    if q.dim() != 3 or k.dim() != 3 or v.dim() != 3:
-        raise RuntimeError(f"expected 3D q/k/v, got {q.shape}/{k.shape}/{v.shape}")
+    del max_seqlen_k, causal
+    if not q.is_cuda or not k.is_cuda or not v.is_cuda:
+        raise RuntimeError("SM121 QSA varlen attention requires CUDA tensors")
+    if q.ndim != 3 or k.ndim != 3 or v.ndim != 3:
+        raise ValueError(f"expected 3-D q/k/v, got {q.shape}/{k.shape}/{v.shape}")
+    if max_seqlen_q != 1:
+        raise ValueError(f"QSA requires max_seqlen_q=1, got {max_seqlen_q}")
     if q.dtype not in (torch.bfloat16, torch.float16):
-        raise RuntimeError(f"qsa_fa_fallback: unsupported q dtype {q.dtype}")
+        raise TypeError(f"unsupported query dtype: {q.dtype}")
     _fp8 = {torch.float8_e4m3fn, torch.float8_e5m2}
     if k.dtype != v.dtype:
-        raise RuntimeError(f"qsa_fa_fallback: k/v dtypes must match ({k.dtype}/{v.dtype})")
+        raise TypeError(f"k/v dtypes must match, got {k.dtype}/{v.dtype}")
     if k.dtype != q.dtype and k.dtype not in _fp8:
-        raise RuntimeError(
-            f"qsa_fa_fallback: k/v dtype {k.dtype} is not {q.dtype} or fp8"
+        raise TypeError(
+            f"k/v dtype {k.dtype} is not {q.dtype} or fp8"
         )
+    if q.device != k.device or q.device != v.device:
+        raise ValueError("q/k/v must be on the same CUDA device")
+    if cu_seqlens_q.device != q.device or cu_seqlens_k.device != q.device:
+        raise ValueError("cu_seqlens_q/k must be on the same CUDA device as q")
+    if cu_seqlens_q.dtype != torch.int32 or cu_seqlens_k.dtype != torch.int32:
+        raise TypeError("cu_seqlens_q/k must use torch.int32")
 
-    total_q, hq, d = q.shape
-    total_k, hkv, dk = k.shape
-    if dk != d or v.shape[2] != d:
-        raise RuntimeError("head_dim mismatch")
-    if hq % hkv != 0:
-        raise RuntimeError(f"GQA mismatch: {hq} q heads vs {hkv} kv heads")
-
-    num_seqs = total_q
-    if cu_seqlens_k.numel() != num_seqs + 1:
-        raise RuntimeError("cu_seqlens_k size mismatch")
-
-    # Host-side syncs (torch.equal) are illegal inside CUDA graph capture;
-    # the eager path has already validated the one-query-per-sequence contract
-    # before any graph is captured, so skip the check while capturing.
-    if not torch.cuda.is_current_stream_capturing():
-        q_lens_ok = bool(
-            torch.equal(
-                cu_seqlens_q[1:] - cu_seqlens_q[:-1],
-                torch.ones_like(cu_seqlens_q[1:]),
-            )
+    total_queries, num_q_heads, head_dim = q.shape
+    _, num_kv_heads, key_head_dim = k.shape
+    if v.shape != k.shape:
+        raise ValueError(f"k/v shapes must match, got {k.shape}/{v.shape}")
+    if key_head_dim != head_dim:
+        raise ValueError(
+            f"q/k head dimensions must match, got {head_dim}/{key_head_dim}"
         )
-        if not q_lens_ok:
-            raise RuntimeError(
-                "qsa_fa_fallback only supports q_len==1 per varlen sequence "
-                "(the QSA backend's only call shape)"
-            )
+    if num_q_heads % num_kv_heads != 0:
+        raise ValueError(
+            f"QSA GQA requires q heads divisible by kv heads, got "
+            f"{num_q_heads}/{num_kv_heads}"
+        )
+    if cu_seqlens_q.numel() != total_queries + 1:
+        raise ValueError("cu_seqlens_q must contain one entry per query plus the end")
+    if cu_seqlens_k.numel() != total_queries + 1:
+        raise ValueError("cu_seqlens_k must contain one entry per query plus the end")
 
-    if cu_seqlens_q.dtype != torch.int32:
-        cu_seqlens_q = cu_seqlens_q.to(torch.int32)
-    if cu_seqlens_k.dtype != torch.int32:
-        cu_seqlens_k = cu_seqlens_k.to(torch.int32)
-
-    q_c = q if q.is_contiguous() else q.contiguous()
-    k_c = k if k.is_contiguous() else k.contiguous()
-    v_c = v if v.is_contiguous() else v.contiguous()
-    out = torch.empty_like(q_c)
-
-    BLOCK_KV = 64
-    grid = (num_seqs, hq)
-    _varlen_one_q_attn_kernel[grid](
-        q_c, k_c, v_c, out,
+    q = q.contiguous()
+    k = k.contiguous()
+    v = v.contiguous()
+    output = torch.empty_like(q)
+    padded_head_dim = triton.next_power_of_2(max(head_dim, 16))
+    _qsa_one_query_varlen_kernel[(total_queries, num_q_heads)](
+        q,
+        k,
+        v,
+        output,
         cu_seqlens_q,
         cu_seqlens_k,
         softmax_scale,
-        HQ=hq, HKV=hkv,
-        D=d, D_PAD=_next_pow2(d),
-        BLOCK_KV=BLOCK_KV,
-        q_stride_t=q_c.stride(0), q_stride_h=q_c.stride(1),
-        k_stride_t=k_c.stride(0), k_stride_h=k_c.stride(1),
-        v_stride_t=v_c.stride(0), v_stride_h=v_c.stride(1),
-        o_stride_t=out.stride(0), o_stride_h=out.stride(1),
+        NUM_Q_HEADS=num_q_heads,
+        NUM_KV_HEADS=num_kv_heads,
+        HEAD_DIM=head_dim,
+        PADDED_HEAD_DIM=padded_head_dim,
+        BLOCK_KV=64,
+        q_stride_t=q.stride(0),
+        q_stride_h=q.stride(1),
+        k_stride_t=k.stride(0),
+        k_stride_h=k.stride(1),
+        v_stride_t=v.stride(0),
+        v_stride_h=v.stride(1),
+        out_stride_t=output.stride(0),
+        out_stride_h=output.stride(1),
         num_warps=4,
     )
-    return out
+    return output
 QSA_EOF
 
   cat > "${SCRIPT_DIR}/.patch/qsa_nvfp4_kv.py" <<'NVP4_EOF'
@@ -1446,26 +1496,57 @@ APPLY_EOF
 
   cat > "${SCRIPT_DIR}/.patch/Dockerfile" <<DKR_EOF
 # DSpark kernel-work image for Qwen3.8-Flash-Next-NVFP4 on DGX Spark (SM121/GB10).
-# See start.sh header for the full story.
+# sglang#36806 (exclude SM121 from TRT-LLM sparse decode) + #36845 (Triton
+# packed-varlen fallback) + NVFP4 KV for the QSA path. See start.sh header.
 FROM ${BASE_IMAGE}
 
-COPY qsa_fa_fallback.py /sgl-workspace/sglang/python/sglang/srt/layers/attention/qsa_fa_fallback.py
+COPY sm121_varlen.py /sgl-workspace/sglang/python/sglang/srt/layers/attention/qsa/sm121_varlen.py
 COPY qsa_nvfp4_kv.py /sgl-workspace/sglang/python/sglang/srt/layers/attention/qsa_nvfp4_kv.py
 COPY apply_nvfp4_patches.py /tmp/apply_nvfp4_patches.py
 RUN python3 - <<'PYEOF'
 p = "/sgl-workspace/sglang/python/sglang/srt/layers/attention/qwen_sparse_attn_backend.py"
 s = open(p).read()
-anchor = "    try:\n        from flash_attn import flash_attn_varlen_func"
-patch = (
-    "    from sglang.srt.utils import is_sm100_supported\n"
-    "    if not is_sm100_supported():\n"
-    "        from sglang.srt.layers.attention.qsa_fa_fallback import triton_varlen_attn_func\n"
-    "        return triton_varlen_attn_func\n"
-) + anchor
-assert anchor in s, "anchor not found — upstream image layout changed"
-assert "qsa_fa_fallback" not in s, "already patched"
-open(p, "w").write(s.replace(anchor, patch, 1))
-print("qwen_sparse_attn_backend.py patched for SM121")
+
+# sglang#36845: SM121 packed-varlen Triton fallback (not FA4 CuTe).
+if "qsa.sm121_varlen" not in s:
+    anchor = "    try:\\n        from flash_attn import flash_attn_varlen_func"
+    assert anchor in s, "flash_attn varlen anchor not found — upstream image layout changed"
+    insert = (
+        "    from sglang.srt.utils import is_sm121\\n"
+        "\\n"
+        "    if is_sm121():\\n"
+        "        from sglang.srt.layers.attention.qsa.sm121_varlen import (\\n"
+        "            qsa_sm121_varlen_attention,\\n"
+        "        )\\n"
+        "\\n"
+        "        return qsa_sm121_varlen_attention\\n"
+    )
+    s = s.replace(anchor, insert + anchor, 1)
+
+# sglang#36806: never take FlashInfer TRT-LLM sparse decode on SM121.
+# A newer base image may re-enable it (token-id-0 at long context).
+marker = "dspark: SM121 must not use TRT-LLM sparse decode"
+if marker not in s:
+    fn = "def _resolve_trtllm_sparse_decode():"
+    i = s.find(fn)
+    assert i >= 0, "trtllm resolver not found — upstream image layout changed"
+    ds = s.find('"""', i)
+    assert ds > 0, "trtllm resolver docstring not found"
+    ds_end = s.find('"""', ds + 3)
+    assert ds_end > 0, "trtllm resolver docstring unterminated"
+    ds_end += 3
+    s = s[:ds_end] + (
+        "\\n    from sglang.srt.utils import is_sm121\\n"
+        "\\n"
+        "    # dspark: SM121 must not use TRT-LLM sparse decode\\n"
+        "    # (sglang#36806 / #36845). That path silently emits token id 0\\n"
+        "    # at long context on GB10.\\n"
+        "    if is_sm121():\\n"
+        "        return None\\n"
+    ) + s[ds_end:]
+
+open(p, "w").write(s)
+print("qwen_sparse_attn_backend.py patched for SM121 (sglang#36806 + #36845)")
 PYEOF
 RUN python3 /tmp/apply_nvfp4_patches.py && rm -f /tmp/apply_nvfp4_patches.py
 DKR_EOF
@@ -1475,7 +1556,7 @@ ensure_patched_image() {
   header "SM121 kernel patch → ${PATCHED_IMAGE}"
   write_patch_context
   local stamp
-  stamp="$(cat "${SCRIPT_DIR}/.patch/qsa_fa_fallback.py" "${SCRIPT_DIR}/.patch/qsa_nvfp4_kv.py" "${SCRIPT_DIR}/.patch/apply_nvfp4_patches.py" "${SCRIPT_DIR}/.patch/Dockerfile" | sha256sum | cut -d' ' -f1)"
+  stamp="$(cat "${SCRIPT_DIR}/.patch/sm121_varlen.py" "${SCRIPT_DIR}/.patch/qsa_nvfp4_kv.py" "${SCRIPT_DIR}/.patch/apply_nvfp4_patches.py" "${SCRIPT_DIR}/.patch/Dockerfile" | sha256sum | cut -d' ' -f1)"
 
   if docker image inspect "${PATCHED_IMAGE}" >/dev/null 2>&1 \
      && [[ "$(cat "${SCRIPT_DIR}/.patch/.stamp" 2>/dev/null)" == "${stamp}" ]]; then
@@ -1520,7 +1601,7 @@ ensure_images() {
     ensure_patched_image
     IMAGE="${PATCHED_IMAGE}"
   else
-    warn "KERNEL_PATCH=0 — the stock image cannot serve Qwen4Exp on SM121 (QSA FA4-cute MLIR failure)"
+    warn "KERNEL_PATCH=0 — the stock image cannot serve Qwen4Exp on SM121 (FA4-cute MLIR failure, or silent token-0 if TRT-LLM sparse decode is enabled)"
     IMAGE="${BASE_IMAGE}"
   fi
 }
@@ -1928,6 +2009,10 @@ launch() {
   trap cleanup_followers EXIT
 
   : >"${LOG_FILE}"; : >"${WORKER_LOG_FILE}"
+  # The sglang startup banner captured here contains server_args, which embeds
+  # the configured --api-key verbatim. Create the logs owner-only so the key
+  # set is not left world-readable between runs.
+  chmod 600 "${LOG_FILE}" "${WORKER_LOG_FILE}"
   echo "[$(date -Is)] launching ${MODEL_ID} TP=${TP_SIZE} nnodes=${NNODES} image=${IMAGE}" >>"${LOG_FILE}"
 
   # Stale containers from a previous run
@@ -2045,12 +2130,23 @@ wait_ready() {
 # Subcommands
 # =============================================================================
 cmd_serve() {
-  # Already running → report and exit cleanly (idempotent)
+  # Already running → report and exit cleanly (idempotent). Both ranks must be
+  # up: a TP=2 group is not "running" because rank 0 is. If the head is up and
+  # the worker is gone, rank 0 sits in NCCL rendezvous forever (or against a
+  # stale rank 1), and exiting 0 here reports success for a pair that can never
+  # serve. Recovery is stop-then-start, which the operator must be told to do.
   if docker ps --format '{{.Names}}' | grep -qx "${HEAD_CONTAINER}"; then
-    ok "${HEAD_CONTAINER} already running"
-    curl -fsS "${AUTH_CURL[@]}" "${READY_URL}" >/dev/null 2>&1 && ok "API is ready: ${READY_URL}" || info "API not ready yet (still booting?)"
-    info "logs: ./start.sh logs   ·   stop: ./start.sh stop"
-    exit 0
+    if worker_docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "${WORKER_CONTAINER}"; then
+      ok "${HEAD_CONTAINER} already running"
+      curl -fsS "${AUTH_CURL[@]}" "${READY_URL}" >/dev/null 2>&1 && ok "API is ready: ${READY_URL}" || info "API not ready yet (still booting?)"
+      info "logs: ./start.sh logs   ·   stop: ./start.sh stop"
+      exit 0
+    fi
+    error "half-assembled pair: ${HEAD_CONTAINER} is running on the head but"
+    error "${WORKER_CONTAINER} is NOT running on ${WORKER_SSH}."
+    error "Rank 0 cannot form a TP group alone -- it will wait in rendezvous."
+    error "Recover with:  ./start.sh stop  &&  ./start.sh"
+    exit 1
   fi
 
   preflight serve
