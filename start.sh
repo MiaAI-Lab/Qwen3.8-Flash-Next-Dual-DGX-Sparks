@@ -392,12 +392,10 @@ ensure_base_image() {
   if worker_docker image inspect "${BASE_IMAGE}" >/dev/null 2>&1; then
     ok "base image present on worker"
   else
-    info "base image missing on worker — trying 'docker load' there…"
-    if docker save "${BASE_IMAGE}" | worker_docker load >/dev/null 2>&1; then
-      ok "base image loaded on worker"
-    else
-      warn "worker load failed — syncing image head → worker via docker save/load"
-    fi
+    info "base image missing on worker — streaming via docker save | docker load…"
+    docker save "${BASE_IMAGE}" | worker_docker load >/dev/null
+    worker_docker image inspect "${BASE_IMAGE}" >/dev/null 2>&1 || { error "image sync to worker failed"; exit 1; }
+    ok "base image loaded on worker"
   fi
 }
 
