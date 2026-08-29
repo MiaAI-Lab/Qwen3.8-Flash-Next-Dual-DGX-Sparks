@@ -375,9 +375,17 @@ the ones you'll actually touch:
   (never TRT-LLM on SM121) and [sglang#36845](https://github.com/sgl-project/sglang/pull/36845)
   (Triton packed-varlen fallback). Upstream's SM121 validation then passed
   structured `get_weather({"city": "Paris"})` plus exact NIAH at 120k/190k/210k
-  with zero token id 0. If a client still streams `!!!!!!` until `max_tokens`
-  after you rebuild the patched image, file it — the remaining workaround is
-  still to turn thinking off for those sessions:
+  with zero token id 0.
+
+  A **leftover long-thinking decode loop** can still start after that kernel
+  path (fp8 KV, no tools, forced 1600-token thinking; then later requests
+  stream `!` until both ranks restart). The patched image now (1) zeros
+  non-finite QSA attention output, (2) aborts after 16 consecutive token-0
+  samples instead of filling `max_tokens`, (3) does not insert that
+  completion into radix, and (4) resets the prefix cache before the next
+  prefill. `./start.sh smoke` fails on a `!` run. Rebuild the image before
+  treating this as live (`./start.sh serve`). Residual workaround if a
+  client still loops:
 
   Per request (preferred — keeps thinking for everything else):
 
@@ -427,6 +435,7 @@ the ones you'll actually touch:
 start.sh          # everything: download, sync, image build, launch, ops
 evals/            # live-API evals (not required to serve)
   nvfp4_kv_eval.py  # passkey/NIAH eval for NVFP4 KV reliability
+  doom_loop_repro.py # long thinking decode token-0 `!` regression
 .env.example      # copy to .env and edit (cluster IPs, worker ssh, recipe)
 .env              # your local config (gitignored — create from .env.example)
 .patch/           # (generated) SM121 kernel-patch Docker build context

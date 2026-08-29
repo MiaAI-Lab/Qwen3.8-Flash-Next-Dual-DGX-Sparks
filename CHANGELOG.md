@@ -56,6 +56,13 @@ All notable changes to this serving recipe.
   Upstream validated exact NIAH at 120k/190k/210k on one GB10 with zero
   token id 0; rebuild the image (`KERNEL_PATCH=1`) before treating 256k as
   trusted on this cluster.
+- **Leftover long-thinking token-id-0 loop after #36845** (fp8 KV, no tools,
+  forced 1600-token thinking, then sticky `!` on later requests). The QSA
+  varlen kernel now zeros non-finite attention output. Decode aborts after
+  16 consecutive token-0 samples, skips radix insert, and resets the prefix
+  cache before the next prefill. `./start.sh smoke` fails on a `!` run;
+  `./start.sh doom-loop` is the long-thinking regression. Rebuild the image
+  before treating this as live.
 - Keyed-server readiness hang ([PR #7](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Next-Dual-DGX-Sparks/pull/7)): derive the
   effective `--api-key` (argparse last-wins, including `EXTRA_ARGS`) so
   `wait_ready` / `status` / `smoke` send `Authorization` instead of looping

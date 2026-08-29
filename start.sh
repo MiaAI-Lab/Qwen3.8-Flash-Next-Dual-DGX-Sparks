@@ -81,9 +81,13 @@
 #    `_resolve_flash_attn_varlen_func` to the #36845 Triton kernel. The
 #    kernel reads cu_seqlens on-device so CUDA-graph replay stays valid.
 #    DSpark extra vs upstream: fp8 K/V is allowed (upcast in-kernel) so
-#    NVFP4_KV_CACHE=0 still works. KERNEL_PATCH=0 disables the patch (the
-#    stock image then dies at warmup with an MLIRError, or worse, a silent
-#    token-0 loop if the image has the SM121 TRT-LLM route).
+#    NVFP4_KV_CACHE=0 still works. A leftover long-thinking token-id-0 loop
+#    (HTTP 200, then sticky `!` on later requests) is aborted after 16
+#    consecutive token-0 samples; that completion is not inserted into radix
+#    and the prefix cache is reset before the next prefill. KERNEL_PATCH=0
+#    disables the patch (the stock image then dies at warmup with an
+#    MLIRError, or worse, a silent token-0 loop if the image has the SM121
+#    TRT-LLM route).
 #
 #    The same derivative image adds NVFP4 KV cache support for the QSA
 #    layers (default NVFP4_KV_CACHE=1): the pool stores packed FP4 + per-block
@@ -104,8 +108,9 @@
 #    ./start.sh stop            # tear down both nodes
 #    ./start.sh status          # containers / API state on both nodes
 #    ./start.sh logs [head|worker]
-#    ./start.sh smoke           # one chat completion against :8888
+#    ./start.sh smoke           # one chat completion against :8888 (fails on `!` loops)
 #    ./start.sh kv-eval         # NVFP4 KV passkey/NIAH reliability vs live API
+#    ./start.sh doom-loop       # long thinking decode regression for token-id-0 `!`
 #    ./start.sh doctor          # preflight checks only
 #
 #  Tunables (env or .env in this directory; shell env wins):
@@ -362,8 +367,8 @@ ACTION="${1:-serve}"
 case "${ACTION}" in
   serve|"") ;;
   download|--download-only) ACTION="download" ;;
-  stop|status|logs|smoke|kv-eval|doctor|-h|--help) ;;
-  *) echo "Unknown argument: ${ACTION}"; echo "Usage: $0 [serve|download|stop|status|logs|smoke|kv-eval|doctor]"; exit 1 ;;
+  stop|status|logs|smoke|kv-eval|doom-loop|doctor|-h|--help) ;;
+  *) echo "Unknown argument: ${ACTION}"; echo "Usage: $0 [serve|download|stop|status|logs|smoke|kv-eval|doom-loop|doctor]"; exit 1 ;;
 esac
 if [[ "${ACTION}" == "-h" || "${ACTION}" == "--help" ]]; then
   # Print the whole header comment block — from line 2 until the first line
@@ -728,7 +733,13 @@ def _qsa_one_query_varlen_kernel(
         accumulator += tl.sum(probabilities[:, None] * values, axis=0)
         running_max = new_max
 
-    output = accumulator / tl.where(running_sum > 0.0, running_sum, 1.0)
+    # Empty selected-KV (or a 0 running_sum) must not divide through -inf
+    # softmax state: that yields NaN attention, NaN logits, then token id 0
+    # (`!`) until max_tokens and can poison later radix hits.
+    valid = (kv_end > kv_start) & (running_sum > 0.0)
+    output = accumulator / tl.where(valid, running_sum, 1.0)
+    finite = output == output
+    output = tl.where(finite & valid, output, 0.0)
     tl.store(
         out_ptr
         + query_idx * out_stride_t
@@ -1487,7 +1498,146 @@ def main() -> None:
         expected=2,
         marker=FP8_DOT_MARKER,
     )
+    patch_token0_guard()
     print("NVFP4 KV patches applied")
+
+
+TOKEN0_MARKER = "dspark_token0_guard"
+TOKEN0_RUN = 16  # matches logs/qwen38_doom_loop_repro.py
+
+
+def patch_token0_guard() -> None:
+    """Abort a token-id-0 (`!`) decode loop and drop the poisoned prefix cache.
+
+    sglang#36806/#36845 closed the SM121 TRT-LLM path. A later long thinking
+    decode can still emit token 0, finish HTTP 200, and poison the next
+    request via radix reuse. See logs/qwen38-doom-loop-bug-report.md.
+    """
+    schedule_batch = SRT / "managers" / "schedule_batch.py"
+    processor = (
+        SRT / "managers" / "scheduler_components" / "batch_result_processor.py"
+    )
+    scheduler = SRT / "managers" / "scheduler.py"
+
+    pad_anchor = '''def _compute_pad_value(hash: int) -> int:
+    """Compute pad value from hash."""
+    return MM_PAD_SHIFT_VALUE + (hash % (1 << 30))
+'''
+    pad_repl = pad_anchor + '''
+# dspark_token0_guard: set when a request hits a repeated token-id-0 run.
+DSPARK_TOKEN0_FLUSH_NEEDED = False
+
+
+def dspark_note_token0_loop() -> None:
+    global DSPARK_TOKEN0_FLUSH_NEEDED
+    DSPARK_TOKEN0_FLUSH_NEEDED = True
+
+
+def dspark_consume_token0_flush() -> bool:
+    global DSPARK_TOKEN0_FLUSH_NEEDED
+    needed = DSPARK_TOKEN0_FLUSH_NEEDED
+    DSPARK_TOKEN0_FLUSH_NEEDED = False
+    return needed
+
+'''
+    vocab_anchor = '''    def _check_vocab_boundary_finish(self, new_accepted_tokens: List[int] = None):
+'''
+    vocab_repl = f'''    def _check_token0_loop_finish(self) -> bool:
+        """Stop a decoded token-id-0 (`!`) run before it fills max_tokens."""
+        ids = self.output_ids
+        if len(ids) < {TOKEN0_RUN}:
+            return False
+        if any(token != 0 for token in ids[-{TOKEN0_RUN}:]):
+            return False
+        self.finished_reason = FINISH_ABORT(
+            "token-id-0 loop (decoded '!'); aborting to avoid poisoning later requests",
+            HTTPStatus.INTERNAL_SERVER_ERROR,
+            "InternalServerError",
+        )
+        self.finished_len = len(ids) - {TOKEN0_RUN} + 1
+        self.token0_loop = True
+        dspark_note_token0_loop()
+        logger.error(
+            "dspark: token-id-0 loop after %s output tokens rid=%s",
+            len(ids),
+            self.rid,
+        )
+        return True
+
+    def _check_vocab_boundary_finish(self, new_accepted_tokens: List[int] = None):
+'''
+    finish_anchor = '''        new_accepted_tokens = self.output_ids[-new_accepted_len:]
+
+        # Sanitize out-of-range / NaN token ids before any decode.
+        if self._check_vocab_boundary_finish(new_accepted_tokens):
+            self._cap_finished_len_at_max_new_tokens()
+            return
+'''
+    finish_repl = '''        new_accepted_tokens = self.output_ids[-new_accepted_len:]
+
+        # Sanitize out-of-range / NaN token ids before any decode.
+        if self._check_vocab_boundary_finish(new_accepted_tokens):
+            self._cap_finished_len_at_max_new_tokens()
+            return
+
+        # dspark_token0_guard: abort a repeated token-id-0 (`!`) run.
+        if self._check_token0_loop_finish():
+            return
+'''
+    insert_anchor = '''                is_insert = (
+                    req.mamba_lazy_is_insert
+                    if mamba_extra_buffer_lazy_enabled()
+                    else True
+                )
+                release_kv_cache(req, self.tree_cache, is_insert=is_insert)
+'''
+    insert_repl = '''                is_insert = (
+                    req.mamba_lazy_is_insert
+                    if mamba_extra_buffer_lazy_enabled()
+                    else True
+                )
+                if getattr(req, "token0_loop", False):  # dspark_token0_guard
+                    is_insert = False
+                release_kv_cache(req, self.tree_cache, is_insert=is_insert)
+'''
+    next_anchor = '''    def get_next_batch_to_run(
+        self, running_batch: ScheduleBatch, last_batch: Optional[ScheduleBatch]
+    ) -> NextBatchPlan:
+        self.process_pending_chunked_abort()
+'''
+    next_repl = '''    def get_next_batch_to_run(
+        self, running_batch: ScheduleBatch, last_batch: Optional[ScheduleBatch]
+    ) -> NextBatchPlan:
+        self.process_pending_chunked_abort()
+        # dspark_token0_guard: drop the radix tree before the next prefill so
+        # a later request cannot reuse prefix KV corrupted by a token-id-0 run.
+        if running_batch.is_empty():
+            from sglang.srt.managers.schedule_batch import dspark_consume_token0_flush
+
+            if dspark_consume_token0_flush():
+                logger.warning(
+                    "dspark: token-id-0 loop; resetting prefix cache before the next prefill"
+                )
+                self.tree_cache.reset()
+'''
+
+    def _one(path, replacements):
+        s = path.read_text()
+        if TOKEN0_MARKER in s:
+            print(f"{path.name}: token0 guard already patched")
+            return
+        for anchor, replacement in replacements:
+            count = s.count(anchor)
+            assert count == 1, (
+                f"{path.name}: token0 anchor matched {count} times (want 1):\\n{anchor}"
+            )
+            s = s.replace(anchor, replacement, 1)
+        path.write_text(s)
+        print(f"{path.name}: token0 guard patched")
+
+    _one(schedule_batch, [(pad_anchor, pad_repl), (vocab_anchor, vocab_repl), (finish_anchor, finish_repl)])
+    _one(processor, [(insert_anchor, insert_repl)])
+    _one(scheduler, [(next_anchor, next_repl)])
 
 
 if __name__ == "__main__":
@@ -1497,7 +1647,8 @@ APPLY_EOF
   cat > "${SCRIPT_DIR}/.patch/Dockerfile" <<DKR_EOF
 # DSpark kernel-work image for Qwen3.8-Flash-Next-NVFP4 on DGX Spark (SM121/GB10).
 # sglang#36806 (exclude SM121 from TRT-LLM sparse decode) + #36845 (Triton
-# packed-varlen fallback) + NVFP4 KV for the QSA path. See start.sh header.
+# packed-varlen fallback) + NVFP4 KV for the QSA path + token-id-0 abort
+# guard. See start.sh header.
 FROM ${BASE_IMAGE}
 
 COPY sm121_varlen.py /sgl-workspace/sglang/python/sglang/srt/layers/attention/qsa/sm121_varlen.py
@@ -1953,6 +2104,7 @@ common_docker_env() { # echoes "-e K=V" pairs shared by both nodes (callers word
     "TRANSFORMERS_OFFLINE=1"
     "TRITON_CACHE_DIR=/root/.triton"
     "HF_TOKEN=${HF_TOKEN:-}"
+    "SGLANG_SANITIZE_NAN_LOGITS=1"
   )
   local v out=""
   for v in "${vars[@]}"; do out+=" -e ${v}"; done
@@ -2243,11 +2395,21 @@ cmd_smoke() {
     -H 'Content-Type: application/json' \
     -d "{\"model\": \"${SERVED_MODEL_NAME}\", \"messages\": [{\"role\": \"user\", \"content\": \"Give me three words that rhyme with 'spark', then use one in a sentence.\"}], \"max_tokens\": 300}" \
     | python3 -c '
-import json, sys
-m = json.load(sys.stdin)["choices"][0]["message"]
-r = getattr(m, "reasoning_content", None) or ""
+import json, re, sys
+data = json.load(sys.stdin)
+choice = data["choices"][0]
+m = choice["message"]
+r = m.get("reasoning_content") or ""
+c = m.get("content") or ""
+text = r + c
 print("reasoning:", (r[:200] + "…") if len(r) > 200 else r)
-print("content:  ", m["content"])
+print("content:  ", c)
+if choice.get("finish_reason") == "abort":
+    print("SMOKE FAIL: finish_reason=abort", file=sys.stderr)
+    sys.exit(1)
+if re.search(r"!{16,}", text):
+    print("SMOKE FAIL: token-0 exclamation loop", file=sys.stderr)
+    sys.exit(1)
 ' || { error "smoke test failed — check ./start.sh logs"; exit 1; }
 }
 
@@ -2261,5 +2423,6 @@ case "${ACTION}" in
   logs)     cmd_logs "${2:-head}" ;;
   smoke)    cmd_smoke ;;
   kv-eval)  shift; exec python3 "${SCRIPT_DIR}/evals/nvfp4_kv_eval.py" --base-url "http://127.0.0.1:${PORT}" --model "${SERVED_MODEL_NAME}" --api-key "${EFFECTIVE_API_KEY}" "$@" ;;
+  doom-loop) shift; API_KEY="${EFFECTIVE_API_KEY}" exec python3 "${SCRIPT_DIR}/evals/doom_loop_repro.py" --base-url "http://127.0.0.1:${PORT}/v1" --model "${SERVED_MODEL_NAME}" "$@" ;;
   doctor)   cmd_doctor ;;
 esac
