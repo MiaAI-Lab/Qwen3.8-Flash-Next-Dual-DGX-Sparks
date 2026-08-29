@@ -1640,12 +1640,24 @@ try:
         files = [(s["rfilename"], s.get("size") or 0) for s in json.load(r)["siblings"]]
 except Exception as e:
     print(f"[WARN]  HF API unreachable ({e}); falling back to heuristic check")
-    need = ("config.json", "model.safetensors.index.json")
-    st = sum(1 for f in os.listdir(snap) if f.endswith(".safetensors"))
-    if all(os.path.exists(os.path.join(snap, n)) for n in need) and st >= 400:
-        print(f"[OK]    {label}: heuristic check passed ({st} safetensors)")
+    index_path = os.path.join(snap, "model.safetensors.index.json")
+    try:
+        with open(index_path) as f:
+            shards = set(json.load(f)["weight_map"].values())
+    except (OSError, KeyError, TypeError, json.JSONDecodeError):
+        shards = set()
+    missing_shards = [
+        name for name in shards
+        if not os.path.isfile(os.path.join(snap, name))
+        or os.path.getsize(os.path.join(snap, name)) == 0
+    ]
+    if os.path.isfile(os.path.join(snap, "config.json")) and shards and not missing_shards:
+        print(f"[OK]    {label}: heuristic check passed ({len(shards)} indexed shards)")
         sys.exit(0)
-    print(f"[ERROR] {label}: heuristic check failed ({st} safetensors)")
+    print(
+        f"[ERROR] {label}: heuristic check failed "
+        f"({len(shards)} indexed shards, {len(missing_shards)} missing/empty)"
+    )
     sys.exit(1)
 missing, bad = [], []
 for name, size in files:

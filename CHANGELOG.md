@@ -42,6 +42,9 @@ All notable changes to this serving recipe.
 
 ### Fixed
 
+- Offline weight verification now reads the safetensors index instead of
+  assuming at least 400 shards; the model has 206 shards, so a transient HF
+  API outage no longer triggers an unnecessary 135 GB re-download.
 - **SM121 QSA decode token-id-0** ([sglang#36537](https://github.com/sgl-project/sglang/issues/36537),
   [sglang#36806](https://github.com/sgl-project/sglang/pull/36806),
   [sglang#36845](https://github.com/sgl-project/sglang/pull/36845)). FlashInfer
