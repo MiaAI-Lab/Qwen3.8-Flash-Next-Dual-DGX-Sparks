@@ -1699,6 +1699,139 @@ if marker not in s:
 open(p, "w").write(s)
 print("qwen_sparse_attn_backend.py patched for SM121 (sglang#36806 + #36845)")
 PYEOF
+
+# DSpark: build GDN chunk indices once from host-side extend lengths.
+# Avoid prepare_chunk_indices(...).tolist() CUDA -> CPU sync in every GDN layer.
+RUN python3 - <<'PYEOF'
+from pathlib import Path
+
+ROOT = Path("/sgl-workspace/sglang/python/sglang")
+MARK = "dspark_gdn_chunk_indices_cpu"
+
+def patch(path, replacements):
+    s = path.read_text()
+
+    if MARK in s:
+        print(f"{path.name}: GDN D2H patch already present")
+        return
+
+    for old, new in replacements:
+        count = s.count(old)
+        assert count == 1, (
+            f"{path}: anchor matched {count} times, expected 1:\n{old}"
+        )
+        s = s.replace(old, new, 1)
+
+    path.write_text(s)
+    print(f"{path.name}: GDN D2H patch applied")
+
+
+# 1. Precompute chunk indices once per forward from the CPU lengths.
+p = ROOT / "srt/layers/attention/linear/gdn_backend.py"
+
+patch(p, [
+(
+'''    def init_forward_metadata(self, forward_batch: ForwardBatch):
+        super().init_forward_metadata(forward_batch)
+''',
+'''    def init_forward_metadata(self, forward_batch: ForwardBatch):
+        super().init_forward_metadata(forward_batch)
+
+        # dspark_gdn_chunk_indices_cpu:
+        # Build once on CPU instead of calling .tolist() on CUDA in every GDN layer.
+        self.forward_metadata.dspark_gdn_chunk_indices = None
+        if forward_batch.extend_seq_lens_cpu is not None:
+            pairs = [
+                (seq_idx, chunk_idx)
+                for seq_idx, seq_len in enumerate(forward_batch.extend_seq_lens_cpu)
+                for chunk_idx in range(
+                    (int(seq_len) + FLA_CHUNK_SIZE - 1) // FLA_CHUNK_SIZE
+                )
+            ]
+            self.forward_metadata.dspark_gdn_chunk_indices = (
+                torch.tensor(pairs, dtype=torch.int32, device=self.device)
+                if pairs
+                else torch.empty((0, 2), dtype=torch.int32, device=self.device)
+            )
+'''
+),
+(
+'''                query_start_loc=query_start_loc,
+                state_checkpoint_cu_starts=(
+''',
+'''                query_start_loc=query_start_loc,
+                chunk_indices=getattr(
+                    forward_metadata, "dspark_gdn_chunk_indices", None
+                ),
+                state_checkpoint_cu_starts=(
+'''
+),
+])
+
+
+# 2. Pass the precomputed indices through the Triton backend.
+p = ROOT / "srt/layers/attention/linear/kernels/gdn_triton.py"
+
+patch(p, [
+(
+'''            cu_seqlens=query_start_loc,
+            head_first=False,
+''',
+'''            cu_seqlens=query_start_loc,
+            chunk_indices=kwargs.get("chunk_indices"),  # dspark_gdn_chunk_indices_cpu
+            head_first=False,
+'''
+),
+])
+
+
+# 3. Use them instead of recomputing via CUDA -> CPU .tolist().
+p = ROOT / "kernels/ops/attention/fla/chunk.py"
+
+patch(p, [
+(
+'''        cu_seqlens: Optional[torch.LongTensor] = None,
+        use_qk_l2norm_in_kernel: bool = False,
+''',
+'''        cu_seqlens: Optional[torch.LongTensor] = None,
+        chunk_indices: Optional[torch.LongTensor] = None,  # dspark_gdn_chunk_indices_cpu
+        use_qk_l2norm_in_kernel: bool = False,
+'''
+),
+(
+'''        chunk_indices = (
+            prepare_chunk_indices(cu_seqlens, CHUNK_SIZE)
+            if cu_seqlens is not None
+            else None
+        )
+''',
+'''        if chunk_indices is None and cu_seqlens is not None:
+            chunk_indices = prepare_chunk_indices(cu_seqlens, CHUNK_SIZE)
+'''
+),
+(
+'''    cu_seqlens: Optional[torch.LongTensor] = None,
+    head_first: bool = False,
+''',
+'''    cu_seqlens: Optional[torch.LongTensor] = None,
+    chunk_indices: Optional[torch.LongTensor] = None,
+    head_first: bool = False,
+'''
+),
+(
+'''        cu_seqlens,
+        use_qk_l2norm_in_kernel,
+''',
+'''        cu_seqlens,
+        chunk_indices,
+        use_qk_l2norm_in_kernel,
+'''
+),
+])
+
+print("DSpark GDN CPU chunk-index patch complete")
+PYEOF
+
 RUN python3 /tmp/apply_nvfp4_patches.py && rm -f /tmp/apply_nvfp4_patches.py
 DKR_EOF
 }
