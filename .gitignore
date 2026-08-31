@@ -1,0 +1,30 @@
+# Environment / secrets
+.env
+.env.*
+!.env.sample
+
+# Logs
+*.log
+logs/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Editors / IDE
+.vscode/
+.idea/
+*.swp
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temp / runtime artifacts
+*.pid
+tmp/
+*.tmp
