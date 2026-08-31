@@ -277,6 +277,16 @@ curl http://localhost:8888/v1/chat/completions \
   -d '{"model":"qwen3.8-flash-next","messages":[{"role":"user","content":[{"type":"text","text":"What is in this image?"},{"type":"image_url","image_url":{"url":"https://example.com/image.jpg"}}]}]}'
 ```
 
+> **Verified live on this deployment** — fine OCR (48 px text inside a 3840×2160 frame,
+> ≈8.2k vision tokens), color/shape/scene QA, and correct *refusal* to read text that isn't
+> in the image. Two caveats: **(1)** this is a reasoning model and thinking consumes
+> `max_tokens` first — if `content` is empty with `finish_reason: "length"`, just raise
+> `max_tokens` (2–4k covers most image QA); `chat_template_kwargs.thinking_budget` is
+> **not** honored by this build. **(2)** media must be a URL or base64 data-URL (no local
+> paths — `--allowed-local-media-path` is not set), default limit is 1 image + 1 video per
+> prompt, and the vision encoder budget is 16,384 tokens (larger inputs are auto-resized /
+> sparse-sampled for video).
+
 ## YaRN (1M context)
 
 ```bash
