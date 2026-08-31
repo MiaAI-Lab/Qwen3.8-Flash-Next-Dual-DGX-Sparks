@@ -48,6 +48,11 @@ for var in HEAD_IP WORKER_IP IFACE IB_HCA IB_GID_INDEX MODEL_ID \
 done
 
 WORKER_USER="${WORKER_USER:-}"
+# Numeric sanity: the YaRN guard below does an arithmetic comparison on MAX_MODEL_LEN
+if ! [[ "$MAX_MODEL_LEN" =~ ^[1-9][0-9]*$ ]]; then
+    echo "ERROR: MAX_MODEL_LEN must be a positive integer (got: '$MAX_MODEL_LEN')"
+    exit 1
+fi
 # Per-node overrides — the two nodes may be cross-wired (head port f1 ↔ worker port f0),
 # so the connected interface/HCA can have different names on each node.
 WORKER_IFACE="${WORKER_IFACE:-$IFACE}"
