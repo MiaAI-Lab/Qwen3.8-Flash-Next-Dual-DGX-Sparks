@@ -73,7 +73,7 @@ every measurement in this README.
 | `MODEL_ID` | `RadixArk/Qwen3.8-Flash-Next-NVFP4` | same | HuggingFace model |
 | `SERVED_MODEL_NAME` | `qwen3.8-flash-next` | same | Name in `/v1/models` |
 | `MAX_MODEL_LEN` | `1000000` | `1000000` | Context length (262144 = native, no YaRN) |
-| `YARN_ENABLE` | `true` | `true` | Extend context via YaRN rope scaling |
+| `YARN_ENABLE` | `true` | `true` | Extend context via YaRN rope scaling — **auto force-disabled when `MAX_MODEL_LEN` ≤ 262144** |
 | `YARN_FACTOR` | `4.0` | `4.0` | 262144 × 4.0 ≈ 1M |
 | `GPU_MEMORY_UTILIZATION` | `0.835` | `0.835` | Fraction of the 121.69 GiB budgeted by vLLM (see [KV cache budget](#kv-cache-budget)) |
 | `MAX_NUM_SEQS` | `8` | `8` | Max concurrent sequences |
@@ -301,6 +301,10 @@ VLLM_ALLOW_LONG_MAX_MODEL_LEN=1
 with extreme caution` warning — YaRN is what makes the 1M positions valid. Quality at 1M with
 `factor 4.0` is beyond the checkpoint's trained range: benchmark before trusting long-context
 answers, and fall back to `MAX_MODEL_LEN=262144` / `YARN_ENABLE=false` for comparison runs.
+
+> **Rule:** YaRN exists to *extend* context beyond native. At `MAX_MODEL_LEN` ≤ 262144 it has no
+> benefit and costs accuracy, so `start.sh` now force-disables it automatically (prints a NOTE) —
+> no need to remember `YARN_ENABLE=false` when testing at native context.
 
 ## Performance (batch-1, greedy, default runtime above)
 

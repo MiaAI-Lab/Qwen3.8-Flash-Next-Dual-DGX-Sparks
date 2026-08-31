@@ -61,6 +61,14 @@ EXTRA_VLLM_ARGS="${EXTRA_VLLM_ARGS:-}"
 EXTRA_DOCKER_ARGS="${EXTRA_DOCKER_ARGS:-}"
 HF_TOKEN="${HF_TOKEN:-}"
 
+# YaRN only makes sense ABOVE the native 262144 context. At or below native,
+# rope scaling degrades quality for zero benefit — force it off.
+YARN_ENABLE="${YARN_ENABLE:-false}"
+if [[ "$YARN_ENABLE" == "true" && "$MAX_MODEL_LEN" -le 262144 ]]; then
+    echo "NOTE: MAX_MODEL_LEN=$MAX_MODEL_LEN <= native 262144 — YaRN force-disabled."
+    YARN_ENABLE=false
+fi
+
 # ---------------------------------------------------------------------------
 # Parse CLI flags
 # ---------------------------------------------------------------------------
