@@ -156,13 +156,13 @@ if $DO_DOWNLOAD; then
 
     if command -v uvx &>/dev/null; then
         info "Using uvx to download..."
-        HF_HOME="$HF_CACHE_DIR" uvx hf download "$MODEL_ID"
+        HF_HOME="$HF_CACHE_DIR" uvx hf download "$MODEL_ID" --cache-dir "$HUB_PATH"
     elif command -v huggingface-cli &>/dev/null; then
         info "Using huggingface-cli to download..."
-        HF_HOME="$HF_CACHE_DIR" huggingface-cli download "$MODEL_ID"
+        HF_HOME="$HF_CACHE_DIR" huggingface-cli download "$MODEL_ID" --cache-dir "$HUB_PATH"
     elif command -v hf &>/dev/null; then
         info "Using hf CLI to download..."
-        HF_HOME="$HF_CACHE_DIR" hf download "$MODEL_ID"
+        HF_HOME="$HF_CACHE_DIR" hf download "$MODEL_ID" --cache-dir "$HUB_PATH"
     else
         err "No HuggingFace download tool found. Install one of:\n  pip install huggingface_hub\n  pip install uv"
     fi
@@ -174,28 +174,42 @@ fi
 # ---------------------------------------------------------------------------
 info "=== Step 2: Resolve cache path ==="
 
-# Try CLI tools first, then guess from cache layout
-MODEL_DIR=""
-for tool_cmd in "uvx hf path" "hf path" "huggingface-cli path"; do
-    first_word="${tool_cmd%% *}"
-    if command -v "$first_word" &>/dev/null; then
-        MODEL_DIR=$($tool_cmd "$MODEL_ID" 2>/dev/null || true)
-        [[ -n "$MODEL_DIR" && -d "$MODEL_DIR" ]] && break
-        MODEL_DIR=""
-    fi
-done
+ORG="${MODEL_ID%%/*}"
+NAME="${MODEL_ID##*/}"
+# Hub repo dir (blobs/refs/snapshots). Prefer this over `hf path`, which is not
+# a real CLI command and (when it exists) often returns a snapshot subdir.
+MODEL_DIR="$HUB_PATH/models--${ORG}--${NAME}"
 
-# Fallback: guess from standard HF cache layout
-if [[ -z "$MODEL_DIR" || ! -d "$MODEL_DIR" ]]; then
-    ORG="${MODEL_ID%%/*}"
-    NAME="${MODEL_ID##*/}"
-    CANDIDATE="$HUB_PATH/models--${ORG}--${NAME}"
-    [[ -d "$CANDIDATE" ]] && MODEL_DIR="$CANDIDATE"
+if [[ ! -d "$MODEL_DIR" ]]; then
+    local_guess=""
+    for tool_cmd in "uvx hf path" "hf path" "huggingface-cli path"; do
+        first_word="${tool_cmd%% *}"
+        if command -v "$first_word" &>/dev/null; then
+            local_guess=$($tool_cmd "$MODEL_ID" 2>/dev/null || true)
+            [[ -n "$local_guess" && -d "$local_guess" ]] && break
+            local_guess=""
+        fi
+    done
+    if [[ -n "$local_guess" && -d "$local_guess" ]]; then
+        # Walk up to models--org--name if the CLI pointed at a snapshot.
+        case "$local_guess" in
+            *"/models--${ORG}--${NAME}"*)
+                MODEL_DIR="${local_guess%%/models--${ORG}--${NAME}*}/models--${ORG}--${NAME}"
+                ;;
+            *)
+                MODEL_DIR="$local_guess"
+                ;;
+        esac
+    fi
 fi
 
 if [[ -z "$MODEL_DIR" || ! -d "$MODEL_DIR" ]]; then
     err "Could not resolve local cache path for $MODEL_ID under $HUB_PATH"
 fi
+case "$MODEL_DIR" in
+    "$HF_CACHE_DIR"|"$HF_CACHE_DIR"/*) ;;
+    *) err "snapshot ${MODEL_DIR} is not under HF_HOME=${HF_CACHE_DIR}" ;;
+esac
 
 ok "Model cache: $MODEL_DIR"
 
@@ -204,13 +218,14 @@ ok "Model cache: $MODEL_DIR"
 # ---------------------------------------------------------------------------
 if $DO_RSYNC; then
     info "=== Step 3: Sync weights to worker ($WORKER_IP) ==="
-    info "  Worker cache: $REMOTE_HUB"
+    local_wrepo="${REMOTE_HUB}/models--${ORG}--${NAME}"
+    info "  Worker cache: $local_wrepo"
 
-    ssh_worker "mkdir -p '$REMOTE_HUB'"
+    ssh_worker "mkdir -p '$local_wrepo'"
 
     rsync -av --progress --partial \
         "${MODEL_DIR}/" \
-        "${WORKER_USER:+${WORKER_USER}@}${WORKER_IP}:${REMOTE_HUB}/"
+        "${WORKER_USER:+${WORKER_USER}@}${WORKER_IP}:${local_wrepo}/"
 
     ok "Rsync complete."
 fi
