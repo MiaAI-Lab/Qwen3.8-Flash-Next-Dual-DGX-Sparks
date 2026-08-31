@@ -27,6 +27,16 @@ ssh_cmd() {
     ssh -o StrictHostKeyChecking=no "${user_prefix}$WORKER_IP" "$@"
 }
 
+REMOTE_HOME=$(ssh_cmd "echo \"\$HOME\"")
+if [[ -n "${WORKER_HF_HOME:-}" ]]; then
+    REMOTE_HF="$WORKER_HF_HOME"
+elif [[ "$HF_CACHE_DIR" == "$HOME" || "$HF_CACHE_DIR" == "$HOME/"* ]]; then
+    REMOTE_HF="${REMOTE_HOME}${HF_CACHE_DIR#"$HOME"}"
+else
+    REMOTE_HF="$HF_CACHE_DIR"
+fi
+WORKER_MODEL_PATH="${REMOTE_HF}/hub/models--${ORG}--${NAME}"
+
 check_node() {
     local label="$1"
     local path="$2"
@@ -62,14 +72,15 @@ check_node() {
 }
 
 echo "Checking weights for: $MODEL_ID"
-echo "Cache path: $MODEL_PATH"
+echo "Head cache:   $MODEL_PATH"
+echo "Worker cache: $WORKER_MODEL_PATH"
 echo ""
 
 HEAD_OK=false
 WORKER_OK=false
 
 check_node "HEAD  ($HEAD_IP)" "$MODEL_PATH" "local" && HEAD_OK=true
-check_node "WORKER ($WORKER_IP)" "$MODEL_PATH" "ssh" && WORKER_OK=true
+check_node "WORKER ($WORKER_IP)" "$WORKER_MODEL_PATH" "ssh" && WORKER_OK=true
 
 echo ""
 

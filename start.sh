@@ -113,6 +113,42 @@ ssh_worker() {
 }
 
 # ---------------------------------------------------------------------------
+# HF cache on both nodes
+# WORKER_HF_HOME wins. Otherwise mirror HF_HOME: a path under the head's $HOME
+# is rewritten onto the worker's $HOME; any other absolute path (/data/hf, …)
+# is used as-is so both Sparks mount the same layout.
+# ---------------------------------------------------------------------------
+HF_CACHE_DIR="${HF_HOME:-$HOME/.cache/huggingface}"
+export HF_HOME="$HF_CACHE_DIR"
+HUB_PATH="$HF_CACHE_DIR/hub"
+mkdir -p "$HF_CACHE_DIR"
+
+REMOTE_HOME=$(ssh_worker "echo \"\$HOME\"")
+if [[ -n "${WORKER_HF_HOME:-}" ]]; then
+    REMOTE_HF="$WORKER_HF_HOME"
+elif [[ "$HF_CACHE_DIR" == "$HOME" || "$HF_CACHE_DIR" == "$HOME/"* ]]; then
+    REMOTE_HF="${REMOTE_HOME}${HF_CACHE_DIR#"$HOME"}"
+else
+    REMOTE_HF="$HF_CACHE_DIR"
+fi
+REMOTE_HUB="${REMOTE_HF}/hub"
+info "Head HF cache:   $HF_CACHE_DIR"
+info "Worker HF cache: $REMOTE_HF"
+
+# Auto-detect: skip download/rsync if weights already on both nodes
+ORG="${MODEL_ID%%/*}"
+NAME="${MODEL_ID##*/}"
+if $DO_DOWNLOAD && $DO_RSYNC; then
+    HEAD_HAS=$( [[ -d "$HUB_PATH/models--${ORG}--${NAME}" ]] && echo 1 || echo 0 )
+    WORKER_HAS=$(ssh_worker "test -d '$REMOTE_HUB/models--${ORG}--${NAME}' && echo 1 || echo 0" 2>/dev/null || echo 0)
+    if [[ "$HEAD_HAS" == "1" && "$WORKER_HAS" == "1" ]]; then
+        ok "Weights already present on both nodes — skipping download + rsync."
+        DO_DOWNLOAD=false
+        DO_RSYNC=false
+    fi
+fi
+
+# ---------------------------------------------------------------------------
 # 1. Download the model weights (head node)
 # ---------------------------------------------------------------------------
 if $DO_DOWNLOAD; then
@@ -120,13 +156,13 @@ if $DO_DOWNLOAD; then
 
     if command -v uvx &>/dev/null; then
         info "Using uvx to download..."
-        uvx hf download "$MODEL_ID"
+        HF_HOME="$HF_CACHE_DIR" uvx hf download "$MODEL_ID"
     elif command -v huggingface-cli &>/dev/null; then
         info "Using huggingface-cli to download..."
-        huggingface-cli download "$MODEL_ID"
+        HF_HOME="$HF_CACHE_DIR" huggingface-cli download "$MODEL_ID"
     elif command -v hf &>/dev/null; then
         info "Using hf CLI to download..."
-        hf download "$MODEL_ID"
+        HF_HOME="$HF_CACHE_DIR" hf download "$MODEL_ID"
     else
         err "No HuggingFace download tool found. Install one of:\n  pip install huggingface_hub\n  pip install uv"
     fi
@@ -137,9 +173,6 @@ fi
 # 2. Resolve local cache path
 # ---------------------------------------------------------------------------
 info "=== Step 2: Resolve cache path ==="
-
-HF_CACHE_DIR="${HF_HOME:-$HOME/.cache/huggingface}"
-HUB_PATH="$HF_CACHE_DIR/hub"
 
 # Try CLI tools first, then guess from cache layout
 MODEL_DIR=""
@@ -165,23 +198,6 @@ if [[ -z "$MODEL_DIR" || ! -d "$MODEL_DIR" ]]; then
 fi
 
 ok "Model cache: $MODEL_DIR"
-
-# Resolve remote $HOME so we target the worker user's actual cache dir
-REMOTE_HOME=$(ssh_worker "echo \"\$HOME\"")
-REMOTE_HUB="${REMOTE_HOME}/.cache/huggingface/hub"
-
-# Auto-detect: skip download/rsync if weights already on both nodes
-ORG="${MODEL_ID%%/*}"
-NAME="${MODEL_ID##*/}"
-if $DO_DOWNLOAD && $DO_RSYNC; then
-    HEAD_HAS=$( [[ -d "$HUB_PATH/models--${ORG}--${NAME}" ]] && echo 1 || echo 0 )
-    WORKER_HAS=$(ssh_worker "test -d '$REMOTE_HUB/models--${ORG}--${NAME}' && echo 1 || echo 0" 2>/dev/null || echo 0)
-    if [[ "$HEAD_HAS" == "1" && "$WORKER_HAS" == "1" ]]; then
-        ok "Weights already present on both nodes — skipping download + rsync."
-        DO_DOWNLOAD=false
-        DO_RSYNC=false
-    fi
-fi
 
 # ---------------------------------------------------------------------------
 # 3. Rsync weights to worker node
@@ -430,7 +446,7 @@ else:
     # ---- Worker (rank 1) ----
     info "--- Launching worker (rank 1) on $WORKER_IP ---"
     ssh_worker "docker rm -f vllm-fn >/dev/null 2>&1 || true"
-    ssh_worker "mkdir -p ~/.cache/vllm"
+    ssh_worker "mkdir -p '$REMOTE_HF' ~/.cache/vllm"
 
     # Worker can't mount head's filesystem — copy the patched file over
     info "  Copying PLE patch to worker..."
@@ -467,7 +483,7 @@ docker run \
     $PLE_OFFLOAD_ENV \
     -e HF_HOME=/root/.cache/huggingface \
     -v /tmp/ple_layer_patched.py:/usr/local/lib/python3.12/dist-packages/vllm/models/qwen3_8_flash_next/nvidia/ple_layer.py:ro \
-    -v $REMOTE_HOME/.cache/huggingface:/root/.cache/huggingface \
+    -v $REMOTE_HF:/root/.cache/huggingface \
     -v $REMOTE_HOME/.cache/vllm:/root/.cache/vllm \
     $IMAGE \
     $MODEL_ID \
@@ -541,7 +557,7 @@ docker run \
     $PLE_OFFLOAD_ENV \
     -e HF_HOME=/root/.cache/huggingface \
     -v $PATCHED_PLE:/usr/local/lib/python3.12/dist-packages/vllm/models/qwen3_8_flash_next/nvidia/ple_layer.py:ro \
-    -v $HOME/.cache/huggingface:/root/.cache/huggingface \
+    -v $HF_CACHE_DIR:/root/.cache/huggingface \
     -v $HOME/.cache/vllm:/root/.cache/vllm \
     $IMAGE \
     $MODEL_ID \
