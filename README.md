@@ -257,6 +257,19 @@ warmup), graph capture ~7 s. First request after launch is slow while FlashInfer
 **Endpoints:** `/v1/chat/completions`, `/v1/completions`, `/v1/models`, `/tokenize`,
 `/detokenize`, `/metrics`, `/health`, `/version`, `/docs` on `http://$HEAD_IP:8888`.
 
+**`reasoning_effort`:** the chat template accepts **`low`, `medium`, `xhigh`** (default
+`xhigh`) and rejects anything else at template-render time with HTTP 400:
+
+```
+Unexpected reasoning effort max. Supported types are xhigh (default), medium, and low.
+```
+
+`max` and `high` are *not* accepted — worth knowing if you point a client at this lane
+that also talks to models where `high`/`max` are valid, or share one client config across
+models. Two related caveats: thinking tokens are billed against the request's `max_tokens`
+(a small `max_tokens` returns empty `content` with `finish_reason: "length"`), and
+`chat_template_kwargs.thinking_budget` is **not** honored by this build.
+
 ## The PLE Patch
 
 The NVFP4 checkpoint stores the 51B-param N-gram/PLE embedding table as FP8 shards + one global
