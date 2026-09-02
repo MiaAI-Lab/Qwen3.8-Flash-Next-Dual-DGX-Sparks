@@ -41,7 +41,7 @@ docker logs vllm-fn 2>&1 | grep -E "Available KV cache memory|GPU KV cache size"
 | Flag | Description |
 |------|-------------|
 | `--no-download` | Skip HF download (weights already in local cache) |
-| `--no-launch` | Download + rsync only, don't start the server |
+| `--no-launch` | Download + rsync only — does **not** apply the PLE patch and does not start the server (the patch step runs on the launch path) |
 | `--launch` | Apply patch + launch only (weights already on both nodes) |
 
 ## What Happens
@@ -50,8 +50,15 @@ docker logs vllm-fn 2>&1 | grep -E "Available KV cache memory|GPU KV cache size"
 2. **Rsync** — copies weights to the worker node
 3. **Image sync** — ensures `vllm/vllm-openai:qwen38-flash-next` is on both nodes
 4. **PLE patch** — extracts `ple_layer.py` from the image and patches it into `files/ple_layer_patched.py` (no image rebuild; bind-mounted at runtime)
-5. **Drop caches** — `sync && echo 3 > /proc/sys/vm/drop_caches` (mandatory for unified memory on GB10)
-6. **Launch** — worker (rank 1) starts first, then head (rank 0) serves on `:8888`
+5. **Launch** — worker (rank 1) starts first, then head (rank 0) serves on `:8888`
+
+> **Not done for you: dropping page caches.** `start.sh` needs no root and does
+> **not** drop page caches. Do it yourself on **both** nodes before a launch —
+> it matters on GB10 unified memory (see [Gotchas](#gotchas)):
+>
+> ```bash
+> sync && echo 3 | sudo tee /proc/sys/vm/drop_caches
+> ```
 
 Both containers are named **`vllm-fn`** (head and worker); `./stop.sh` removes both.
 
@@ -327,7 +334,8 @@ decode speed is dominated by KV bandwidth, so cache dtype moves it.
   `Available RAM: 44.92 GiB` at target-weight load and `41.71 GiB` before the MTP drafter
   loads on this box — offloading will OOM or thrash swap. Keep it `false`
   here; the FP8 PLE shard fits comfortably on the GPU.
-- **Drop page caches before every launch** (`start.sh` does this). Skipping it is the usual
+- **Drop page caches before every launch** — `sync && echo 3 | sudo tee /proc/sys/vm/drop_caches`
+  on both nodes. `start.sh` does **not** do this for you. Skipping it is the usual
   cause of a `CUDA out of memory` that "worked yesterday" on unified memory.
 - **Never point `IB_HCA` at an HCA cabled to another cluster** — NCCL will hang mid-NCCL-init
   with no useful error. One exact-match device per node (leading `=`).

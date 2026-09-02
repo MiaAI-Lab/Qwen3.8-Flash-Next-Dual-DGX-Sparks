@@ -8,7 +8,7 @@
 # Usage:
 #   ./start.sh                # download weights → rsync → apply patch → launch
 #   ./start.sh --no-download  # skip download (weights already cached locally)
-#   ./start.sh --no-launch    # download + rsync + patch only, don't start server
+#   ./start.sh --no-launch    # download + rsync only (no PLE patch, no server)
 #   ./start.sh --launch       # skip download + rsync, just apply patch + launch
 # ============================================================================
 set -euo pipefail
@@ -91,7 +91,7 @@ for arg in "$@"; do
             echo ""
             echo "  (default)      Download weights, rsync to worker, apply patch, launch"
             echo "  --no-download  Skip HF download (weights already cached locally)"
-            echo "  --no-launch    Download + rsync only, don't start vLLM"
+            echo "  --no-launch    Download + rsync only (no PLE patch, no vLLM)"
             echo "  --launch       Apply patch + launch only (weights already on both nodes)"
             exit 0
             ;;
