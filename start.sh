@@ -532,12 +532,16 @@ LAUNCH_EOF
         sed -i '$ s/$/ \\/' "$WORKER_SCRIPT"
         echo "    --hf-overrides '{\"rope_parameters\":{\"rope_type\":\"yarn\",\"factor\":$YARN_FACTOR,\"original_max_position_embeddings\":262144}}'"  >> "$WORKER_SCRIPT"
     fi
-    chmod +x "$WORKER_SCRIPT"
+    # 0700 explicitly (not `chmod +x`, which is umask-dependent), and the copy
+    # on the worker is removed once it has run: as soon as EXTRA_VLLM_ARGS
+    # carries something like `--api-key <key>`, this generated script holds
+    # secrets, and /tmp/vllm_worker_launch.sh is a fixed, world-readable path.
+    chmod 700 "$WORKER_SCRIPT"
     scp -q "$WORKER_SCRIPT" "${WORKER_USER:+${WORKER_USER}@}${WORKER_IP}:/tmp/vllm_worker_launch.sh"
     rm -f "$WORKER_SCRIPT"
 
     info "  (starting worker container...)"
-    ssh_worker "bash /tmp/vllm_worker_launch.sh"
+    ssh_worker "bash /tmp/vllm_worker_launch.sh; rm -f /tmp/vllm_worker_launch.sh"
     ok "Worker container started."
     info "  Waiting 15s for worker to initialize..."
     sleep 15
@@ -606,7 +610,9 @@ LAUNCH_EOF
         sed -i '$ s/$/ \\/' "$HEAD_SCRIPT"
         echo "    --hf-overrides '{\"rope_parameters\":{\"rope_type\":\"yarn\",\"factor\":$YARN_FACTOR,\"original_max_position_embeddings\":262144}}'"  >> "$HEAD_SCRIPT"
     fi
-    chmod +x "$HEAD_SCRIPT"
+    # Same reasoning as the worker script above (this copy stays on the head
+    # after launch, which is handy for debugging — but not world-readable).
+    chmod 700 "$HEAD_SCRIPT"
 
     info "  (starting head container...)"
     bash "$HEAD_SCRIPT"
