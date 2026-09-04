@@ -716,6 +716,8 @@ reference; the numbers above supersede these.
   "worked yesterday" on unified memory: `sync && echo 3 | sudo tee /proc/sys/vm/drop_caches`.
 - **Never point `IB_HCA` at an HCA cabled to another cluster** — NCCL will hang mid-NCCL-init
   with no useful error. One exact-match device per node (leading `=`).
+- **`IB_GID_INDEX=3` does not come up on every ConnectX/RoCE setup.** If NCCL/RoCE fails
+  to initialise, try `IB_GID_INDEX=5` (some clusters route on GID 5 instead).
 - **Cross-wired nodes**: head uses `f1`, worker `f0` — hence the separate `WORKER_IFACE` /
   `WORKER_IB_HCA` overrides. If you re-cable, set both.
 - **fp8 KV needs the QSA patch, which `start.sh` applies for you.** The stock kernels declare
@@ -734,6 +736,13 @@ reference; the numbers above supersede these.
 - **`NFS_SHARE=true` only:** do not stop `vllm-fn-nfs` while vLLM is loading or running — the
   worker reads shards from it. Cold start streams ~126 GiB over CX7 (lazy safetensors); once
   weights are in GPU memory the share is idle.
+- **Weights corruption is silent until load.** A shard corrupted mid-download keeps its
+  apparent size close enough that `check-weights.sh` (size + file count) passes, then the
+  engine dies at ~33% weight load with `safe_open` → "incomplete metadata, file not fully
+  covered". Run `./check-weights.sh --verify` after any download or rsync to hash every
+  shard against the Hugging Face manifest (read-only, ~1 min for 135 GB).
+- **`huggingface_hub >= 1.x` offline mode fails with "Cannot find cached snapshot"** if
+  `refs/main` has a trailing newline. Write `refs/main` with `printf`, not `echo`.
 
 ## Credits
 
@@ -765,3 +774,4 @@ upstream terms, and nothing here relicenses them. Files under `files/` that carr
 | `start.sh` | optional download on head → distribute to worker (rsync, or NFS with `--nfs`) → verify → image sync → PLE + MXFP8 patches → launch rank 1 then rank 0 |
 | `stop.sh` | `docker rm -f vllm-fn` on worker, then head (`--nfs` also stops the share) |
 | `check-weights.sh` | verify the checkpoint on the head and on the worker (local copy, or over NFS when `NFS_SHARE=true`) |
+| `verify-weights.py` | per-file SHA-256 verification against the Hugging Face manifest (used by `check-weights.sh --verify`) |
