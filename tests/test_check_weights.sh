@@ -165,6 +165,21 @@ run "corrupt shard is blocking (non-zero exit)" bash -c "
 "
 mv "$WORK/model.safetensors.bak" "$SNAPSHOT/model.safetensors"
 
+# 3b. --dry-run succeeds, fetches the manifest, checks presence/size, no hash.
+run "--dry-run succeeds (presence + size only)" \
+    env PATH="$WORK/bin:$PATH" ./check-weights.sh --dry-run >/dev/null 2>&1
+
+# 3c. --dry-run still flags a missing file (presence check, not just a plan).
+mv "$SNAPSHOT/model.safetensors" "$WORK/model.safetensors.hidden"
+run "--dry-run flags missing file (non-zero exit)" bash -c "
+    set +e
+    PATH=$WORK/bin:\$PATH ./check-weights.sh --dry-run >/dev/null 2>&1
+    rc=\$?
+    set -e
+    [[ \$rc -ne 0 ]]
+"
+mv "$WORK/model.safetensors.hidden" "$SNAPSHOT/model.safetensors"
+
 # 4. Unknown flag is rejected with exit 2.
 run "unknown flag rejected (exit 2)" bash -c "
     set +e

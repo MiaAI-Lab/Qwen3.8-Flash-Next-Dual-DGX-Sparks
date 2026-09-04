@@ -740,7 +740,9 @@ reference; the numbers above supersede these.
   apparent size close enough that `check-weights.sh` (size + file count) passes, then the
   engine dies at ~33% weight load with `safe_open` → "incomplete metadata, file not fully
   covered". Run `./check-weights.sh --verify` after any download or rsync to hash every
-  shard against the Hugging Face manifest (read-only, ~1 min for 135 GB).
+  shard against the Hugging Face manifest (read-only, ~1 min for 135 GB). If the nodes are
+  busy, `./check-weights.sh --dry-run` does the same planning and presence/size checks
+  without reading the weights.
 - **`huggingface_hub >= 1.x` offline mode fails with "Cannot find cached snapshot"** if
   `refs/main` has a trailing newline. Write `refs/main` with `printf`, not `echo`.
 
@@ -774,4 +776,6 @@ upstream terms, and nothing here relicenses them. Files under `files/` that carr
 | `start.sh` | optional download on head → distribute to worker (rsync, or NFS with `--nfs`) → verify → image sync → PLE + MXFP8 patches → launch rank 1 then rank 0 |
 | `stop.sh` | `docker rm -f vllm-fn` on worker, then head (`--nfs` also stops the share) |
 | `check-weights.sh` | verify the checkpoint on the head and on the worker (local copy, or over NFS when `NFS_SHARE=true`) |
+| `check-weights.sh --verify` | per-file SHA-256 verification against the Hugging Face manifest (~1 min read-only) |
+| `check-weights.sh --dry-run` | plan `--verify` (fetch manifest, check presence/size) without hashing or scp |
 | `verify-weights.py` | per-file SHA-256 verification against the Hugging Face manifest (used by `check-weights.sh --verify`) |
