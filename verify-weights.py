@@ -13,7 +13,7 @@ and on worker nodes without installing anything.
 Usage:
   python3 verify-weights.py [--repo MODEL_ID] [--path DIR] [--revision REV]
                             [--manifest FILE] [--save-manifest FILE] [--fetch-only]
-                            [--workers N] [--quiet]
+                            [--dry-run] [--workers N] [--quiet]
 
 The manifest is fetched from the Hugging Face API unless --manifest points at
 a previously saved one. check-weights.sh --verify fetches it once on the head
@@ -243,12 +243,15 @@ class Problem:
         self.detail = detail
 
 
-def verify(tree_dir: str, manifest: dict[str, dict], workers: int) -> list[Problem]:
+def verify(tree_dir: str, manifest: dict[str, dict], workers: int,
+           hash_files: bool = True) -> list[Problem]:
     """Verify the model tree against the manifest and return all problems.
 
     Every manifest entry is checked for presence; present files are checked for
     size and, for entries carrying an LFS SHA-256, for content hash. Problems
     are collected instead of raising, so one bad file does not hide another.
+    With hash_files=False (dry run) the SHA-256 pass is skipped, leaving only
+    the cheap presence/size checks.
     """
     if workers < 1:
         workers = 1
@@ -287,6 +290,8 @@ def verify(tree_dir: str, manifest: dict[str, dict], workers: int) -> list[Probl
         for rel in hashable
         if expected_oid(manifest[rel])
     ]
+    if not hash_files:
+        return problems
     if hash_targets:
         def check(item: tuple[str, str]) -> Problem | None:
             rel, oid = item
@@ -317,6 +322,8 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--save-manifest", default=None, help="Save the fetched manifest to this file")
     parser.add_argument("--fetch-only", action="store_true",
                         help="Fetch (and save) the manifest, then exit without verifying")
+    parser.add_argument("--dry-run", "-n", action="store_true",
+                        help="Resolve and check presence/size only, skip the SHA-256 pass")
     parser.add_argument("--workers", type=int, default=8, help="Parallel hash workers (default: 8)")
     parser.add_argument("--quiet", action="store_true", help="Only print problems")
     args = parser.parse_args(argv)
@@ -386,9 +393,12 @@ def main(argv: list[str]) -> int:
     if not args.quiet:
         print(f"Manifest: {len(manifest)} files ({expected_bytes / 1e9:.1f} GB)")
         print(f"Verifying {tree_dir} ...")
-        print("Hashing LFS files; this reads the full checkpoint and takes a while on first run.\n")
+        if args.dry_run:
+            print("Dry run: checking presence and size only (no SHA-256 hashing).\n")
+        else:
+            print("Hashing LFS files; this reads the full checkpoint and takes a while on first run.\n")
 
-    problems = verify(tree_dir, manifest, args.workers)
+    problems = verify(tree_dir, manifest, args.workers, hash_files=not args.dry_run)
 
     if problems:
         for p in problems:
@@ -400,7 +410,10 @@ def main(argv: list[str]) -> int:
         return 1
 
     if not args.quiet:
-        print(f"OK: {len(manifest)} files verified, all sizes and SHA-256 hashes match.")
+        if args.dry_run:
+            print(f"OK: {len(manifest)} files present with matching sizes (SHA-256 hashing skipped).")
+        else:
+            print(f"OK: {len(manifest)} files verified, all sizes and SHA-256 hashes match.")
     return 0
 
 

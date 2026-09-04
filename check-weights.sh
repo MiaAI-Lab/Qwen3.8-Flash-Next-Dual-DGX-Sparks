@@ -2,26 +2,42 @@
 # check-weights.sh — Verify model weights exist on both head and worker nodes.
 #
 # Usage:
-#   ./check-weights.sh          # presence + size on both nodes (fast)
-#   ./check-weights.sh --verify # per-file SHA-256 against the HF manifest
+#   ./check-weights.sh           # presence + size on both nodes (fast)
+#   ./check-weights.sh --verify  # per-file SHA-256 against the HF manifest
+#   ./check-weights.sh --dry-run # plan --verify without hashing or scp
 #
 # --verify streams every shard and compares its SHA-256 with the checksum the
 # Hugging Face API reports for the repo. A size-only check does not catch a
 # shard corrupted mid-download that kept roughly the wrong size (see issue #30);
 # hashing does. It fetches the manifest once on the head, saves it locally, and
 # ships it to the worker so both nodes validate against the same manifest.
+#
+# --dry-run (alias -n) does the same planning and the cheap presence/size checks
+# on both nodes, but skips the SHA-256 pass and the scp of the verifier to the
+# worker. It is safe to run while the cluster is busy: no 135 GB reads, no
+# copies, only a manifest fetch and stat calls.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
 DO_VERIFY=false
-if [[ "${1:-}" == "--verify" ]]; then
-    DO_VERIFY=true
-elif [[ -n "${1:-}" ]]; then
-    echo "Usage: $0 [--verify]" >&2
-    exit 2
-fi
+DO_DRY_RUN=false
+case "${1:-}" in
+    --verify)
+        DO_VERIFY=true
+        ;;
+    --dry-run|-n)
+        DO_VERIFY=true
+        DO_DRY_RUN=true
+        ;;
+    "")
+        ;;
+    *)
+        echo "Usage: $0 [--verify|--dry-run]" >&2
+        exit 2
+        ;;
+esac
 
 if [[ ! -f .env ]]; then
     echo "ERROR: .env not found."
@@ -37,12 +53,60 @@ HF_CACHE_DIR="${HF_HOME:-$HOME/.cache/huggingface}"
 HUB_PATH="$HF_CACHE_DIR/hub"
 ORG="${MODEL_ID%%/*}"
 NAME="${MODEL_ID##*/}"
-MODEL_PATH="$HUB_PATH/models--${ORG}--${NAME}"
+
+# Resolve the local model directory exactly like start.sh does: the standard
+# hub path (blobs/refs/snapshots) first, then the `hf path` CLI if the hub dir
+# does not exist. check-weights.sh must agree with the launcher about where
+# the weights live, or a real --verify run would hash nothing.
+resolve_model_dir() {
+    local hub="$HUB_PATH/models--${ORG}--${NAME}"
+    if [[ -d "$hub" && -n "$(ls -A "$hub" 2>/dev/null)" ]]; then
+        echo "$hub"
+        return 0
+    fi
+    local guess=""
+    for tool_cmd in "hf path" "huggingface-cli path"; do
+        local first_word="${tool_cmd%% *}"
+        if command -v "$first_word" &>/dev/null; then
+            guess=$($tool_cmd "$MODEL_ID" 2>/dev/null || true)
+            [[ -n "$guess" && -d "$guess" ]] && break
+            guess=""
+        fi
+    done
+    if [[ -n "$guess" && -d "$guess" ]]; then
+        case "$guess" in
+            *"/models--${ORG}--${NAME}"*)
+                guess="${guess%%/models--${ORG}--${NAME}*}/models--${ORG}--${NAME}"
+                ;;
+        esac
+        echo "$guess"
+        return 0
+    fi
+    # Direct-download layout: `hf download --local-dir <dir>` and manual rsync
+    # both put model files at the repo root, not under hub/models--.... The
+    # local-dir carries a .cache/ directory produced by the downloader, so walk
+    # up from HF_CACHE_DIR looking for a model content file (config.json plus
+    # the safetensors index). This also covers weight dirs copied next to a
+    # .cache dir by hand.
+    local dir="$HF_CACHE_DIR"
+    for _ in 1 2 3 4 5; do
+        dir="$(cd "$dir/.." 2>/dev/null && pwd)" || break
+        if [[ -f "$dir/config.json" && -f "$dir/model.safetensors.index.json" ]]; then
+            echo "$dir"
+            return 0
+        fi
+    done
+    return 1
+}
+
+MODEL_PATH="$(resolve_model_dir 2>/dev/null || echo "$HUB_PATH/models--${ORG}--${NAME}")"
 
 ssh_cmd() {
     local user_prefix=""
     [[ -n "$WORKER_USER" ]] && user_prefix="${WORKER_USER}@"
-    ssh -o StrictHostKeyChecking=no "${user_prefix}$WORKER_IP" "$@"
+    # Fail fast when the worker is unreachable (e.g. cluster in use elsewhere)
+    # instead of hanging on the default TCP timeout.
+    ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 "${user_prefix}$WORKER_IP" "$@"
 }
 
 REMOTE_HOME=$(ssh_cmd "echo \"\$HOME\"")
@@ -68,11 +132,20 @@ check_node() {
             echo "  $label ✅  $path"
             echo "         Size: $size | Shards: $shards"
             if $DO_VERIFY; then
-                echo "         Verifying SHA-256 against the HF manifest ..."
-                if ! python3 "$SCRIPT_DIR/verify-weights.py" --path "$path" --repo "$MODEL_ID" \
-                        --manifest "$VERIFY_MANIFEST"; then
-                    echo "  $label ❌  SHA-256 mismatch in $path"
-                    return 1
+                if $DO_DRY_RUN; then
+                    echo "         [dry run] presence + size check only (no hashing)"
+                    if ! python3 "$SCRIPT_DIR/verify-weights.py" --path "$path" --repo "$MODEL_ID" \
+                            --manifest "$VERIFY_MANIFEST" --dry-run; then
+                        echo "  $label ❌  problem(s) found"
+                        return 1
+                    fi
+                else
+                    echo "         Verifying SHA-256 against the HF manifest ..."
+                    if ! python3 "$SCRIPT_DIR/verify-weights.py" --path "$path" --repo "$MODEL_ID" \
+                            --manifest "$VERIFY_MANIFEST"; then
+                        echo "  $label ❌  SHA-256 mismatch in $path"
+                        return 1
+                    fi
                 fi
             fi
             return 0
@@ -88,14 +161,18 @@ check_node() {
             echo "  $label ✅  $path"
             echo "         Size: $size | Shards: $shards"
             if $DO_VERIFY; then
-                echo "         Verifying SHA-256 against the HF manifest ..."
-                # The worker cache does not have the repo checkout, so ship the
-                # verifier (stdlib-only, single file) and the manifest there.
-                scp -q "$SCRIPT_DIR/verify-weights.py" "${WORKER_USER:+${WORKER_USER}@}${WORKER_IP}:/tmp/verify-weights.py"
-                scp -q "$VERIFY_MANIFEST" "${WORKER_USER:+${WORKER_USER}@}${WORKER_IP}:/tmp/verify-manifest.json"
-                if ! ssh_cmd "python3 /tmp/verify-weights.py --path '$path' --repo '$MODEL_ID' --manifest /tmp/verify-manifest.json"; then
-                    echo "  $label ❌  SHA-256 mismatch in $path"
-                    return 1
+                if $DO_DRY_RUN; then
+                    echo "         [dry run] would scp verifier + manifest and hash $path"
+                else
+                    echo "         Verifying SHA-256 against the HF manifest ..."
+                    # The worker cache does not have the repo checkout, so ship the
+                    # verifier (stdlib-only, single file) and the manifest there.
+                    scp -q "$SCRIPT_DIR/verify-weights.py" "${WORKER_USER:+${WORKER_USER}@}${WORKER_IP}:/tmp/verify-weights.py"
+                    scp -q "$VERIFY_MANIFEST" "${WORKER_USER:+${WORKER_USER}@}${WORKER_IP}:/tmp/verify-manifest.json"
+                    if ! ssh_cmd "python3 /tmp/verify-weights.py --path '$path' --repo '$MODEL_ID' --manifest /tmp/verify-manifest.json"; then
+                        echo "  $label ❌  SHA-256 mismatch in $path"
+                        return 1
+                    fi
                 fi
             fi
             return 0

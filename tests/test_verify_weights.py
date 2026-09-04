@@ -280,6 +280,29 @@ class VerifyWeightsTest(unittest.TestCase):
         rc = vw.main(["--repo", "org/model", "--fetch-only", "--manifest", "/nope.json", "--quiet"])
         self.assertEqual(rc, 2)
 
+    def test_dry_run_skips_hashing(self):
+        """Expected use: dry-run reports size problems but not hash problems."""
+        manifest = shas(self.tmp, {"model.safetensors": b"abcd"})
+        with open(os.path.join(self.tmp, "model.safetensors"), "wb") as f:
+            f.write(b"WXYZ")  # same size, different content
+        # Real verify catches the hash mismatch.
+        full = vw.verify(self.tmp, manifest, workers=2)
+        self.assertEqual(self.kinds(full), ["HASH"])
+        # Dry run skips hashing but still checks presence + size (both fine).
+        dry = vw.verify(self.tmp, manifest, workers=2, hash_files=False)
+        self.assertEqual(dry, [])
+
+    def test_dry_run_cli_exit_0(self):
+        """Expected use: CLI --dry-run returns 0 for same-size different-content."""
+        manifest = shas(self.tmp, {"model.safetensors": b"abcd"})
+        with open(os.path.join(self.tmp, "model.safetensors"), "wb") as f:
+            f.write(b"WXYZ")
+        manifest_path = os.path.join(self.tmp, "manifest.json")
+        vw.save_manifest(manifest_path, manifest)
+        rc = vw.main(["--repo", "org/model", "--path", self.tmp,
+                      "--manifest", manifest_path, "--dry-run", "--quiet"])
+        self.assertEqual(rc, 0)
+
     def test_main_missing_model_dir_returns_2(self):
         """Failure case: verify without --path and no model dir gives exit 2."""
         with mock.patch.dict(os.environ, {"HF_HOME": self.tmp}):
