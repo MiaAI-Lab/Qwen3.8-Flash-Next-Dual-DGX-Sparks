@@ -331,6 +331,8 @@ decode speed is dominated by KV bandwidth, so cache dtype moves it.
   cause of a `CUDA out of memory` that "worked yesterday" on unified memory.
 - **Never point `IB_HCA` at an HCA cabled to another cluster** — NCCL will hang mid-NCCL-init
   with no useful error. One exact-match device per node (leading `=`).
+- **`IB_GID_INDEX=3` does not come up on every ConnectX/RoCE setup.** If NCCL/RoCE fails
+  to initialise, try `IB_GID_INDEX=5` (some clusters route on GID 5 instead).
 - **Cross-wired nodes**: head uses `f1`, worker `f0` — hence the separate `WORKER_IFACE` /
   `WORKER_IB_HCA` overrides. If you re-cable, set both.
 - **fp8 KV is not supported by this checkpoint** — the weights only support bf16 KV cache as of
@@ -340,6 +342,32 @@ decode speed is dominated by KV bandwidth, so cache dtype moves it.
   attention metadata per draft step). `MTP_NUM_SPECULATIVE_TOKENS=1` is the safe comparison point.
 - `./stop.sh` force-removes `vllm-fn` on both nodes; nothing persists between launches
   (FlashInfer autotune cache in `~/.cache/vllm` is the only thing that carries over).
+- **Weights corruption is silent until load.** A shard corrupted mid-download keeps its
+  apparent size close enough that `check-weights.sh` (size + file count) passes, then the
+  engine dies at ~33% weight load with `safe_open` → "incomplete metadata, file not fully
+  covered". Run `./check-weights.sh --verify` after any download or rsync to hash every
+  shard against the Hugging Face manifest (read-only; ~1 min for 135 GB at the 2.4 GiB/s
+  8-thread hash rate measured on local NVMe, proportionally slower over NFS). If the nodes
+  are busy, `./check-weights.sh --dry-run` does the same planning and presence/size checks
+  without reading the weights.
+- **No route to `huggingface.co` from the nodes?** `--verify` needs the file manifest, not
+  the weights. Save it once where the API is reachable and pass it in — nothing else phones
+  home, and the same file is shipped to the worker:
+
+  ```bash
+  python3 verify-weights.py --repo RadixArk/Qwen3.8-Flash-Next-NVFP4 \
+      --save-manifest manifest.json --fetch-only     # where the API is reachable
+  ./check-weights.sh --manifest manifest.json        # on the head node
+  ```
+
+  `HF_API_BASE` in `.env` points the fetch at a mirror instead.
+- **No route to Docker Hub from the nodes?** `start.sh` runs `docker pull` on head and
+  worker, so both need to reach the registry. If only one node can, pull there and ship the
+  image over SSH — `docker save "$IMAGE" | ssh worker docker load`. If neither can, fetch it
+  from a host that can (`crane pull "$IMAGE" image.tar`, HTTP proxy if needed) and
+  `docker load < image.tar` on both nodes before running `./start.sh --launch`.
+- **`huggingface_hub >= 1.x` offline mode fails with "Cannot find cached snapshot"** if
+  `refs/main` has a trailing newline. Write `refs/main` with `printf`, not `echo`.
 
 ## Scripts
 
@@ -348,3 +376,7 @@ decode speed is dominated by KV bandwidth, so cache dtype moves it.
 | `start.sh` | download → rsync → verify → image sync → PLE patch → launch rank 1 then rank 0 |
 | `stop.sh` | `docker rm -f vllm-fn` on worker, then head |
 | `check-weights.sh` | verify the checkpoint exists (and its size) on both nodes |
+| `check-weights.sh --verify` | per-file SHA-256 verification against the Hugging Face manifest (~1 min read-only) |
+| `check-weights.sh --dry-run` | plan `--verify` (fetch manifest, check presence/size) without hashing or scp |
+| `check-weights.sh --manifest FILE` | verify against a manifest saved earlier — no Hugging Face API call |
+| `verify-weights.py` | per-file SHA-256 verification engine (used by `check-weights.sh --verify`) |
