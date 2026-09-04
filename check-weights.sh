@@ -2,9 +2,10 @@
 # check-weights.sh — Verify model weights exist on both head and worker nodes.
 #
 # Usage:
-#   ./check-weights.sh           # presence + size on both nodes (fast)
-#   ./check-weights.sh --verify  # per-file SHA-256 against the HF manifest
-#   ./check-weights.sh --dry-run # plan --verify without hashing or scp
+#   ./check-weights.sh                    # presence + size on both nodes (fast)
+#   ./check-weights.sh --verify           # per-file SHA-256 against the HF manifest
+#   ./check-weights.sh --dry-run          # plan --verify without hashing or scp
+#   ./check-weights.sh --manifest FILE    # verify against a saved manifest (no API call)
 #
 # --verify streams every shard and compares its SHA-256 with the checksum the
 # Hugging Face API reports for the repo. A size-only check does not catch a
@@ -16,6 +17,12 @@
 # on both nodes, but skips the SHA-256 pass and the scp of the verifier to the
 # worker. It is safe to run while the cluster is busy: no 135 GB reads, no
 # copies, only a manifest fetch and stat calls.
+#
+# --manifest FILE verifies against a manifest saved earlier
+# (`python3 verify-weights.py --repo ID --save-manifest FILE --fetch-only`) instead
+# of calling the Hugging Face API, so nodes without direct access to huggingface.co
+# can still verify. It implies --verify and combines with --dry-run. HF_API_BASE
+# in .env points the fetch at a mirror.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -23,21 +30,36 @@ cd "$SCRIPT_DIR"
 
 DO_VERIFY=false
 DO_DRY_RUN=false
-case "${1:-}" in
-    --verify)
-        DO_VERIFY=true
-        ;;
-    --dry-run|-n)
-        DO_VERIFY=true
-        DO_DRY_RUN=true
-        ;;
-    "")
-        ;;
-    *)
-        echo "Usage: $0 [--verify|--dry-run]" >&2
-        exit 2
-        ;;
-esac
+SAVED_MANIFEST=""
+usage() {
+    echo "Usage: $0 [--verify|--dry-run] [--manifest FILE]" >&2
+    exit 2
+}
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --verify)
+            DO_VERIFY=true
+            ;;
+        --dry-run|-n)
+            DO_VERIFY=true
+            DO_DRY_RUN=true
+            ;;
+        --manifest)
+            [[ $# -ge 2 ]] || usage
+            DO_VERIFY=true
+            SAVED_MANIFEST="$2"
+            shift
+            ;;
+        --manifest=*)
+            DO_VERIFY=true
+            SAVED_MANIFEST="${1#--manifest=}"
+            ;;
+        *)
+            usage
+            ;;
+    esac
+    shift
+done
 
 if [[ ! -f .env ]]; then
     echo "ERROR: .env not found."
@@ -109,15 +131,36 @@ ssh_cmd() {
     ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 "${user_prefix}$WORKER_IP" "$@"
 }
 
-REMOTE_HOME=$(ssh_cmd "echo \"\$HOME\"")
-if [[ -n "${WORKER_HF_HOME:-}" ]]; then
-    REMOTE_HF="$WORKER_HF_HOME"
-elif [[ "$HF_CACHE_DIR" == "$HOME" || "$HF_CACHE_DIR" == "$HOME/"* ]]; then
-    REMOTE_HF="${REMOTE_HOME}${HF_CACHE_DIR#"$HOME"}"
-else
-    REMOTE_HF="$HF_CACHE_DIR"
+# Resolve the worker's model directory. Mirrored clusters often use different
+# absolute roots per node (e.g. /home/user/models-gigabyte on head vs
+# /home/user/models on worker) with the same layout, so an explicit
+# WORKER_MODEL_PATH override in .env is the reliable way to pin it; without it
+# we mirror the head's HF_HOME under the worker's $HOME and resolve the same
+# layout the head used (hub path or direct local-dir, via resolve_model_dir).
+WORKER_MODEL_PATH="${WORKER_MODEL_PATH:-}"
+if [[ -z "$WORKER_MODEL_PATH" ]]; then
+    REMOTE_HOME="$HOME"
+    REMOTE_HOME=$(ssh_cmd "echo \"\$HOME\"" 2>/dev/null || echo "$HOME")
+    if [[ -n "${WORKER_HF_HOME:-}" ]]; then
+        REMOTE_HF="$WORKER_HF_HOME"
+    elif [[ "$HF_CACHE_DIR" == "$HOME" || "$HF_CACHE_DIR" == "$HOME/"* ]]; then
+        REMOTE_HF="${REMOTE_HOME}${HF_CACHE_DIR#"$HOME"}"
+    else
+        REMOTE_HF="$HF_CACHE_DIR"
+    fi
+    # Prefer the hub path under the worker's HF cache, then walk up looking for
+    # a direct local-dir layout, exactly like the head side.
+    WORKER_MODEL_PATH="$REMOTE_HF/hub/models--${ORG}--${NAME}"
+    if [[ ! -d "$WORKER_MODEL_PATH" ]]; then
+        WORKER_MODEL_PATH="$(ssh_cmd "HF_CACHE_DIR='$REMOTE_HF'; ORG='$ORG'; NAME='$NAME'
+            for dir in \"\$HF_CACHE_DIR\" \"\$HF_CACHE_DIR/..\" \"\$HOME\"; do
+                if [[ -f \"\$dir/config.json\" && -f \"\$dir/model.safetensors.index.json\" ]]; then
+                    echo \"\$dir\"; break
+                fi
+            done" 2>/dev/null | tail -1)"
+        [[ -n "$WORKER_MODEL_PATH" ]] || WORKER_MODEL_PATH="$REMOTE_HF/hub/models--${ORG}--${NAME}"
+    fi
 fi
-WORKER_MODEL_PATH="${REMOTE_HF}/hub/models--${ORG}--${NAME}"
 
 check_node() {
     local label="$1"
@@ -192,14 +235,28 @@ echo ""
 # environment (same convention as start.sh).
 export HF_HOME="$HF_CACHE_DIR"
 export HF_TOKEN="${HF_TOKEN:-}"
+# A mirror set in .env must reach the verifier too, on both nodes.
+[[ -n "${HF_API_BASE:-}" ]] && export HF_API_BASE
 VERIFY_MANIFEST=""
 if $DO_VERIFY; then
-    VERIFY_MANIFEST="${TMPDIR:-/tmp}/verify-manifest.json"
-    echo "Fetching manifest for $MODEL_ID ..."
-    if ! python3 "$SCRIPT_DIR/verify-weights.py" --repo "$MODEL_ID" \
-            --save-manifest "$VERIFY_MANIFEST" --fetch-only --quiet; then
-        echo "ERROR: could not fetch manifest for $MODEL_ID" >&2
-        exit 1
+    if [[ -n "$SAVED_MANIFEST" ]]; then
+        if [[ ! -f "$SAVED_MANIFEST" ]]; then
+            echo "ERROR: manifest not found: $SAVED_MANIFEST" >&2
+            exit 1
+        fi
+        VERIFY_MANIFEST="$SAVED_MANIFEST"
+        echo "Using saved manifest: $VERIFY_MANIFEST"
+    else
+        VERIFY_MANIFEST="${TMPDIR:-/tmp}/verify-manifest.json"
+        echo "Fetching manifest for $MODEL_ID ..."
+        if ! python3 "$SCRIPT_DIR/verify-weights.py" --repo "$MODEL_ID" \
+                --save-manifest "$VERIFY_MANIFEST" --fetch-only --quiet; then
+            echo "ERROR: could not fetch manifest for $MODEL_ID" >&2
+            echo "       Offline or behind a proxy? Save it once where the API is reachable:" >&2
+            echo "       python3 verify-weights.py --repo $MODEL_ID --save-manifest m.json --fetch-only" >&2
+            echo "       then run: $0 --verify --manifest m.json" >&2
+            exit 1
+        fi
     fi
 fi
 
