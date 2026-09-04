@@ -1,17 +1,33 @@
 <h1 align="center">Qwen3.8-Flash-Next-NVFP4-vLLM-Dual-DGX-Spark</h1>
 
 <p align="center">
-  <sub>by <a href="https://x.com/MiaAI_lab">Mia'a AI Lab</a></sub>
+  <sub>by <a href="https://x.com/MiaAI_lab">Mia'a AI Lab</a> · forked by <a href="https://github.com/jarvis959">jarvis959</a></sub>
   <br><br>
   <a href="https://github.com/sponsors/MiaAI-Lab" target="_blank" rel="noopener noreferrer" style="display:inline-block;margin:0 8px;vertical-align:middle;"><img src="https://img.shields.io/badge/Sponsor%20me%20on%20GitHub-181717?style=for-the-badge&logo=githubsponsors&logoColor=white" alt="Sponsor me on GitHub" height="28" style="height:28px;width:auto;vertical-align:middle;border:0;" /></a>
   <a href="https://x.com/MiaAI_lab" target="_blank" rel="noopener noreferrer" style="display:inline-block;margin:0 8px;vertical-align:middle;"><img src="https://img.shields.io/badge/Follow%20me%20on%20X-000000?style=for-the-badge&logo=x&logoColor=white" alt="Follow Mia on X" height="28" style="height:28px;width:auto;vertical-align:middle;border:0;" /></a>
 </p>
 
-Multi-node inference for [RadixArk/Qwen3.8-Flash-Next-NVFP4](https://huggingface.co/RadixArk/Qwen3.8-Flash-Next-NVFP4) across 2 DGX Sparks using vLLM with TP2+EP+MTP3.
+Multi-node inference for Flash-Next NVFP4 checkpoints across 2 DGX Sparks using vLLM with TP2+EP+MTP3 — targets [RadixArk/Qwen3.8-Flash-Next-NVFP4](https://huggingface.co/RadixArk/Qwen3.8-Flash-Next-NVFP4) by default and can switch to compatible builds with one `MODEL_ID` line; see [Recipe switching](#recipe-switching).
 
 Based on [getrefined/Qwen3.8-Flash-Next-NVFP4-vLLM-DGX-Spark](https://github.com/getrefined/Qwen3.8-Flash-Next-NVFP4-vLLM-DGX-Spark).
 
-All numbers in **KV cache budget** and **Default runtime** below were read from the running
+All numbers in **KV cache budget** and **Default runtime** below were rea## Recipe switching
+
+Fork add-on: `start.sh` now auto-derives `PLE_QUANT_OVERRIDE` from the model's `config.json` (unset in `.env` = auto), so switching the served build is a single `MODEL_ID` line.
+
+**Auto-derivation:** when `PLE_QUANT_OVERRIDE` is unset, `start.sh` reads `text_config.ple_embedding_dtype` from the model's `config.json` (fetched from the HF API, using `HF_TOKEN` when set) and sets `fp8` for `float8_e4m3fn`, else `bf16`. The PLE resolver shim in `files/ple_layer_patched.py` activates only for `fp8`; `bf16` builds keep the stock loader. This replaces the previously hardcoded `PLE_QUANT_OVERRIDE=fp8`, which assumed the RadixArk build. The `MODEL_ID` value flows into the container as the vLLM model argument, so any build the pinned image supports works.
+
+Compatible checkpoints (2026-09):
+
+| `MODEL_ID` | PLE (auto) | Notes |
+|---|---|---|
+| `RadixArk/Qwen3.8-Flash-Next-NVFP4` | `fp8` | the default target of this recipe (125.91 GiB; public) |
+| `lychee888/Qwen3.8-Flash-Next-Uncensored-NVFP4-FP8PLE` | `fp8` | orca's abliterated build, PLE table FP8-quantized in the RadixArk PLE layout (123.25 GiB; public) |
+| `orcarouter/Qwen3.8-Flash-Next-Uncensored-NVFP4` | `bf16` | orca's abliterated build, PLE kept bf16 (170.93 GiB; gated: request access + `HF_TOKEN`) |
+
+All three carry identical MTP weights and the same `layer_types` (`full_attention` ×12 / `linear_attention` ×36), so the MTP3 speculative config applies unchanged. Set `SERVED_MODEL_NAME` to match the build (e.g. `qwen3.8-flash-next-uncensored` for the orca-derived ones). Pin `PLE_QUANT_OVERRIDE` in `.env` to override auto-detection if needed.
+
+d from the running
 server (`docker logs vllm-fn`, `docker inspect vllm-fn`) — they are measurements, not estimates.
 That container runs `GPU_MEMORY_UTILIZATION=0.835`, i.e. the value `.env` / `.env.sample` ship today.
 
@@ -87,6 +103,8 @@ every measurement in this README.
 | `IMAGE` | `vllm/vllm-openai:qwen38-flash-next` | same | Day-0 image |
 | `VLLM_ALLOW_LONG_MAX_MODEL_LEN` | `1` | `1` | Required when `MAX_MODEL_LEN` > 262144 |
 | `MASTER_PORT` | `50000` | `50000` | Distributed coordination port |
+| `PLE_QUANT_OVERRIDE` | unset (auto) | unset (auto) | optional pin; auto-derived from the model's `config.json` `ple_embedding_dtype` when unset |
+| `HF_TOKEN` | unset | unset | HuggingFace token, needed only for gated repos (e.g. the orcarouter builds) during download/auto-derive |
 | `EXTRA_VLLM_ARGS` / `EXTRA_DOCKER_ARGS` / `HF_TOKEN` | unset | unset | Escape hatches (`EXTRA_VLLM_ARGS` is appended last) |
 
 > **KV cache dtype:** the default is **`auto`, which resolves to bfloat16** (the engine logs
