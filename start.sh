@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # ============================================================================
-# start.sh — Download, distribute, and serve RadixArk/Qwen3.8-Flash-Next-NVFP4
+# start.sh — Download, distribute, and serve a Flash-Next NVFP4 checkpoint
 #             across a 2-node DGX Spark cluster with vLLM TP2+EP+MTP3.
+# Recipe-switching add-on: PLE_QUANT_OVERRIDE auto-derives from the model's
+# config.json (unset in .env = auto). See README "Recipe switching".
 #
 # Based on: https://github.com/getrefined/Qwen3.8-Flash-Next-NVFP4-vLLM-DGX-Spark
 #
@@ -65,6 +67,44 @@ PLE_OFFLOAD="${PLE_OFFLOAD:-false}"
 EXTRA_VLLM_ARGS="${EXTRA_VLLM_ARGS:-}"
 EXTRA_DOCKER_ARGS="${EXTRA_DOCKER_ARGS:-}"
 HF_TOKEN="${HF_TOKEN:-}"
+
+# ---------------------------------------------------------------------------
+# PLE quant override — auto-derives from the model's config.json unless
+# PLE_QUANT_OVERRIDE is set explicitly in .env.
+#   config text_config.ple_embedding_dtype == "float8_e4m3fn" -> fp8
+#   absent or bf16                                            -> bf16
+# The fp8 path activates the ple_layer resolver shim
+# (files/ple_layer_patched.py); the bf16 path leaves it installed but inert.
+# ---------------------------------------------------------------------------
+PLE_QUANT_OVERRIDE="${PLE_QUANT_OVERRIDE:-}"
+if [[ -z "$PLE_QUANT_OVERRIDE" ]]; then
+    ple_dtype=""
+    if [[ "$MODEL_ID" == /* ]]; then
+        ple_dtype=$(python3 -c "
+import json,sys
+try:
+    c=json.load(open(sys.argv[1]+'/config.json')); tc=c.get('text_config',c)
+    print(tc.get('ple_embedding_dtype') or '')
+except Exception:
+    print('')
+" "$MODEL_ID" 2>/dev/null)
+    else
+        ple_dtype=$(curl -sfL --max-time 15 -H "Authorization: Bearer ${HF_TOKEN:-}" \
+            "https://huggingface.co/${MODEL_ID}/resolve/main/config.json" 2>/dev/null | python3 -c "
+import json,sys
+try:
+    c=json.load(sys.stdin); tc=c.get('text_config',c)
+    print(tc.get('ple_embedding_dtype') or '')
+except Exception:
+    print('')
+" 2>/dev/null)
+    fi
+    case "$ple_dtype" in
+        float8_e4m3fn|fp8|f8_e4m3*) PLE_QUANT_OVERRIDE="fp8" ;;
+        *) PLE_QUANT_OVERRIDE="bf16" ;;
+    esac
+    echo "INFO: PLE_QUANT_OVERRIDE auto-derived as $PLE_QUANT_OVERRIDE from model config (ple_embedding_dtype='${ple_dtype:-<absent>}')"
+fi
 
 # YaRN only makes sense ABOVE the native 262144 context. At or below native,
 # rope scaling degrades quality for zero benefit — force it off.
@@ -415,7 +455,7 @@ else:
     DOCKER_ARGS+=(-e "HF_HUB_OFFLINE=1")
     DOCKER_ARGS+=(-e "TRANSFORMERS_OFFLINE=1")
     # PLE FP8 fix
-    DOCKER_ARGS+=(-e "PLE_QUANT_OVERRIDE=fp8")
+    DOCKER_ARGS+=(-e "PLE_QUANT_OVERRIDE=$PLE_QUANT_OVERRIDE")
     # YaRN: allow max_model_len > 262K
     if [[ -n "$VLLM_ALLOW_LONG_MAX_MODEL_LEN" ]]; then
         DOCKER_ARGS+=(-e "VLLM_ALLOW_LONG_MAX_MODEL_LEN=$VLLM_ALLOW_LONG_MAX_MODEL_LEN")
@@ -492,7 +532,7 @@ docker run \
     -e NCCL_DEBUG=WARN \
     -e HF_HUB_OFFLINE=1 \
     -e TRANSFORMERS_OFFLINE=1 \
-    -e PLE_QUANT_OVERRIDE=fp8 \
+    -e PLE_QUANT_OVERRIDE=$PLE_QUANT_OVERRIDE \
     -e VLLM_HOST_IP=$WORKER_IP \
     ${VLLM_ALLOW_LONG_MAX_MODEL_LEN:+-e VLLM_ALLOW_LONG_MAX_MODEL_LEN=$VLLM_ALLOW_LONG_MAX_MODEL_LEN} \
     $PLE_OFFLOAD_ENV \
@@ -566,7 +606,7 @@ docker run \
     -e NCCL_DEBUG=WARN \
     -e HF_HUB_OFFLINE=1 \
     -e TRANSFORMERS_OFFLINE=1 \
-    -e PLE_QUANT_OVERRIDE=fp8 \
+    -e PLE_QUANT_OVERRIDE=$PLE_QUANT_OVERRIDE \
     -e VLLM_HOST_IP=$HEAD_IP \
     ${VLLM_ALLOW_LONG_MAX_MODEL_LEN:+-e VLLM_ALLOW_LONG_MAX_MODEL_LEN=$VLLM_ALLOW_LONG_MAX_MODEL_LEN} \
     $PLE_OFFLOAD_ENV \
