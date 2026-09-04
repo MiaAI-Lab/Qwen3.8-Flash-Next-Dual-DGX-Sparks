@@ -1,9 +1,27 @@
 #!/usr/bin/env bash
 # check-weights.sh — Verify model weights exist on both head and worker nodes.
+#
+# Usage:
+#   ./check-weights.sh          # presence + size on both nodes (fast)
+#   ./check-weights.sh --verify # per-file SHA-256 against the HF manifest
+#
+# --verify streams every shard and compares its SHA-256 with the checksum the
+# Hugging Face API reports for the repo. A size-only check does not catch a
+# shard corrupted mid-download that kept roughly the wrong size (see issue #30);
+# hashing does. It fetches the manifest once on the head, saves it locally, and
+# ships it to the worker so both nodes validate against the same manifest.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
+
+DO_VERIFY=false
+if [[ "${1:-}" == "--verify" ]]; then
+    DO_VERIFY=true
+elif [[ -n "${1:-}" ]]; then
+    echo "Usage: $0 [--verify]" >&2
+    exit 2
+fi
 
 if [[ ! -f .env ]]; then
     echo "ERROR: .env not found."
@@ -41,15 +59,22 @@ check_node() {
     local label="$1"
     local path="$2"
     local run_cmd="${3:-local}"
+    local size shards
 
     if [[ "$run_cmd" == "local" ]]; then
         if [[ -d "$path" ]]; then
-            local size
             size=$(du -sh "$path" 2>/dev/null | cut -f1)
-            local shards
             shards=$(find "$path" -name "*.safetensors" -o -name "*.bin" 2>/dev/null | wc -l)
             echo "  $label ✅  $path"
             echo "         Size: $size | Shards: $shards"
+            if $DO_VERIFY; then
+                echo "         Verifying SHA-256 against the HF manifest ..."
+                if ! python3 "$SCRIPT_DIR/verify-weights.py" --path "$path" --repo "$MODEL_ID" \
+                        --manifest "$VERIFY_MANIFEST"; then
+                    echo "  $label ❌  SHA-256 mismatch in $path"
+                    return 1
+                fi
+            fi
             return 0
         else
             echo "  $label ❌  $path — NOT FOUND"
@@ -58,11 +83,21 @@ check_node() {
     else
         # Remote check via SSH
         if ssh_cmd "test -d '$path'" 2>/dev/null; then
-            local size shards
             size=$(ssh_cmd "du -sh '$path' 2>/dev/null" | cut -f1)
             shards=$(ssh_cmd "find '$path' -name '*.safetensors' -o -name '*.bin' 2>/dev/null | wc -l")
             echo "  $label ✅  $path"
             echo "         Size: $size | Shards: $shards"
+            if $DO_VERIFY; then
+                echo "         Verifying SHA-256 against the HF manifest ..."
+                # The worker cache does not have the repo checkout, so ship the
+                # verifier (stdlib-only, single file) and the manifest there.
+                scp -q "$SCRIPT_DIR/verify-weights.py" "${WORKER_USER:+${WORKER_USER}@}${WORKER_IP}:/tmp/verify-weights.py"
+                scp -q "$VERIFY_MANIFEST" "${WORKER_USER:+${WORKER_USER}@}${WORKER_IP}:/tmp/verify-manifest.json"
+                if ! ssh_cmd "python3 /tmp/verify-weights.py --path '$path' --repo '$MODEL_ID' --manifest /tmp/verify-manifest.json"; then
+                    echo "  $label ❌  SHA-256 mismatch in $path"
+                    return 1
+                fi
+            fi
             return 0
         else
             echo "  $label ❌  $path — NOT FOUND"
@@ -75,6 +110,21 @@ echo "Checking weights for: $MODEL_ID"
 echo "Head cache:   $MODEL_PATH"
 echo "Worker cache: $WORKER_MODEL_PATH"
 echo ""
+
+# Export for verify-weights.py, which resolves the default model path from the
+# environment (same convention as start.sh).
+export HF_HOME="$HF_CACHE_DIR"
+export HF_TOKEN="${HF_TOKEN:-}"
+VERIFY_MANIFEST=""
+if $DO_VERIFY; then
+    VERIFY_MANIFEST="${TMPDIR:-/tmp}/verify-manifest.json"
+    echo "Fetching manifest for $MODEL_ID ..."
+    if ! python3 "$SCRIPT_DIR/verify-weights.py" --repo "$MODEL_ID" \
+            --save-manifest "$VERIFY_MANIFEST" --fetch-only --quiet; then
+        echo "ERROR: could not fetch manifest for $MODEL_ID" >&2
+        exit 1
+    fi
+fi
 
 HEAD_OK=false
 WORKER_OK=false
