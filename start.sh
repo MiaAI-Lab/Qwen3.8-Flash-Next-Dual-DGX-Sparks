@@ -64,6 +64,10 @@ KV_CACHE_DTYPE="${KV_CACHE_DTYPE:-auto}"   # auto = model dtype (bf16); this che
 PLE_OFFLOAD="${PLE_OFFLOAD:-false}"
 EXTRA_VLLM_ARGS="${EXTRA_VLLM_ARGS:-}"
 EXTRA_DOCKER_ARGS="${EXTRA_DOCKER_ARGS:-}"
+# Optional JSON overrides: full --speculative-config JSON (empty = MTP with
+# MTP_NUM_SPECULATIVE_TOKENS, 0 = off) and the --compilation-config JSON.
+SPEC_CONFIG_JSON="${SPEC_CONFIG_JSON:-}"
+if [[ -z "${COMPILATION_CONFIG_JSON:-}" ]]; then COMPILATION_CONFIG_JSON='{"mode":0,"cudagraph_mode":"FULL_DECODE_ONLY"}'; fi
 HF_TOKEN="${HF_TOKEN:-}"
 
 # YaRN only makes sense ABOVE the native 262144 context. At or below native,
@@ -473,6 +477,19 @@ else:
     PLE_OFFLOAD_ENV=""
     [[ "$PLE_OFFLOAD" == "true" ]] && PLE_OFFLOAD_ENV="-e VLLM_PLE_CPU_OFFLOAD=1"
 
+    # Resolve the engine-arg fragments shared by BOTH ranks (TP ranks must match).
+    EP_ARGS=""
+    [[ "$ENABLE_EXPERT_PARALLEL" == "true" ]] && EP_ARGS="--enable-expert-parallel --all2all-backend allgather_reducescatter"
+    if [[ -n "$SPEC_CONFIG_JSON" ]]; then
+        SPEC_ARGS="--speculative-config '$SPEC_CONFIG_JSON'"
+    elif [[ "$MTP_NUM_SPECULATIVE_TOKENS" -gt 0 ]]; then
+        SPEC_ARGS="--speculative-config '{\"method\":\"mtp\",\"num_speculative_tokens\":$MTP_NUM_SPECULATIVE_TOKENS}'"
+    else
+        SPEC_ARGS=""
+    fi
+    COMPILE_ARGS="--compilation-config '$COMPILATION_CONFIG_JSON'"
+    info "  engine fragments: EP=[$EP_ARGS] SPEC=[$SPEC_ARGS] COMPILE=[$COMPILE_ARGS] EXTRA=[$EXTRA_VLLM_ARGS] DOCKER_EXTRA=[$EXTRA_DOCKER_ARGS]"
+
     # Write worker launch script to a temp file and scp it (avoids SSH JSON quoting issues)
     WORKER_SCRIPT=$(mktemp /tmp/vllm_worker_XXXXXX.sh)
     cat > "$WORKER_SCRIPT" <<LAUNCH_EOF
@@ -482,6 +499,7 @@ docker run \
     --gpus all --network host --ipc host \
     --cap-add SYS_NICE --ulimit memlock=-1 --ulimit stack=67108864 \
     --device /dev/infiniband:/dev/infiniband \
+    $EXTRA_DOCKER_ARGS \
     -e GLOO_SOCKET_IFNAME=$WORKER_IFACE \
     -e NCCL_SOCKET_IFNAME=$WORKER_IFACE \
     -e TP_SOCKET_IFNAME=$WORKER_IFACE \
@@ -519,10 +537,10 @@ docker run \
     --nnodes 2 \
     --master-addr $HEAD_IP \
     --master-port $MASTER_PORT \
-    --enable-expert-parallel \
-    --all2all-backend allgather_reducescatter \
-    --speculative-config '{"method":"mtp","num_speculative_tokens":$MTP_NUM_SPECULATIVE_TOKENS}' \
-    --compilation-config '{"mode":0,"cudagraph_mode":"FULL_DECODE_ONLY"}' \
+    $EP_ARGS \
+    $SPEC_ARGS \
+    $COMPILE_ARGS \
+    $EXTRA_VLLM_ARGS \
     --node-rank 1 \
     --headless
 LAUNCH_EOF
@@ -556,6 +574,7 @@ docker run \
     --gpus all --network host --ipc host \
     --cap-add SYS_NICE --ulimit memlock=-1 --ulimit stack=67108864 \
     --device /dev/infiniband:/dev/infiniband \
+    $EXTRA_DOCKER_ARGS \
     -e GLOO_SOCKET_IFNAME=$IFACE \
     -e NCCL_SOCKET_IFNAME=$IFACE \
     -e TP_SOCKET_IFNAME=$IFACE \
@@ -593,10 +612,10 @@ docker run \
     --nnodes 2 \
     --master-addr $HEAD_IP \
     --master-port $MASTER_PORT \
-    --enable-expert-parallel \
-    --all2all-backend allgather_reducescatter \
-    --speculative-config '{"method":"mtp","num_speculative_tokens":$MTP_NUM_SPECULATIVE_TOKENS}' \
-    --compilation-config '{"mode":0,"cudagraph_mode":"FULL_DECODE_ONLY"}' \
+    $EP_ARGS \
+    $SPEC_ARGS \
+    $COMPILE_ARGS \
+    $EXTRA_VLLM_ARGS \
     --node-rank 0 \
     --host 0.0.0.0 \
     --port $PORT
