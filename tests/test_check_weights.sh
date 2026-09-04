@@ -180,6 +180,43 @@ run "--dry-run flags missing file (non-zero exit)" bash -c "
 "
 mv "$WORK/model.safetensors.hidden" "$SNAPSHOT/model.safetensors"
 
+# 3d. --manifest verifies against a saved manifest without touching the API.
+#     HF_API_BASE points at a dead port, so any fetch attempt would fail.
+run "--manifest uses the saved manifest (no API call)" \
+    env PATH="$WORK/bin:$PATH" HF_API_BASE="http://127.0.0.1:1" \
+    ./check-weights.sh --verify --manifest "$WORK/manifest.json" >/dev/null 2>&1
+
+# 3e. --manifest still catches a corrupt shard.
+cp "$SNAPSHOT/model.safetensors" "$WORK/model.safetensors.bak"
+printf 'corrupt!!!' > "$SNAPSHOT/model.safetensors"
+run "--manifest catches a corrupt shard (non-zero exit)" bash -c "
+    set +e
+    PATH=$WORK/bin:\$PATH HF_API_BASE=http://127.0.0.1:1 \
+        ./check-weights.sh --manifest $WORK/manifest.json >/dev/null 2>&1
+    rc=\$?
+    set -e
+    [[ \$rc -ne 0 ]]
+"
+mv "$WORK/model.safetensors.bak" "$SNAPSHOT/model.safetensors"
+
+# 3f. A --manifest path that does not exist is a hard error (exit 1).
+run "--manifest missing file fails (exit 1)" bash -c "
+    set +e
+    PATH=$WORK/bin:\$PATH ./check-weights.sh --manifest $WORK/nope.json >/dev/null 2>&1
+    rc=\$?
+    set -e
+    [[ \$rc -eq 1 ]]
+"
+
+# 3g. --manifest without its argument is a usage error (exit 2).
+run "--manifest without argument rejected (exit 2)" bash -c "
+    set +e
+    PATH=$WORK/bin:\$PATH ./check-weights.sh --manifest >/dev/null 2>&1
+    rc=\$?
+    set -e
+    [[ \$rc -eq 2 ]]
+"
+
 # 4. Unknown flag is rejected with exit 2.
 run "unknown flag rejected (exit 2)" bash -c "
     set +e
