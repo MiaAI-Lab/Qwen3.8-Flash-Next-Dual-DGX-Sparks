@@ -73,6 +73,14 @@ docker logs vllm-fn 2>&1 | grep -E "Available KV cache memory|GPU KV cache size"
    `ENABLE_EXPERT_PARALLEL=false` and `MTP_NUM_SPECULATIVE_TOKENS=0` are honored). The head's
    rendered script is kept as `.last_head_launch.sh` for inspection.
 
+> **Not done for you: dropping page caches.** `start.sh` needs no root and does
+> **not** drop page caches. Do it yourself on **both** nodes before a launch —
+> it matters on GB10 unified memory (see [Gotchas](#gotchas)):
+>
+> ```bash
+> sync && echo 3 | sudo tee /proc/sys/vm/drop_caches
+> ```
+
 Both containers are named **`vllm-fn`** (head and worker); `./stop.sh` removes both.
 
 ## NFS weight sharing (optional)
@@ -400,6 +408,19 @@ docker run --rm --gpus all --ipc host \
 
 `stock` (default) leaves the image untouched. The `gb10` table is a starting point, not a result.
 
+**`reasoning_effort`:** the chat template accepts **`low`, `medium`, `xhigh`** (default
+`xhigh`) and rejects anything else at template-render time with HTTP 400:
+
+```
+Unexpected reasoning effort max. Supported types are xhigh (default), medium, and low.
+```
+
+`max` and `high` are *not* accepted — worth knowing if you point a client at this lane
+that also talks to models where `high`/`max` are valid, or share one client config across
+models. Two related caveats: thinking tokens are billed against the request's `max_tokens`
+(a small `max_tokens` returns empty `content` with `finish_reason: "length"`), and
+`chat_template_kwargs.thinking_budget` is **not** honored by this build.
+
 ## The PLE Patch
 
 The NVFP4 checkpoint stores the 51B-param N-gram/PLE embedding table as FP8 shards + one global
@@ -713,7 +734,8 @@ reference; the numbers above supersede these.
   loads on this box — offloading will OOM or thrash swap. Keep it `false`
   here; the FP8 PLE shard fits comfortably on the GPU.
 - **Drop page caches before every launch** if you hit a `CUDA out of memory` that
-  "worked yesterday" on unified memory: `sync && echo 3 | sudo tee /proc/sys/vm/drop_caches`.
+  "worked yesterday" on unified memory: `sync && echo 3 | sudo tee /proc/sys/vm/drop_caches`
+  on **both** nodes. `start.sh` does **not** do this for you (it needs no root).
 - **Never point `IB_HCA` at an HCA cabled to another cluster** — NCCL will hang mid-NCCL-init
   with no useful error. One exact-match device per node (leading `=`).
 - **Cross-wired nodes**: head uses `f1`, worker `f0` — hence the separate `WORKER_IFACE` /
