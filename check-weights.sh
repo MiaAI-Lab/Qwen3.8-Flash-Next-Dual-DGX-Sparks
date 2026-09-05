@@ -39,7 +39,7 @@ ssh_worker() {
     ssh -o StrictHostKeyChecking=no "${user_prefix}$WORKER_IP" "$@"
 }
 
-REMOTE_HOME=$(ssh_cmd "echo \"\$HOME\"")
+REMOTE_HOME=$(ssh_worker "echo \"\$HOME\"")
 if [[ -n "${WORKER_HF_HOME:-}" ]]; then
     REMOTE_HF="$WORKER_HF_HOME"
 elif [[ "$HF_CACHE_DIR" == "$HOME" || "$HF_CACHE_DIR" == "$HOME/"* ]]; then
@@ -69,10 +69,10 @@ check_node() {
         fi
     else
         # Remote check via SSH
-        if ssh_cmd "test -d '$path'" 2>/dev/null; then
+        if ssh_worker "test -d '$path'" 2>/dev/null; then
             local size shards
-            size=$(ssh_cmd "du -sh '$path' 2>/dev/null" | cut -f1)
-            shards=$(ssh_cmd "find '$path' -name '*.safetensors' -o -name '*.bin' 2>/dev/null | wc -l")
+            size=$(ssh_worker "du -sh '$path' 2>/dev/null" | cut -f1)
+            shards=$(ssh_worker "find '$path' -name '*.safetensors' -o -name '*.bin' 2>/dev/null | wc -l")
             echo "  $label ✅  $path"
             echo "         Size: $size | Shards: $shards"
             return 0
