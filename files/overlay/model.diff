@@ -1,0 +1,31 @@
+--- files/overlay/model.py.orig	2026-09-02 15:27:42.742577348 +0300
++++ files/overlay/model.py	2026-09-02 15:27:42.762327041 +0300
+@@ -262,10 +262,12 @@
+         self.attn_hyper_connection = GatedResidual(
+             hc_config,
+             prefix=maybe_prefix(prefix, "attn_hyper_connection"),
++            quant_config=quant_config,  # [fp8dense overlay]
+         )
+         self.mlp_hyper_connection = GatedResidual(
+             hc_config,
+             prefix=maybe_prefix(prefix, "mlp_hyper_connection"),
++            quant_config=quant_config,  # [fp8dense overlay]
+         )
+ 
+     def forward(
+@@ -434,6 +436,7 @@
+                 hc_config,
+                 use_combine=False,
+                 prefix=maybe_prefix(prefix, "hyper_connection_mixer"),
++                quant_config=vllm_config.quant_config,  # [fp8dense overlay]
+             )
+         else:
+             self.hyper_connection_mixer = None
+@@ -625,6 +628,7 @@
+         self.lm_head = ParallelLMHead(
+             config.vocab_size,
+             config.hidden_size,
++            quant_config=vllm_config.quant_config,  # [fp8dense overlay]
+             prefix=maybe_prefix(prefix, "lm_head"),
+         )
+         self.logits_processor = LogitsProcessor(config.vocab_size)

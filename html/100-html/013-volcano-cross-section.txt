@@ -1,0 +1,115 @@
+TITLE: Anatomy of a Stratovolcano — a scroll-assembled geological cross-section
+
+PROMPT: Build a single self-contained HTML page (all CSS in one <style>, all JS in one <script>,
+no external requests of any kind, no webfonts, system font stacks only) that tells a scroll story
+called "Anatomy of a Stratovolcano".
+
+LAYOUT. Three vertical movements. (1) A full-viewport masthead: a monospace kicker line top-left
+("Field Geology · Section No. 013 · Scale 1:24 000") and top-right ("Andesitic arc · Subduction
+margin"); a colossal three-line condensed headline where line 1 is solid "Anatomy of a", line 2 is
+an outlined stroke-only word ("Stratovol") and line 3 is solid incandescent orange ("cano"); a
+short serif deck paragraph; and a bottom stat row of four instrument stats (summit elevation,
+basement depth, number of eruptions, andesite percentage) plus a "Begin section" scroll cue with an
+animated 44px vertical rule. Behind it, an inline-SVG silhouette ridge with one orange-lit peak.
+(2) The story: a position:sticky full-bleed stage (height 100vh, margin-bottom:-100vh so a
+following .flow column overlaps it) containing an inline-SVG cross-section that assembles as you
+scroll, plus a particle canvas for the eruption plume; the .flow column carries the chapters and is
+pointer-events:none except for its cards, so the art stays interactive. (3) A quiet aftermath
+panel with six succession cards and a gradient timeline bar.
+
+THE ART (inline SVG, viewBox 0 0 1600 780, preserveAspectRatio xMidYMax slice, ground line y=470,
+cone base x 330–1270, crater rim y=168, crater floor y=212, vent axis x=800). Build it in JS from
+one parametric surface function surf(x) (two flanks plus a crater notch) and draw every stratum as
+a chevron strip between surf(x)+d and surf(x)+d+17, clipped to a cone-shaped clipPath, so the beds
+form nested chevrons exactly like a real section. Layers, in order of construction: distant ridges;
+a basement block filled with a 45° hatch <pattern> plus two listric normal faults drawn as dashed
+beziers; fifteen alternating beds, each filled with its own hand-written <pattern> (ropy lava, ash
+stipple, pumice vesicles, angular lithic tuff, scoria, unsorted lahar) and each carrying data-in /
+data-out scroll thresholds so they appear one by one; radiating orange dike swarms; three stacked
+summit sills (the cap-rock complex); the edifice outline stroked over the bands; a lobed magma
+chamber 6–11 km deep filled with a radial gradient plus a crystal-mush stipple pattern and dashed
+melt/crystal boundaries; a waisted conduit drawn as three nested throats (dark halo, gradient,
+white-hot core) with a hatched frozen plug; the summit crater with talus and five fumarole squiggles;
+a late "green" group (crater lake gradient, randomised saplings on the slope, dashed soil line); and
+a depth axis with ticks every 2 km, an "EDIFICE SCHEMATIC" caveat and leader-line callouts.
+
+THE PLUME. A canvas absolutely overlaying the stage, anchored to the vent by recomputing the
+xMidYMax slice transform on resize (scale = max(W/1600, H/780)), so particles always leave the
+crater at any aspect ratio. Emit a scroll-driven number of particles per frame; each has buoyancy
+that decays with height, gravity, drag, a sine wobble, expansion and lifetime. Wind shear is
+height-squared, so the column bends sideways and spreads an umbrella at its buoyancy level. Draw
+with globalCompositeOperation "lighter" using five pre-rendered 72px radial-gradient sprite canvases
+whose colours run grey ash (104,100,99) → dusty (128,113,100) → ember (176,110,58) → incandescent
+(255,109,0) → (255,202,40); pick the sprite from height and VEI so a low index is grey and a high one
+glows at the base. Add a radial vent glow. Cap the particle array at 900.
+
+SCROLL. Compute p = (scrollY − storyTop)/(storyHeight − innerHeight), clamp to 0–1, and drive:
+per-element opacity plus a 16px lift from data-in/data-out; the plume power envelope (0 until 0.56,
+ramp to 1 by 0.68, fade to 0.16 residual degassing after 0.86); a saturate/brightness filter on the
+sky wash; the right-hand progress rail fill, percentage readout and seven chapter dots that fill in
+sequence and reveal their label only when active.
+
+INTERACTION. A VEI 1–8 selector (eight condensed-numeral toggle buttons, aria-pressed) rewrites six
+monospace readouts (index, ejecta volume, column height, mass discharge, dispersion, style) plus a
+reference event (Stromboli 2019 · Etna 2021 · Parícutin 1943 · Eyjafjallajökull 2010 · St. Helens
+1980 · Pinatubo 1991 · Tambora 1815 · Lava Creek), and morphs the plume's height target, density,
+exit velocity, shear and colour mix, and brightens the conduit and chamber. Hovering (or tapping) a
+stratum outlines it in #ffca28, brightens it, and shows a monospace tooltip with the log line, e.g.
+"PUMICE · 2.6 m / Pumice bed — Plinian · 11 km column". Keys 1–8 set the index, Arrow up/down nudge
+it, and A jumps to the aftermath. All copy is real field-geology prose: edifice, interbedding,
+conduit, cap rock, eruption, index, aftermath, each with a monospace "notes" list of measured
+quantities, plus a 0–200-year primary-succession panel (bare tephra, crust, moss and lichen,
+Lupinus lepidus, alder on lahars, conifer canopy).
+
+PALETTE. basalt #14100f (page), #1b1513/#241b18 blocks, ash #6f6a68/#8d8681/#b3aaa2, incandescent
+#ff6d00, ember #ffca28, cold sky #a7c4d4, paper #f2ece2, muted #a1978d, hairline rules
+rgba(226,216,202,.16).
+
+TYPOGRAPHY. Display: "Haettenschweiler","Arial Narrow",Impact,"Arial Black","Helvetica Neue",
+system-ui, uppercase, line-height .82, sizes clamped from 38px to 224px, some words stroke-only via
+-webkit-text-stroke. Body: Georgia/Palatino/Baskerville serif, 17px, 1.6, in a narrow column of
+min(37ch,44vw) with an incandescent condensed drop cap. Labels/readouts/axes: ui-monospace, Menlo,
+Consolas at 9.5–14px with .1–.28em letter-spacing.
+
+MOTION & RESPONSIVE. Everything is scroll-bound; prefers-reduced-motion disables the rAF loop and
+instead renders one deterministic (seeded LCG) static plume snapshot, re-rendered on demand, and
+collapses all transitions. Layout adapts 360px→2560px: below 900px the stage drops to 64vh, cards go
+full width, rail labels hide; below 560px the readouts shrink. No console errors, no network.
+
+DESIGN: The page is built like a field plate rather than a website — the reader is watching a
+section being drawn, so the art stays pinned and inert while the prose moves past it, and the only
+way to make the mountain "do" anything is to operate the instruments. The condensed display face and
+stroke-only outline words give it a survey-chart headline voice; Georgia in a 37-character column
+keeps the reading intimate against a basalt field. Colour is used as data, never as decoration: cold
+sky blue for anything at or above the ground line, greys for fragmented rock, and the orange-to-amber
+pair reserved exclusively for melt, gas and the instrument that measures them, so the moment the
+index climbs the reader understands what got hotter.
+
+TECHNIQUES:
+- Sticky full-bleed stage with margin-bottom:-100vh so a normal-flow text column scrolls over pinned art
+- Parametric SVG geometry: one surf(x) function generates every chevron bed strip and the cone clipPath
+- Hand-authored SVG <pattern> textures (ropy lava, ash stipple, pumice vesicles, lithic clasts, scoria,
+  lahar, crystal mush, 45° basement hatch) referenced by url(#id)
+- SVG <clipPath> + gradient-filled lobed chamber + nested stroked throats for the conduit
+- Scroll progress → per-element data-in/data-out reveal windows (opacity + 16px lift), no libraries
+- Canvas particle plume anchored to SVG coordinates by reimplementing the xMidYMax slice transform
+- Pre-rendered offscreen radial-gradient sprite canvases + "lighter" compositing for cheap additive smoke
+- Height-squared wind shear producing a bent jet and an umbrella cloud at the buoyancy level
+- Seeded LCG pseudo-random field, so reduced-motion statics and vegetation scatter are reproducible
+- requestAnimationFrame + rAF-throttled scroll handler; layout() recomputed on debounced resize and load
+- ARIA toggle buttons (aria-pressed) for the VEI set, role="status" live tooltip, role="img" +
+  title/desc on the SVG, keyboard access for every control
+- prefers-reduced-motion fallback that steps the same physics 260 times into one still frame
+- CSS-only stroke text (-webkit-text-stroke) for outline headline words; clamp() fluid type scale
+- No URL-shaped literals at all: the SVG namespace URI is assembled with .concat() at runtime
+
+INTERACTION:
+- Scroll: assembles basement → 15 strata → dikes and sills → chamber → conduit → crater, then lights
+  the eruption and finally the regrowth; the right rail fills and its chapter dots latch in sequence.
+- VEI 1–8 buttons (or keys 1–8, Arrow up/down): morph plume height, density, exit speed, shear and
+  colour from grey to incandescent, brighten the plumbing, and rewrite ejecta volume, column height,
+  mass discharge, dispersion, eruption style and reference event.
+- Hover/tap a stratum: amber outline, brightness lift and a monospace petrology log line (lithology,
+  thickness, transport process, isotope or temperature note).
+- Key A: smooth-scrolls to the primary-successession aftermath panel (instant under reduced motion).
+- Chapter labels appear only for the currently active section, keeping the pinned art uncluttered.

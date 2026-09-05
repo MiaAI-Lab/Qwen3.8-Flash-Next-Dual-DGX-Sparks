@@ -1,0 +1,51 @@
+TITLE:
+023 — Kinetic Type Scramble
+
+PROMPT:
+Build a single self-contained HTML page that is a kinetic typography instrument. Full-bleed black
+stage (#08090b) carrying one giant word set with clamp() up to roughly 22vw, split into per-letter
+spans so each glyph can be animated independently. The word reacts to the pointer through a distance
+field: letters close to the cursor gain weight, scale, skew, blur and vertical offset, so moving the
+mouse sculpts the word as if the glyphs were iron filings near a magnet. Simulate variable weight by
+cross-fading a heavy stack ("Arial Black", Impact) against a light stack ("Helvetica Neue", system-ui).
+
+Modes, selectable from a hairline bottom bar:
+- SCULPT: the distance-field deformation described above.
+- SCRAMBLE: a decode animation that cycles random glyphs per letter before settling.
+- WAVE: a sine-stagger ripple travelling through the letters.
+- SHATTER: on click, letters explode outward and reassemble with spring easing.
+- ELASTIC: letters are draggable springs that snap back into alignment.
+
+Controls: three custom sliders labelled RADIUS, FORCE, DAMPING with live mono numeric readouts; a
+word input that swaps the displayed word from a curated list and also accepts free typing; and an
+auto-cycle demo that engages after six seconds of idle so the page is never static. Add a faint grid
+backdrop and a status line formatted like "MODE — SCULPT · r=340px · f=0.62".
+
+Rules: all CSS in one <style> block, all JS in one <script> block, zero external references (no CDN,
+no web fonts, no images, no libraries), system font stacks only, <html lang="en">, charset utf-8,
+viewport meta, valid HTML5, no console errors, works offline, responsive from 360px to 2560px, and
+prefers-reduced-motion swaps the animation for a static composed state.
+
+DESIGN:
+Type as the only material. There is no imagery and almost no chrome — a single word, a dark room and a
+set of precise controls. The pleasure is physical: the word should feel like it has mass and
+susceptibility, deforming under the cursor and recovering with believable easing rather than snapping.
+Restraint in palette (black ground, bone type, one hot accent) keeps attention on letterform behaviour,
+and the mono instrument readouts lend the whole thing the feel of a calibration tool rather than a gimmick.
+
+TECHNIQUES:
+- Per-letter span decomposition with transform + opacity/weight cross-fade
+- Distance-field deformation: per-glyph influence computed from pointer delta with a falloff curve
+- Spring/damper integration per letter for recovery, elastic snap-back and shatter reassembly
+- Glyph-scramble decode driven by a character pool with per-letter settle timing
+- clamp() fluid type scale up to ~22vw; heavy/light font-stack substitution to fake variable weights
+- Custom-styled range inputs, hairline rules and a mono status/instrument readout
+- Idle timer that hands control to an auto-demo loop
+- prefers-reduced-motion guard collapsing motion to a static composition
+
+INTERACTION:
+- Move the pointer to sculpt the word; the falloff radius, force and damping are live-adjustable.
+- Switch modes from the bottom bar (or keys 1–5): SCULPT, SCRAMBLE, WAVE, SHATTER, ELASTIC.
+- Click to shatter and reassemble in SHATTER mode; drag letters in ELASTIC mode.
+- Type into the input or pick from the curated list to change the word instantly.
+- After 6s idle the page auto-cycles modes until input returns.

@@ -1,0 +1,129 @@
+TITLE: Vessel & Filament — Neon Sign Works, Closing Time (Bench 3)
+
+PROMPT:
+Build a single self-contained HTML page: a neon sign workshop at closing time, last customer
+gone, the sign still burning. Everything drawn in-browser — no CDN, no web fonts, no images,
+no libraries, system font stacks only, one <style> block and one <script> block, no console
+errors, responsive, prefers-reduced-motion honoured.
+- A wet-brick storefront at night. The brick must come from layered gradients alone (offset
+  courses with broken joints, a lit top lip and shadowed bottom per brick, grime wash, damp
+  blotches), with a shop window of unlit bent stock, a doorway, a service conduit and a
+  transformer on the wall. Below the facade, a wet street that MIRRORS the sign and wobbles.
+- NEON SIGN EDITOR: an editable line of text (contenteditable) rendered as glowing glass tubes
+  using layered text-shadows — white-hot core, coloured halo, wide bloom. A second, smaller
+  tube line below it, plus a bent tube swash drawn as an inline SVG path under the words.
+  Whatever is typed must appear in the puddle at the same time.
+- GAS-COLOUR SWATCHES recolour the whole run instantly: Argon #35c8ff, Neon coral #ff4d6d,
+  Krypton #b6ff3a, Xenon amber #ffb42e, Mercury violet #a06bff. The wall glow, the window
+  spill and the reflection all take the new colour.
+- CONTROLS: FLICKER — one tube stutters with irregular, non-uniform timing (never a plain CSS
+  loop); BURN RATE — a brightness slider that everything reads; a tube-character selector that
+  switches the lettering between script (cursive stack, tight tracking), geometric caps and mono.
+- AMBIENT LIFE: a buzzing transformer (real WebAudio buzz, click to audition), a moth orbiting
+  the sign, occasional rain that dims and refracts the glow, and an OPEN/SOLD-OUT flip sign
+  that toggles the shop between full burn and a night burn.
+Make it look like a photograph of a real shop at 23:47, not like a UI demo.
+
+DESIGN:
+Art direction is "one light source in a dead city": everything on the page is either the tube
+or something the tube is touching, so the palette is a near-black masonry base (night #050409,
+brick #0b0908/#170f0c/#2a1a14, mortar #120c09, asphalt #08080c, kerb #131318) against a single
+saturated gas colour that the user chooses. Because the accent is a variable rather than a
+fixed hue, the page can be coral or acid green or violet without touching a rule — the gas
+drives --gas/--gas-soft/--gas-far, and every glow, the wall wash, the window spill, the slider
+fill, the selection colour and the moody blue bench lamp all follow it. Typography splits by
+role: a mono stack (ui-monospace/SFMono/Menlo/Consolas) for everything mechanical — rail
+markings, plate labels, meters, buttons, the door faces — set wide (0.14–0.34em) like
+screen-printed steel; a humanist sans (Avenir Next/Helvetica Neue/Futura) for the bench
+prose; and three stacks reserved for the tubes themselves (Snell Roundhand/Apple Chancery
+cursive with negative tracking for bent script glass, Futura caps at 0.17em for geometric
+runs, heavy mono for industrial lettering). Composition is a two-column workbench: the
+storefront on the left, a sticky steel control panel on the right, a shop clock and a status
+line as the frame — the reader is a sign-maker standing at Bench 3 at close, not a visitor
+to a website. Deliberate imperfections carry the fiction: one tube is always weak, the bricks
+are stained and dripped, the reflection is blurred and never still, the meter reports a glass
+temperature, and the copy talks about electrodes and strikes rather than features.
+
+TECHNIQUES:
+- Brick from stacked CSS gradients only: two repeating-linear-gradient courses plus a
+  .wall::before half-course offset by half a brick and cut with a repeating mask-image so the
+  joints break; .wall::after adds a lit lip and a shadowed underside with mix-blend-mode:screen.
+- Neon lettering as seven stacked text-shadows on one element (1px white core, 4px white halo,
+  9/18px gas, 34px gas-soft, 68px + 120px gas-far bloom) plus a filter:
+  brightness(calc(.55 + .55*--burn - .3*--damp)) saturate(...) on the same node.
+- Two custom properties as a global lighting bus: --burn (0.45–1.25) and --damp (0–1) written
+  to :root by JS; opacity, filter and colour stops everywhere use calc() against them, so one
+  number relights the wall, the puddle, the swash and the mirror.
+- Per-glyph typesetting: each character of the editable lines is wrapped in <span class="ch">
+  with caret position captured/restored by character index through a Range, so individual
+  tubes can go dead (.dead), stutter (.jitter, steps(1)) or be mirrored one letter at a time.
+- Inline SVG: the bent tube swash (two paths, a wide gas stroke plus a thin white fill stroke,
+  stroke-linecap round, drop-shadow() filter chain, stroke-dasharray/dashoffset gas-flow pulse)
+  with electrode rects; the unlit tube rack in the shop window; the transformer arc spark; the
+  moth (two <g> wings animated by a scaleX flap keyframe, body ellipse, antennae strokes).
+- 3D door sign: perspective on the button, transform-style:preserve-3d on the leaf, two faces
+  with backface-visibility and rotateX(±180deg), aria-pressed also cross-fades face opacity so
+  the visible face is deterministic; the leaf is forced to display:block because it is a span.
+- Wet street mirror: a duplicated copy of both tube lines and the swash inside a container
+  masked with a linear-gradient mask-image, flipped with translateY(100%) scaleY(-1) (origin is
+  the top edge, so a bare scaleY(-1) throws the copy out of the clipped street), blurred and
+  saturated, then wobbled every frame by JS summing two sines into scaleY/skewX/translateY.
+  .ripples uses repeating gradients with mix-blend-mode:overlay and an animated
+  background-position.
+- Canvas rain: fixed full-viewport <canvas>, drops as short slanted strokes whose count
+  (50 + 210*damp), alpha and speed scale with the damp variable, stroke colour mixed from the
+  current gas RGB, device-pixel-ratio-aware backing store capped at 2x.
+- WebAudio transformer: four oscillators (100Hz triangle plus 150/200.6/300.4Hz sawtooth) into
+  a 340Hz lowpass with Q 5, into a gain ramped to 0.026, with a 47Hz square LFO summed into the
+  gain param for the buzz; nodes are ramped down and stopped on toggle-off. A short per-gas
+  sine blip (262–494Hz, exponential decay) sounds only while the hum is already running.
+- Irregular animation from JS, not keyframes: the flicker engine picks a weighted random branch
+  (long dead hold 900–2800ms / burst of 2–5 half-ignitions with 38–210ms gaps / single 50–240ms
+  miss then 800–4600ms of calm) and sags the --burn variable with it, so the wall glow and the
+  reflection stutter along with the letter. A strike() walks a five-step dip plan; sag() and
+  throatClear() fire on a recursive 19–51s ambient scheduler.
+- Forced-reflow class restart (remove class, read offsetWidth, re-add) to replay the stutter
+  keyframe on one glyph; requestAnimationFrame drives a single loop for wobble, moth, rain and
+  the eased damp value, cancelled on visibilitychange.
+- Screen-blend radial gradients (.wall-tint, .spill) so the gas colour adds light instead of
+  painting over the brick; CSS grid with minmax(0,1fr) columns and collapsing areas at
+  1080/640/400px; segmented buttons and range inputs styled from scratch (webkit and moz
+  pseudo-elements, track fill from a JS-updated --fill variable); prefers-reduced-motion both
+  as a CSS block and as a matchMedia gate that removes the rAF loop entirely.
+
+INTERACTION:
+Two contenteditable tube lines on the sign board: #lineMain (default "Neon Alley", hard cap 22
+characters) and #lineSub (default "bend & fill · after midnight", cap 34). Typing re-typesets
+both the line and its mirror in the street, restores the caret to the same character index, and
+re-picks the weak tube if the text got shorter; Enter blurs instead of inserting a break;
+pasting is flattened to single spaces; emptying a line on blur restores the stock copy and says
+so. #lineSub and the mouse are also plain text — nothing else on the page is editable.
+Fill gas: five .gas buttons (also keyboard G, which cycles). Clicking sets --gas/--gas-soft/
+--gas-far from that button's hex, moves aria-pressed, updates the "Fill gas" readout, the
+Fill meter and the status line, re-tints the rain and the slider fill, and plays a short
+pitched blip only if the transformer is already humming.
+Burn rate: #burn range, 45–125, updates --burn, the burnVal percentage, the track fill and the
+Draw/Glass meters; crossing the extremes produces a warning line. Keyboard B steps the presets
+0.55 / 0.80 / 1.00 / 1.20.
+Tube character: three .seg buttons swap font-script / font-caps / font-mono on <body>, which
+changes both tube lines' font stack, tracking and (for caps) capitalisation; the active one
+keeps aria-pressed and the label reads back script/caps/mono.
+Flicker (button or F): picks one non-space glyph as the failing tube and drives it with the
+randomised timing engine described above, dimming that glyph (.dead), replaying a 90ms steps(1)
+stutter (.jitter) and sagging the global burn. Off restores it and reports a new electrode.
+Rain (button or R): turns the canvas shower on, eases --damp to 0.42–0.82 (labels dry / mist /
+steady rain / downpour), dims the tube filter, blurs the wall tint and the mirror, and starts
+bead streaks running down the board; a user switch locks auto-weather off until the next
+shower window (auto showers fire roughly every 28–64s otherwise).
+Hum (button or the transformer itself, H): builds or tears down the WebAudio buzz on the click,
+flashes the transformer's arc SVG and reports it. Strike (button or S): re-fires the run
+through a five-beat dip sequence, arcs the transformer, increments the Strikes counter.
+Door sign (#flip, or O): flips the leaf between OPEN and SOLD OUT via aria-pressed, toggles
+.sold-out on <body>, rewrites the footer door state, and multiplies the whole lighting bus by
+0.44 for a night burn — flipping back to OPEN runs a strike so the sign visibly re-fires.
+Ambient, no input needed: the shop clock ticks from 23:47:06, the moth orbits the measured
+centre of the board and fades in, the mains sag now and then, the status line under the footer
+narrates every action, and the puddle mirror never stops moving.
+Reduced motion: no rAF loop, no moth, no falling rain (the street is simply wet), the flicker
+switch holds the weak tube dark instead of stuttering, and the mirror is a static flip.
+Escape blurs an editable tube; shortcuts are ignored while focus is in a tube or a form control.

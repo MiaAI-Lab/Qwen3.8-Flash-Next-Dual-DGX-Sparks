@@ -1,0 +1,1017 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>Arcanum Vault — Holographic Collectibles</title>
+<style>
+/* ============================================================
+   ARCANUM VAULT — tokens
+   ============================================================ */
+:root{
+  --void:#08070b;
+  --void-2:#0d0b13;
+  --ink:#efe9ff;
+  --ink-dim:#a49bbd;
+  --ink-faint:#6b6382;
+  --line:rgba(167,139,250,.18);
+  --line-strong:rgba(253,230,138,.34);
+
+  --violet:#a78bfa;
+  --cyan:#22d3ee;
+  --pink:#f472b6;
+  --gold:#fde68a;
+
+  --mythic:var(--gold);
+  --rare:var(--cyan);
+  --common:#9fb0c4;
+
+  --display:"Bodoni MT",Didot,"Hoefler Text","Palatino Linotype",Palatino,Georgia,serif;
+  --human:"Futura","Avenir Next",Optima,"Trebuchet MS","Helvetica Neue",system-ui,sans-serif;
+  --mono:ui-monospace,Menlo,Consolas,"Courier New",monospace;
+
+  --card-w:min(66vw,318px);
+  --card-h:calc(var(--card-w) * 1.4);
+  --dur:.72s;
+  --ease:cubic-bezier(.16,.84,.28,1);
+  --ease-back:cubic-bezier(.2,1.5,.36,1);
+}
+
+*,*::before,*::after{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;
+  background:var(--void);
+  color:var(--ink);
+  font-family:var(--human);
+  letter-spacing:.01em;
+  overflow-x:hidden;
+  -webkit-font-smoothing:antialiased;
+  text-rendering:optimizeLegibility;
+}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+:focus-visible{outline:1px solid var(--gold);outline-offset:3px}
+
+/* ============================================================
+   Room: soft top light, floor bounce, drifting dust
+   ============================================================ */
+.room{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden}
+.room__light{
+  position:absolute;left:50%;top:-38vh;width:150vw;height:96vh;transform:translateX(-50%);
+  background:radial-gradient(closest-side,rgba(167,139,250,.20),rgba(34,211,238,.07) 46%,transparent 74%);
+  filter:blur(14px);
+}
+.room__beam{
+  position:absolute;left:50%;top:-20vh;width:74vw;height:130vh;transform:translateX(-50%);
+  background:conic-gradient(from 178deg at 50% 0%,transparent 0 12%,rgba(244,114,182,.06) 15%,transparent 19%,
+             transparent 46%,rgba(253,230,138,.07) 50%,transparent 54%,transparent 80%,rgba(34,211,238,.05) 85%,transparent 89%);
+  filter:blur(20px);opacity:.85;
+  animation:beam 34s ease-in-out infinite alternate;
+}
+@keyframes beam{from{transform:translateX(-50%) rotate(-2.5deg) scale(1)}to{transform:translateX(-50%) rotate(2.5deg) scale(1.08)}}
+.room__floor{
+  position:absolute;inset:auto 0 0 0;height:46vh;
+  background:radial-gradient(120% 100% at 50% 130%,rgba(34,211,238,.10),rgba(167,139,250,.05) 40%,transparent 70%);
+}
+.room__grain{
+  position:absolute;inset:-20%;
+  background-image:
+    repeating-linear-gradient(0deg,rgba(255,255,255,.028) 0 1px,transparent 1px 3px),
+    repeating-linear-gradient(90deg,rgba(255,255,255,.02) 0 1px,transparent 1px 4px);
+  opacity:.5;mix-blend-mode:overlay;
+}
+.room__vig{
+  position:absolute;inset:0;
+  background:radial-gradient(130% 92% at 50% 42%,transparent 40%,rgba(4,3,7,.7) 88%,rgba(2,2,4,.94) 100%);
+}
+.dust{position:absolute;inset:0}
+.mote{
+  position:absolute;width:2px;height:2px;border-radius:50%;
+  background:rgba(253,230,138,.85);
+  box-shadow:0 0 6px rgba(253,230,138,.5);
+  animation-name:drift;animation-timing-function:linear;animation-iteration-count:infinite;
+  will-change:transform,opacity;
+}
+@keyframes drift{
+  0%{transform:translate3d(0,10vh,0) scale(.6);opacity:0}
+  12%{opacity:var(--o,.5)}
+  88%{opacity:var(--o,.5)}
+  100%{transform:translate3d(var(--dx,4vw),-104vh,0) scale(1.25);opacity:0}
+}
+
+/* ============================================================
+   Shell / layout
+   ============================================================ */
+.shell{position:relative;z-index:1;min-height:100%;display:flex;flex-direction:column}
+.masthead{
+  display:flex;align-items:flex-end;justify-content:space-between;gap:1.5rem;
+  padding:clamp(1rem,3vw,2.2rem) clamp(1rem,4vw,3rem) .9rem;
+  border-bottom:1px solid var(--line);
+}
+.brand{display:flex;align-items:center;gap:.85rem}
+.brand__mark{width:34px;height:34px;flex:0 0 auto;filter:drop-shadow(0 0 10px rgba(167,139,250,.5))}
+.brand__name{
+  font-family:var(--display);font-size:clamp(1.15rem,2.5vw,1.6rem);
+  letter-spacing:.22em;text-transform:uppercase;margin:0;line-height:1;
+  background:linear-gradient(96deg,var(--gold),#fff 22%,var(--cyan) 52%,var(--pink) 78%,var(--gold));
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+}
+.brand__sub{margin:.34rem 0 0;font-family:var(--mono);font-size:.6rem;letter-spacing:.34em;color:var(--ink-faint);text-transform:uppercase}
+.hud{display:flex;align-items:center;gap:clamp(.7rem,2vw,1.6rem);font-family:var(--mono);font-size:.6rem;letter-spacing:.24em;text-transform:uppercase;color:var(--ink-faint)}
+.hud b{display:block;font-weight:400;color:var(--ink);font-size:.78rem;letter-spacing:.14em;margin-top:.28rem}
+.hud__sep{width:1px;height:26px;background:var(--line)}
+
+main{flex:1 1 auto;display:flex;flex-direction:column}
+
+/* ============================================================
+   Stage & fan
+   ============================================================ */
+.stage-wrap{position:relative;padding:clamp(.6rem,2.4vw,1.8rem) 0 clamp(.4rem,1.6vw,1rem)}
+.stage{
+  position:relative;height:calc(var(--card-h) + clamp(3.4rem,9vw,6rem));
+  perspective:1500px;perspective-origin:50% 44%;
+}
+.stage__plinth{
+  position:absolute;left:50%;bottom:clamp(.4rem,3vw,1.4rem);width:min(78vw,720px);height:120px;
+  transform:translateX(-50%);
+  background:radial-gradient(closest-side,rgba(167,139,250,.24),transparent 72%);
+  filter:blur(16px);
+}
+.card{
+  position:absolute;left:50%;top:50%;width:var(--card-w);height:var(--card-h);
+  margin-left:calc(var(--card-w) / -2);margin-top:calc(var(--card-h) / -2);
+  transform-style:preserve-3d;
+  transition:transform var(--dur) var(--ease);
+  will-change:transform;cursor:pointer;
+}
+.card[data-state="near"]{z-index:3}
+.card[data-state="far"]{z-index:2}
+.card.is-focused{z-index:6}
+.card.is-dealing{z-index:9}
+.card__tilt{
+  position:absolute;inset:0;transform-style:preserve-3d;
+}
+.card__inner{
+  position:absolute;inset:0;transform-style:preserve-3d;
+  transition:transform .86s cubic-bezier(.62,.02,.2,1);
+}
+.card.is-flipped .card__inner{transform:rotateY(180deg)}
+.face{
+  position:absolute;inset:0;border-radius:16px;overflow:hidden;
+  backface-visibility:hidden;-webkit-backface-visibility:hidden;
+  background:linear-gradient(168deg,#171226,#0b0912 58%,#120e1e);
+  border:1px solid rgba(255,255,255,.09);
+  box-shadow:0 22px 44px rgba(0,0,0,.6),0 2px 0 rgba(255,255,255,.04) inset;
+  transition:box-shadow var(--dur) var(--ease);
+}
+.card.is-focused .face{box-shadow:0 34px 62px rgba(0,0,0,.72),0 0 34px rgba(167,139,250,.2) inset}
+/* neighbour dimming lives inside each face — a filter on a preserve-3d node would flatten the flip */
+.veil{
+  position:absolute;inset:0;z-index:12;border-radius:16px;pointer-events:none;
+  background:#05040a;opacity:var(--veil,0);transition:opacity var(--dur) var(--ease);
+}
+
+/* ---------- foil frame (border-only ring) ---------- */
+.frame{
+  position:absolute;inset:0;border-radius:16px;padding:1.5px;pointer-events:none;z-index:6;
+  backface-visibility:hidden;-webkit-backface-visibility:hidden;transform:translateZ(2px);
+  background:conic-gradient(from calc(var(--spin,0) * .5deg),
+    var(--violet),var(--cyan) 22%,#fff5 33%,var(--pink) 48%,var(--gold) 63%,#ffffff88 74%,var(--violet) 100%);
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+  -webkit-mask-composite:xor;
+  mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+  mask-composite:exclude;
+}
+.frame::after{
+  content:"";position:absolute;inset:5px;border-radius:12px;
+  box-shadow:inset 0 0 0 .5px rgba(255,255,255,.10);
+}
+.frame__inner{
+  position:absolute;inset:9px;border-radius:9px;pointer-events:none;z-index:6;
+  backface-visibility:hidden;-webkit-backface-visibility:hidden;transform:translateZ(2.2px);
+  border:1px solid rgba(253,230,138,.26);
+  box-shadow:inset 0 0 22px rgba(8,6,14,.9),0 0 0 1px rgba(0,0,0,.5);
+}
+
+/* ---------- holographic layer ---------- */
+.holo{
+  position:absolute;inset:0;z-index:8;pointer-events:none;border-radius:15px;
+  backface-visibility:hidden;-webkit-backface-visibility:hidden;transform:translateZ(1px);
+  background:
+    repeating-linear-gradient(var(--etch,112deg),rgba(255,255,255,.13) 0 1px,rgba(0,0,0,.10) 1px 3px),
+    conic-gradient(from calc(var(--spin,0) * 1deg + var(--tiltA,0deg)) at calc(50% + var(--gx,0%)) calc(50% + var(--gy,0%)),
+      var(--violet) 0deg,var(--cyan) 58deg,#ffffff 96deg,var(--pink) 150deg,
+      var(--gold) 208deg,var(--cyan) 262deg,#ffffffcc 300deg,var(--violet) 360deg);
+  background-blend-mode:overlay;
+  mix-blend-mode:color-dodge;
+  opacity:calc(.30 + var(--lift,0) * .34);
+  -webkit-mask-image:linear-gradient(var(--sweep,140deg),transparent 0 18%,#000 42% 58%,transparent 82% 100%),
+                     radial-gradient(120% 84% at calc(50% + var(--gx,0%)) calc(50% + var(--gy,0%)),#000 12%,transparent 72%);
+  -webkit-mask-composite:source-in;
+  mask-image:linear-gradient(var(--sweep,140deg),transparent 0 18%,#000 42% 58%,transparent 82% 100%),
+             radial-gradient(120% 84% at calc(50% + var(--gx,0%)) calc(50% + var(--gy,0%)),#000 12%,transparent 72%);
+  mask-composite:intersect;
+}
+.holo--fine{
+  mix-blend-mode:color-dodge;opacity:calc(.16 + var(--lift,0) * .2);
+  background:repeating-linear-gradient(calc(var(--etch,112deg) + 90deg),rgba(255,255,255,.5) 0 1px,transparent 1px 7px);
+  -webkit-mask-image:radial-gradient(130% 90% at 50% 40%,#000 20%,transparent 78%);
+  mask-image:radial-gradient(130% 90% at 50% 40%,#000 20%,transparent 78%);
+}
+.glint{
+  position:absolute;inset:0;z-index:9;pointer-events:none;
+  backface-visibility:hidden;-webkit-backface-visibility:hidden;transform:translateZ(1.4px);
+  background:linear-gradient(var(--sweep,140deg),transparent 34%,rgba(255,255,255,.5) 48%,transparent 62%);
+  mix-blend-mode:screen;opacity:calc(.18 + var(--lift,0) * .5);
+}
+
+/* ---------- front face content ---------- */
+.front{display:flex;flex-direction:column;padding:16px 15px 13px;gap:8px}
+.front__top{display:flex;align-items:center;justify-content:space-between;gap:.5rem;position:relative;z-index:7}
+.eyebrow{font-family:var(--mono);font-size:.5rem;letter-spacing:.3em;color:var(--ink-faint);text-transform:uppercase}
+.rarity{
+  font-family:var(--mono);font-size:.5rem;letter-spacing:.26em;text-transform:uppercase;
+  padding:.28rem .5rem;border-radius:2px;color:var(--tier,#fff);
+  border:1px solid color-mix(in srgb,var(--tier,#fff) 46%,transparent);
+  background:linear-gradient(180deg,color-mix(in srgb,var(--tier,#fff) 20%,transparent),transparent);
+  text-shadow:0 0 12px color-mix(in srgb,var(--tier,#fff) 60%,transparent);
+}
+.card[data-rarity="MYTHIC"]{--tier:var(--mythic)}
+.card[data-rarity="RARE"]{--tier:var(--rare)}
+.card[data-rarity="COMMON"]{--tier:var(--common)}
+
+.art{position:relative;height:47%;border-radius:8px;overflow:hidden;background:#07060c;
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.07),inset 0 -26px 44px rgba(0,0,0,.7)}
+.art svg{position:absolute;inset:0;width:100%;height:100%;display:block}
+.art__ground{position:absolute;inset:0;
+  background:radial-gradient(120% 78% at 50% 108%,rgba(34,211,238,.20),transparent 62%),
+             radial-gradient(90% 70% at 22% -8%,rgba(167,139,250,.28),transparent 60%),
+             linear-gradient(180deg,#120f22,#08070d 70%);}
+.art__sigil{position:absolute;inset:8%;filter:drop-shadow(0 3px 14px rgba(167,139,250,.4))}
+.art__rule{position:absolute;left:8%;right:8%;bottom:12%;height:1px;
+  background:linear-gradient(90deg,transparent,rgba(253,230,138,.5),transparent)}
+
+.title{margin:0;font-family:var(--display);font-weight:400;line-height:.98;
+  font-size:clamp(1.12rem,3.6vw,1.5rem);letter-spacing:.02em;
+  background:linear-gradient(94deg,#fff,var(--tier) 46%,#fff 92%);
+  -webkit-background-clip:text;background-clip:text;color:transparent}
+.sub{margin:0;font-family:var(--mono);font-size:.53rem;letter-spacing:.2em;color:var(--ink-faint);text-transform:uppercase}
+.flavour{margin:.15rem 0 0;font-family:"Hoefler Text",Palatino,Georgia,serif;font-style:italic;
+  font-size:.72rem;line-height:1.44;color:#c8bfe4;min-height:2.6em}
+
+/* ---------- stat bars ---------- */
+.stats{margin-top:auto;display:grid;gap:5px;position:relative;z-index:7}
+.stat{display:grid;grid-template-columns:5.6rem 1fr 1.9rem;align-items:center;gap:.5rem;
+  font-family:var(--mono);font-size:.5rem;letter-spacing:.16em;color:var(--ink-dim);text-transform:uppercase}
+.stat__track{position:relative;height:5px;border-radius:99px;background:rgba(255,255,255,.07);overflow:hidden;
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.05)}
+.stat__fill{position:absolute;inset:0;width:0;border-radius:99px;
+  background:linear-gradient(90deg,var(--violet),var(--cyan) 52%,var(--gold));
+  transition:width 1s var(--ease);box-shadow:0 0 10px rgba(34,211,238,.5)}
+.card[data-state] .stat__fill{width:var(--v,50%)}
+.stat__num{text-align:right;color:var(--ink)}
+
+/* ---------- micro-print hairline ---------- */
+.microprint{
+  position:absolute;left:0;right:0;bottom:0;height:11px;overflow:hidden;z-index:7;pointer-events:none;
+  display:flex;align-items:center;
+  background:linear-gradient(180deg,transparent,rgba(253,230,138,.10));
+  border-top:1px solid rgba(253,230,138,.16);
+}
+.microprint span{
+  white-space:nowrap;font-family:var(--mono);font-size:3.6px;letter-spacing:.42em;
+  color:rgba(253,230,138,.62);text-transform:uppercase;animation:micro 26s linear infinite;
+}
+@keyframes micro{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+
+/* ---------- back face (guilloché) ---------- */
+.back{transform:rotateY(180deg);display:grid;place-items:center;
+  background:radial-gradient(120% 90% at 50% 0%,#1a1430,#0a0813 62%,#07060c)}
+.back svg{position:absolute;inset:0;width:100%;height:100%}
+.back__plate{position:relative;width:56%;text-align:center;z-index:3}
+.back__plate svg{position:static;width:100%;height:auto}
+.back__word{position:absolute;left:0;right:0;bottom:16%;z-index:3;text-align:center;
+  font-family:var(--display);letter-spacing:.42em;font-size:.62rem;color:rgba(253,230,138,.66);text-transform:uppercase}
+.rosette{animation:rosette 60s linear infinite}
+@keyframes rosette{to{transform:rotate(360deg)}}
+
+/* ============================================================
+   Console: pager, controls, pack drawer
+   ============================================================ */
+.console{
+  display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:clamp(.6rem,2vw,1.4rem);
+  padding:.4rem clamp(1rem,4vw,3rem) 1.1rem;
+}
+.pager{display:flex;align-items:center;gap:.55rem}
+.arrow{
+  width:42px;height:42px;border-radius:50%;display:grid;place-items:center;
+  border:1px solid var(--line);background:rgba(255,255,255,.03);
+  transition:transform .3s var(--ease-back),border-color .3s,background .3s,box-shadow .3s;
+}
+.arrow:hover{border-color:var(--line-strong);background:rgba(253,230,138,.09);transform:translateY(-2px) scale(1.06);
+  box-shadow:0 8px 22px rgba(0,0,0,.5),0 0 18px rgba(253,230,138,.16)}
+.arrow:active{transform:scale(.94)}
+.arrow svg{width:14px;height:14px}
+.pager__label{font-family:var(--mono);font-size:.6rem;letter-spacing:.28em;color:var(--ink-dim);min-width:8.5rem;text-align:center}
+.pager__label b{color:var(--ink);font-weight:400}
+
+.btn-pack{
+  position:relative;overflow:hidden;padding:.86rem 1.9rem;border-radius:99px;
+  font-family:var(--mono);font-size:.62rem;letter-spacing:.32em;text-transform:uppercase;color:#0b0810;
+  background:linear-gradient(96deg,var(--gold),#fffbe9 30%,var(--cyan) 62%,var(--violet) 96%);
+  box-shadow:0 10px 30px rgba(0,0,0,.55),0 0 26px rgba(253,230,138,.22);
+  transition:transform .3s var(--ease-back),box-shadow .3s,filter .3s;
+}
+.btn-pack:hover{transform:translateY(-2px);filter:saturate(1.15) brightness(1.05);box-shadow:0 14px 38px rgba(0,0,0,.6),0 0 40px rgba(253,230,138,.34)}
+.btn-pack:active{transform:translateY(0) scale(.97)}
+.btn-pack::after{
+  content:"";position:absolute;top:0;bottom:0;width:38%;left:-45%;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.85),transparent);transform:skewX(-18deg);
+}
+.btn-pack:hover::after{animation:swipe .85s var(--ease)}
+@keyframes swipe{to{left:120%}}
+
+.ledger{
+  width:min(1080px,100%);margin:0 auto;padding:1rem clamp(1rem,4vw,3rem) 0;
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(158px,1fr));gap:.6rem 1.4rem;
+  border-top:1px solid var(--line);
+}
+.ledger div{display:flex;justify-content:space-between;gap:.8rem;font-family:var(--mono);font-size:.55rem;
+  letter-spacing:.2em;text-transform:uppercase;color:var(--ink-faint);padding:.5rem 0;border-bottom:1px dashed rgba(255,255,255,.06)}
+.ledger b{font-weight:400;color:var(--ink-dim)}
+
+footer{
+  padding:1.6rem clamp(1rem,4vw,3rem) 2.2rem;margin-top:1.4rem;
+  display:flex;flex-wrap:wrap;gap:.8rem;justify-content:space-between;align-items:baseline;
+  font-family:var(--mono);font-size:.55rem;letter-spacing:.26em;text-transform:uppercase;color:var(--ink-faint);
+  border-top:1px solid var(--line);
+}
+footer em{font-family:"Hoefler Text",Georgia,serif;font-style:italic;text-transform:none;letter-spacing:.02em;color:var(--ink-dim);font-size:.78rem}
+
+/* ============================================================
+   Rarity flash + tray
+   ============================================================ */
+.flash{position:fixed;inset:0;z-index:40;pointer-events:none;opacity:0;
+  background:radial-gradient(closest-side,var(--fc,#fff),transparent 70%);}
+.flash.on{animation:flash .95s var(--ease) forwards}
+@keyframes flash{0%{opacity:0;transform:scale(.7)}22%{opacity:.9}100%{opacity:0;transform:scale(1.35)}}
+.tray{
+  position:fixed;right:clamp(.5rem,2vw,1.4rem);bottom:clamp(.5rem,2vw,1.4rem);z-index:30;
+  display:flex;flex-direction:column;gap:.35rem;align-items:flex-end;pointer-events:none;
+}
+.tray__chip{
+  font-family:var(--mono);font-size:.5rem;letter-spacing:.22em;text-transform:uppercase;
+  padding:.4rem .6rem;border-radius:2px;color:#0a0810;background:var(--tc,var(--gold));
+  box-shadow:0 6px 18px rgba(0,0,0,.6);
+  animation:chip .6s var(--ease-back) both;
+}
+@keyframes chip{from{opacity:0;transform:translateX(26px) scale(.9)}to{opacity:1;transform:none}}
+
+/* deal-time shine sweep, injected inside the front face */
+.shine{
+  position:absolute;inset:0;z-index:11;pointer-events:none;opacity:0;border-radius:16px;
+  background:linear-gradient(104deg,transparent 26%,rgba(255,255,255,.28) 42%,rgba(255,255,255,.9) 50%,rgba(255,255,255,.28) 58%,transparent 74%);
+  mix-blend-mode:screen;
+}
+.card.is-dealing .shine{animation:shine 1s var(--ease) .3s both}
+@keyframes shine{0%{opacity:0;transform:translateX(-78%) skewX(-12deg)}28%{opacity:1}100%{opacity:0;transform:translateX(78%) skewX(-12deg)}}
+
+@media (max-width:560px){
+  :root{--card-w:min(72vw,300px)}
+  .masthead{flex-direction:column;align-items:flex-start;gap:.8rem}
+  .hud{flex-wrap:wrap;gap:.9rem}
+  .hud__sep{display:none}
+  .tray{display:none}
+}
+@media (min-width:1500px){:root{--card-w:352px}}
+
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.001ms !important;animation-iteration-count:1 !important;transition-duration:.08s !important}
+  .mote,.room__beam{display:none}
+}
+</style>
+</head>
+<body>
+<div class="room" aria-hidden="true">
+  <div class="room__light"></div>
+  <div class="room__beam"></div>
+  <div class="room__floor"></div>
+  <div class="dust" id="dust"></div>
+  <div class="room__grain"></div>
+  <div class="room__vig"></div>
+</div>
+<svg width="0" height="0" aria-hidden="true" focusable="false" style="position:absolute">
+  <defs>
+    <pattern id="guilLines" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(28)">
+      <path d="M0 0V7" stroke="rgba(253,230,138,.16)" stroke-width=".45"/>
+      <path d="M0 3.5H7" stroke="rgba(167,139,250,.14)" stroke-width=".35"/>
+    </pattern>
+    <radialGradient id="guilGlow" cx="50%" cy="34%" r="70%">
+      <stop offset="0" stop-color="#a78bfa" stop-opacity=".34"/>
+      <stop offset=".55" stop-color="#22d3ee" stop-opacity=".1"/>
+      <stop offset="1" stop-color="#07060c" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="foil" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fde68a"/><stop offset=".34" stop-color="#ffffff"/>
+      <stop offset=".6" stop-color="#22d3ee"/><stop offset=".82" stop-color="#f472b6"/>
+      <stop offset="1" stop-color="#a78bfa"/>
+    </linearGradient>
+    <linearGradient id="blade" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity=".95"/>
+      <stop offset=".5" stop-color="#cfd8e8" stop-opacity=".7"/>
+      <stop offset="1" stop-color="#6b7a94" stop-opacity=".5"/>
+    </linearGradient>
+    <symbol id="guilloche" viewBox="0 0 300 420" preserveAspectRatio="xMidYMid slice">
+      <rect width="300" height="420" fill="url(#guilLines)"/>
+      <rect width="300" height="420" fill="url(#guilGlow)"/>
+      <g fill="none" stroke="rgba(253,230,138,.30)" stroke-width=".55">
+        <circle cx="150" cy="170" r="26"/><circle cx="150" cy="170" r="48"/>
+        <circle cx="150" cy="170" r="70"/><circle cx="150" cy="170" r="92"/>
+        <circle cx="150" cy="170" r="114"/><circle cx="150" cy="170" r="136"/>
+      </g>
+      <g class="rosette" fill="none" stroke="rgba(34,211,238,.30)" stroke-width=".5" style="transform-origin:150px 170px">
+        <ellipse cx="150" cy="170" rx="118" ry="42" transform="rotate(0 150 170)"/>
+        <ellipse cx="150" cy="170" rx="118" ry="42" transform="rotate(10 150 170)"/>
+        <ellipse cx="150" cy="170" rx="118" ry="42" transform="rotate(20 150 170)"/>
+        <ellipse cx="150" cy="170" rx="118" ry="42" transform="rotate(30 150 170)"/>
+        <ellipse cx="150" cy="170" rx="118" ry="42" transform="rotate(40 150 170)"/>
+        <ellipse cx="150" cy="170" rx="118" ry="42" transform="rotate(50 150 170)"/>
+        <ellipse cx="150" cy="170" rx="118" ry="42" transform="rotate(60 150 170)"/>
+        <ellipse cx="150" cy="170" rx="118" ry="42" transform="rotate(70 150 170)"/>
+        <ellipse cx="150" cy="170" rx="118" ry="42" transform="rotate(80 150 170)"/>
+        <ellipse cx="150" cy="170" rx="118" ry="42" transform="rotate(90 150 170)"/>
+        <ellipse cx="150" cy="170" rx="118" ry="42" transform="rotate(100 150 170)"/>
+        <ellipse cx="150" cy="170" rx="118" ry="42" transform="rotate(110 150 170)"/>
+        <ellipse cx="150" cy="170" rx="118" ry="42" transform="rotate(120 150 170)"/>
+        <ellipse cx="150" cy="170" rx="118" ry="42" transform="rotate(130 150 170)"/>
+        <ellipse cx="150" cy="170" rx="118" ry="42" transform="rotate(140 150 170)"/>
+        <ellipse cx="150" cy="170" rx="118" ry="42" transform="rotate(150 150 170)"/>
+        <ellipse cx="150" cy="170" rx="118" ry="42" transform="rotate(160 150 170)"/>
+        <ellipse cx="150" cy="170" rx="118" ry="42" transform="rotate(170 150 170)"/>
+      </g>
+      <g fill="none" stroke="rgba(244,114,182,.26)" stroke-width=".5">
+        <path d="M0 318q25-16 50 0t50 0 50 0 50 0 50 0 50 0"/>
+        <path d="M0 330q25 16 50 0t50 0 50 0 50 0 50 0 50 0"/>
+        <path d="M0 344q25-16 50 0t50 0 50 0 50 0 50 0 50 0"/>
+        <path d="M0 358q25 16 50 0t50 0 50 0 50 0 50 0 50 0"/>
+      </g>
+      <g fill="none" stroke="rgba(253,230,138,.34)" stroke-width="1">
+        <rect x="14.5" y="14.5" width="271" height="391" rx="10"/>
+      </g>
+      <g fill="none" stroke="rgba(253,230,138,.2)" stroke-width=".6">
+        <path d="M22 46h26M254 46h26M22 374h26M254 374h26"/>
+        <path d="M150 22v18M150 380v18"/>
+      </g>
+    </symbol>
+    <symbol id="vaultcrest" viewBox="0 0 120 120">
+      <circle cx="60" cy="60" r="55" fill="none" stroke="url(#foil)" stroke-width="1.2"/>
+      <circle cx="60" cy="60" r="46" fill="none" stroke="rgba(253,230,138,.5)" stroke-width=".5"/>
+      <path d="M60 20 92 60 60 100 28 60Z" fill="none" stroke="url(#foil)" stroke-width="1.1"/>
+      <path d="M60 34 79 60 60 86 41 60Z" fill="rgba(167,139,250,.16)" stroke="rgba(255,255,255,.4)" stroke-width=".6"/>
+      <path d="M60 48v24M48 60h24" stroke="rgba(253,230,138,.8)" stroke-width=".8"/>
+    </symbol>
+  </defs>
+</svg>
+
+<div class="shell">
+  <header class="masthead">
+    <div class="brand">
+      <svg class="brand__mark" viewBox="0 0 120 120" aria-hidden="true"><use href="#vaultcrest"/></svg>
+      <div>
+        <h1 class="brand__name">Arcanum Vault</h1>
+        <p class="brand__sub">Series IV · Foil &amp; Guilloché · Edition of 120</p>
+      </div>
+    </div>
+    <div class="hud">
+      <span>Serial<b id="hudSerial">001 / 120</b></span>
+      <span class="hud__sep" aria-hidden="true"></span>
+      <span>Grade<b id="hudGrade">PSA 10 · Gem</b></span>
+      <span class="hud__sep" aria-hidden="true"></span>
+      <span>Tier<b id="hudTier">Mythic</b></span>
+    </div>
+  </header>
+
+  <main>
+    <section class="stage-wrap" aria-label="Card vault">
+      <div class="stage" id="stage">
+        <div class="stage__plinth" aria-hidden="true"></div>
+
+        <article class="card" data-rarity="MYTHIC" data-serial="001 / 120" data-grade="PSA 10 · Gem"
+                 data-name="Nyx, the Moth Cardinal" tabindex="0" role="group" aria-label="Card one: Nyx, the Moth Cardinal, mythic">
+          <div class="card__tilt">
+            <div class="card__inner">
+              <div class="face front">
+                <div class="front__top">
+                  <span class="eyebrow">№ 001 · Plate I</span><span class="rarity">Mythic</span>
+                </div>
+                <div class="art">
+                  <div class="art__ground"></div>
+                  <svg class="art__sigil" viewBox="0 0 200 200" role="img" aria-label="Moth sigil">
+                    <g fill="none" stroke="url(#foil)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M100 58v84"/>
+                      <path d="M100 58c-6-10-2-20 6-24M100 58c6-10 2-20-6-24" stroke-width="1.1"/>
+                      <path d="M100 72c-16-24-46-30-62-16-14 12-8 38 12 46 16 6 34-2 50-16" fill="rgba(167,139,250,.20)"/>
+                      <path d="M100 72c16-24 46-30 62-16 14 12 8 38-12 46-16 6-34-2-50-16" fill="rgba(34,211,238,.16)"/>
+                      <path d="M100 112c-14 4-36 10-44 26-6 12 6 22 20 18 12-3 20-14 24-30" fill="rgba(244,114,182,.16)"/>
+                      <path d="M100 112c14 4 36 10 44 26 6 12-6 22-20 18-12-3-20-14-24-30" fill="rgba(253,230,138,.14)"/>
+                      <circle cx="72" cy="86" r="7"/><circle cx="128" cy="86" r="7"/>
+                      <path d="M100 146l-7 12h14z"/>
+                      <path d="M56 78c10 4 18 12 24 22M144 78c-10 4-18 12-24 22" stroke-width=".7" stroke-opacity=".7"/>
+                    </g>
+                    <g fill="rgba(253,230,138,.55)">
+                      <circle cx="100" cy="58" r="2.2"/><circle cx="72" cy="86" r="2"/><circle cx="128" cy="86" r="2"/>
+                    </g>
+                  </svg>
+                  <div class="art__rule"></div>
+                </div>
+                <h3 class="title">Nyx, the Moth Cardinal</h3>
+                <p class="sub">Lepidopteran · Night Choir</p>
+                <p class="flavour">She keeps a ledger of every lamp she has ever loved, and burns it twice a year.</p>
+                <div class="stats">
+                  <div class="stat"><span>Omen</span><span class="stat__track"><i class="stat__fill" style="--v:94%"></i></span><span class="stat__num">94</span></div>
+                  <div class="stat"><span>Gloss</span><span class="stat__track"><i class="stat__fill" style="--v:81%"></i></span><span class="stat__num">81</span></div>
+                  <div class="stat"><span>Venom</span><span class="stat__track"><i class="stat__fill" style="--v:67%"></i></span><span class="stat__num">67</span></div>
+                  <div class="stat"><span>Decay</span><span class="stat__track"><i class="stat__fill" style="--v:42%"></i></span><span class="stat__num">42</span></div>
+                </div>
+                <div class="microprint" aria-hidden="true"><span>arcanum vault · series iv · foil no. a7-22-47 · arcanum vault · series iv · foil no. a7-22-47 · arcanum vault · series iv · foil no. a7-22-47 · arcanum vault · series iv · foil no. a7-22-47 · </span></div>
+              </div>
+              <div class="face back">
+                <svg viewBox="0 0 300 420" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><use href="#guilloche"/></svg>
+                <div class="back__plate"><svg viewBox="0 0 120 120" aria-hidden="true"><use href="#vaultcrest"/></svg></div>
+                <div class="back__word">Arcanum</div>
+                <div class="holo" aria-hidden="true"></div>
+                <div class="frame" aria-hidden="true"></div>
+              </div>
+              <div class="holo holo--fine" aria-hidden="true"></div>
+              <div class="holo" aria-hidden="true"></div>
+              <div class="glint" aria-hidden="true"></div>
+              <div class="frame" aria-hidden="true"></div><div class="frame__inner" aria-hidden="true"></div>
+            </div>
+          </div>
+        </article>
+
+        <article class="card" data-rarity="RARE" data-serial="044 / 120" data-grade="PSA 9 · Mint"
+                 data-name="Vaalmouth, the Ninth Fathom" style="--etch:126deg" tabindex="0" role="group"
+                 aria-label="Card two: Vaalmouth, the Ninth Fathom, rare">
+          <div class="card__tilt">
+            <div class="card__inner">
+              <div class="face front">
+                <div class="front__top">
+                  <span class="eyebrow">№ 044 · Plate II</span><span class="rarity">Rare</span>
+                </div>
+                <div class="art">
+                  <div class="art__ground"></div>
+                  <svg class="art__sigil" viewBox="0 0 200 200" role="img" aria-label="Leviathan sigil">
+                    <g fill="none" stroke="url(#foil)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M28 158c14-34 6-64 34-84 30-22 74-12 88 18 8 18-2 36-19 38-15 2-26-8-25-20 1-10 10-16 18-13"
+                            fill="rgba(34,211,238,.14)"/>
+                      <path d="M28 158c-8 10-8 20 0 26 10-6 16-14 18-24" fill="rgba(167,139,250,.18)"/>
+                      <path d="M62 74c-6-16-2-28 10-34 4 12 6 22 4 32" fill="rgba(244,114,182,.16)"/>
+                      <path d="M104 52c4-14 14-22 28-22-2 12-6 20-14 26" fill="rgba(253,230,138,.14)"/>
+                      <path d="M78 106c14 10 30 14 48 12" stroke-width=".7" stroke-opacity=".7"/>
+                      <path d="M96 128c16 6 32 6 46 0" stroke-width=".7" stroke-opacity=".55"/>
+                      <path d="M126 92h18" stroke-width=".8"/>
+                      <circle cx="138" cy="80" r="4.5"/>
+                      <path d="M20 178q22-12 44 0t44 0 44 0" stroke-width=".8" stroke-opacity=".6"/>
+                      <path d="M14 190q22-12 44 0t44 0 44 0 20 0" stroke-width=".7" stroke-opacity=".4"/>
+                    </g>
+                    <g fill="rgba(253,230,138,.6)"><circle cx="138" cy="80" r="1.7"/></g>
+                  </svg>
+                  <div class="art__rule"></div>
+                </div>
+                <h3 class="title">Vaalmouth, the Ninth Fathom</h3>
+                <p class="sub">Leviathan · Brine Choir</p>
+                <p class="flavour">Nothing drowns. Everything is merely kept, down where the light stops asking questions.</p>
+                <div class="stats">
+                  <div class="stat"><span>Pressure</span><span class="stat__track"><i class="stat__fill" style="--v:88%"></i></span><span class="stat__num">88</span></div>
+                  <div class="stat"><span>Appetite</span><span class="stat__track"><i class="stat__fill" style="--v:73%"></i></span><span class="stat__num">73</span></div>
+                  <div class="stat"><span>Slip</span><span class="stat__track"><i class="stat__fill" style="--v:64%"></i></span><span class="stat__num">64</span></div>
+                  <div class="stat"><span>Memory</span><span class="stat__track"><i class="stat__fill" style="--v:90%"></i></span><span class="stat__num">90</span></div>
+                </div>
+                <div class="microprint" aria-hidden="true"><span>arcanum vault · series iv · foil no. c4-11-02 · arcanum vault · series iv · foil no. c4-11-02 · arcanum vault · series iv · foil no. c4-11-02 · arcanum vault · series iv · foil no. c4-11-02 · </span></div>
+              </div>
+              <div class="face back">
+                <svg viewBox="0 0 300 420" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><use href="#guilloche"/></svg>
+                <div class="back__plate"><svg viewBox="0 0 120 120" aria-hidden="true"><use href="#vaultcrest"/></svg></div>
+                <div class="back__word">Arcanum</div>
+                <div class="holo" aria-hidden="true"></div>
+                <div class="frame" aria-hidden="true"></div>
+              </div>
+              <div class="holo holo--fine" aria-hidden="true"></div>
+              <div class="holo" aria-hidden="true"></div>
+              <div class="glint" aria-hidden="true"></div>
+              <div class="frame" aria-hidden="true"></div><div class="frame__inner" aria-hidden="true"></div>
+            </div>
+          </div>
+        </article>
+
+        <article class="card" data-rarity="COMMON" data-serial="217 / 120" data-grade="PSA 7 · Near Mint"
+                 data-name="Cor Horologii, the Mender's Heart" style="--etch:98deg" tabindex="0" role="group"
+                 aria-label="Card three: Cor Horologii, the Mender's Heart, common">
+          <div class="card__tilt">
+            <div class="card__inner">
+              <div class="face front">
+                <div class="front__top">
+                  <span class="eyebrow">№ 217 · Plate III</span><span class="rarity">Common</span>
+                </div>
+                <div class="art">
+                  <div class="art__ground"></div>
+                  <svg class="art__sigil" viewBox="0 0 200 200" role="img" aria-label="Clockwork heart sigil">
+                    <g fill="none" stroke="url(#foil)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M100 162C58 132 42 108 42 86c0-19 15-32 30-32 13 0 21 8 28 18 7-10 15-18 28-18 15 0 30 13 30 32 0 22-16 46-58 76Z"
+                            fill="rgba(244,114,182,.12)"/>
+                      <circle cx="100" cy="98" r="30" stroke-width=".8" stroke-opacity=".8"/>
+                      <circle cx="100" cy="98" r="24" stroke-width="5" stroke-dasharray="3 6" stroke-opacity=".55"/>
+                      <path d="M100 98c0-9 9-13 15-7s4 19-7 23-25-3-27-17 8-29 24-31" stroke-width=".9"/>
+                      <path d="M100 68v-14M100 128v14M70 98H56M130 98h14" stroke-width=".9"/>
+                      <path d="M100 162v18" stroke-width="2"/>
+                      <circle cx="100" cy="186" r="6" stroke-width="1.1"/>
+                      <path d="M84 118l-10 10M116 118l10 10" stroke-width=".7" stroke-opacity=".6"/>
+                    </g>
+                    <g fill="rgba(253,230,138,.6)"><circle cx="100" cy="98" r="2.4"/></g>
+                  </svg>
+                  <div class="art__rule"></div>
+                </div>
+                <h3 class="title">Cor Horologii</h3>
+                <p class="sub">Automaton · Brass Choir · Salvage</p>
+                <p class="flavour">Wound once by a mender who is now dead; it has been apologising for ninety years.</p>
+                <div class="stats">
+                  <div class="stat"><span>Mainspring</span><span class="stat__track"><i class="stat__fill" style="--v:52%"></i></span><span class="stat__num">52</span></div>
+                  <div class="stat"><span>Tact</span><span class="stat__track"><i class="stat__fill" style="--v:38%"></i></span><span class="stat__num">38</span></div>
+                  <div class="stat"><span>Endurance</span><span class="stat__track"><i class="stat__fill" style="--v:77%"></i></span><span class="stat__num">77</span></div>
+                  <div class="stat"><span>Rust</span><span class="stat__track"><i class="stat__fill" style="--v:61%"></i></span><span class="stat__num">61</span></div>
+                </div>
+                <div class="microprint" aria-hidden="true"><span>arcanum vault · series iv · foil no. f2-08-19 · arcanum vault · series iv · foil no. f2-08-19 · arcanum vault · series iv · foil no. f2-08-19 · arcanum vault · series iv · foil no. f2-08-19 · </span></div>
+              </div>
+              <div class="face back">
+                <svg viewBox="0 0 300 420" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><use href="#guilloche"/></svg>
+                <div class="back__plate"><svg viewBox="0 0 120 120" aria-hidden="true"><use href="#vaultcrest"/></svg></div>
+                <div class="back__word">Arcanum</div>
+                <div class="holo" aria-hidden="true"></div>
+                <div class="frame" aria-hidden="true"></div>
+              </div>
+              <div class="holo holo--fine" aria-hidden="true"></div>
+              <div class="holo" aria-hidden="true"></div>
+              <div class="glint" aria-hidden="true"></div>
+              <div class="frame" aria-hidden="true"></div><div class="frame__inner" aria-hidden="true"></div>
+            </div>
+          </div>
+        </article>
+
+        <article class="card" data-rarity="MYTHIC" data-serial="007 / 120" data-grade="PSA 10 · Gem"
+                 data-name="Corvus on the Meridian Blade" style="--etch:74deg" tabindex="0" role="group"
+                 aria-label="Card four: Corvus on the Meridian Blade, mythic">
+          <div class="card__tilt">
+            <div class="card__inner">
+              <div class="face front">
+                <div class="front__top">
+                  <span class="eyebrow">№ 007 · Plate IV</span><span class="rarity">Mythic</span>
+                </div>
+                <div class="art">
+                  <div class="art__ground"></div>
+                  <svg class="art__sigil" viewBox="0 0 200 200" role="img" aria-label="Crow perched on a blade sigil">
+                    <g fill="none" stroke="url(#foil)" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M100 26 108 122H92Z" fill="url(#blade)"/>
+                      <path d="M100 30v92" stroke-width=".6" stroke-opacity=".7"/>
+                      <path d="M64 122h72v8H64z" fill="rgba(253,230,138,.22)"/>
+                      <path d="M96 130h8v30h-8z" fill="rgba(167,139,250,.2)"/>
+                      <circle cx="100" cy="168" r="7"/>
+                      <path d="M104 84c-8-6-6-18 4-22 12-5 24 2 26 12 2 12-4 24-16 30-14 7-30 4-38-6" stroke-width="1.2"/>
+                      <path d="M100 62 84 66l16 6" fill="rgba(253,230,138,.3)"/>
+                      <path d="M112 76c10 2 20 8 26 16" stroke-width=".8"/>
+                      <path d="M132 100l24 14-8 6-22-14" fill="rgba(34,211,238,.16)"/>
+                      <path d="M108 108l-2 14M120 108l4 14" stroke-width="1"/>
+                      <circle cx="104" cy="68" r="1.9" fill="rgba(253,230,138,.85)" stroke="none"/>
+                    </g>
+                  </svg>
+                  <div class="art__rule"></div>
+                </div>
+                <h3 class="title">Corvus on the Meridian Blade</h3>
+                <p class="sub">Corvid · Meridian Order · Reliquary</p>
+                <p class="flavour">The blade decides who is remembered. The bird decides in which tense.</p>
+                <div class="stats">
+                  <div class="stat"><span>Verdict</span><span class="stat__track"><i class="stat__fill" style="--v:96%"></i></span><span class="stat__num">96</span></div>
+                  <div class="stat"><span>Reach</span><span class="stat__track"><i class="stat__fill" style="--v:84%"></i></span><span class="stat__num">84</span></div>
+                  <div class="stat"><span>Patience</span><span class="stat__track"><i class="stat__fill" style="--v:99%"></i></span><span class="stat__num">99</span></div>
+                  <div class="stat"><span>Mercy</span><span class="stat__track"><i class="stat__fill" style="--v:14%"></i></span><span class="stat__num">14</span></div>
+                </div>
+                <div class="microprint" aria-hidden="true"><span>arcanum vault · series iv · foil no. b9-30-05 · arcanum vault · series iv · foil no. b9-30-05 · arcanum vault · series iv · foil no. b9-30-05 · arcanum vault · series iv · foil no. b9-30-05 · </span></div>
+              </div>
+              <div class="face back">
+                <svg viewBox="0 0 300 420" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><use href="#guilloche"/></svg>
+                <div class="back__plate"><svg viewBox="0 0 120 120" aria-hidden="true"><use href="#vaultcrest"/></svg></div>
+                <div class="back__word">Arcanum</div>
+                <div class="holo" aria-hidden="true"></div>
+                <div class="frame" aria-hidden="true"></div>
+              </div>
+              <div class="holo holo--fine" aria-hidden="true"></div>
+              <div class="holo" aria-hidden="true"></div>
+              <div class="glint" aria-hidden="true"></div>
+              <div class="frame" aria-hidden="true"></div><div class="frame__inner" aria-hidden="true"></div>
+            </div>
+          </div>
+        </article>
+
+      </div>
+    </section>
+
+    <div class="console">
+      <div class="pager">
+        <button class="arrow" id="prev" type="button" aria-label="Previous card">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+        </button>
+        <p class="pager__label" aria-live="polite"><b id="posLabel">01</b> / 04 · <span id="nameLabel">Nyx</span></p>
+        <button class="arrow" id="next" type="button" aria-label="Next card">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
+        </button>
+      </div>
+
+      <button class="btn-pack" id="openPack" type="button">Open pack</button>
+
+      <button class="arrow" id="flipBtn" type="button" aria-label="Flip focused card" aria-pressed="false"
+              style="width:auto;padding:0 1.1rem;border-radius:99px;font-family:var(--mono);font-size:.55rem;letter-spacing:.26em">
+        Flip
+      </button>
+    </div>
+
+    <section class="ledger" aria-label="Vault ledger">
+      <div><span>Print run</span><b>120 numbered</b></div>
+      <div><span>Foil stock</span><b>120µm rainbow</b></div>
+      <div><span>Engraving</span><b>Guilloché, 18-line rose</b></div>
+      <div><span>Mythic odds</span><b>1 : 120</b></div>
+      <div><span>Rare odds</span><b>1 : 14</b></div>
+      <div><span>Micro-print</span><b>3.6pt serial band</b></div>
+      <div><span>Pulls this session</span><b id="pullCount">0</b></div>
+      <div><span>Last pull</span><b id="lastPull">—</b></div>
+    </section>
+  </main>
+
+  <footer>
+    <span>Arcanum Vault · Series IV · Foil &amp; Guilloché</span>
+    <em>“Every card is a small window that only opens sideways.”</em>
+    <span>Arrow keys cycle · Click to flip</span>
+  </footer>
+</div>
+
+<div class="flash" id="flash" aria-hidden="true"></div>
+<div class="tray" id="tray" aria-hidden="true"></div>
+
+<script>
+(function(){
+  "use strict";
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var cards = Array.prototype.slice.call(document.querySelectorAll('.card'));
+  var stage = document.getElementById('stage');
+  var flash = document.getElementById('flash');
+  var tray  = document.getElementById('tray');
+  var hudSerial = document.getElementById('hudSerial');
+  var hudGrade  = document.getElementById('hudGrade');
+  var hudTier   = document.getElementById('hudTier');
+  var posLabel  = document.getElementById('posLabel');
+  var nameLabel = document.getElementById('nameLabel');
+  var pullCount = document.getElementById('pullCount');
+  var lastPull  = document.getElementById('lastPull');
+
+  var TIER_COLOR = {MYTHIC:'#fde68a', RARE:'#22d3ee', COMMON:'#9fb0c4'};
+  var focus = 0, pulling = false;
+
+  /* ---------- drifting dust ---------- */
+  (function dust(){
+    if (reduce) return;
+    var host = document.getElementById('dust'), frag = document.createDocumentFragment();
+    for (var i=0;i<46;i++){
+      var m = document.createElement('span');
+      m.className = 'mote';
+      var dur = 16 + Math.random()*26;
+      m.style.left = (Math.random()*100).toFixed(2) + 'vw';
+      m.style.bottom = (-10 - Math.random()*40) + 'vh';
+      m.style.setProperty('--dx', (Math.random()*14-7).toFixed(2) + 'vw');
+      m.style.setProperty('--o', (0.18 + Math.random()*0.5).toFixed(2));
+      m.style.animationDuration = dur.toFixed(2) + 's';
+      m.style.animationDelay = (-Math.random()*dur).toFixed(2) + 's';
+      if (Math.random() > .62){ m.style.background = 'rgba(167,139,250,.9)'; m.style.boxShadow = '0 0 7px rgba(167,139,250,.55)'; }
+      else if (Math.random() > .7){ m.style.background = 'rgba(34,211,238,.9)'; m.style.boxShadow = '0 0 7px rgba(34,211,238,.5)'; }
+      frag.appendChild(m);
+    }
+    host.appendChild(frag);
+  })();
+
+  /* ---------- fan layout ---------- */
+  function offsetOf(el){
+    var d = el._off || 0;
+    var w = window.innerWidth;
+    var isMobile = w < 720;
+    var spread = Math.max(.40, Math.min(1, (w - 40) / 1010));
+    var sign = d < 0 ? -1 : (d > 0 ? 1 : 0);
+    var a = Math.abs(d);
+    var x = isMobile ? sign * Math.min(a,2) * 26 : sign * (a * 148 - (a>1 ? 26 : 0)) * spread;
+    var z = -a * 210;
+    var r = isMobile ? sign * Math.min(a,2) * 6 : -sign * Math.min(a,3) * 15;
+    var s = 1 - Math.min(a,3) * 0.085;
+    var y = a * (isMobile ? 6 : 12);
+    return 'translate3d(' + x.toFixed(1) + 'px,' + y.toFixed(1) + 'px,' + z + 'px) rotateY(' + r.toFixed(1) + 'deg) scale(' + s.toFixed(3) + ')';
+  }
+
+  function layout(){
+    cards.forEach(function(el, i){
+      var d = i - focus;
+      /* shortest way round the ring so 4 cards fan evenly */
+      if (d > cards.length/2) d -= cards.length;
+      if (d < -cards.length/2) d += cards.length;
+      el._off = d;
+      var state = d === 0 ? 'focus' : (Math.abs(d) === 1 ? 'near' : 'far');
+      el.dataset.state = state;
+      el.classList.toggle('is-focused', d === 0);
+      el.setAttribute('aria-hidden', d === 0 ? 'false' : 'true');
+      Array.prototype.forEach.call(el.querySelectorAll('[tabindex]'), function(t){
+        t.tabIndex = d === 0 ? 0 : -1;
+      });
+      el.style.transform = offsetOf(el);
+      el.style.setProperty('--veil', d === 0 ? '0' : String(Math.min(.30 + Math.min(Math.abs(d),2)*.17, .62)));
+    });
+    var c = cards[focus];
+    posLabel.textContent = ('0' + (focus+1)).slice(-2);
+    nameLabel.textContent = c.dataset.name.split(',')[0];
+    hudSerial.textContent = c.dataset.serial;
+    hudGrade.textContent  = c.dataset.grade;
+    hudTier.textContent   = c.dataset.rarity.charAt(0) + c.dataset.rarity.slice(1).toLowerCase();
+  }
+
+  function go(delta){
+    focus = (focus + delta + cards.length) % cards.length;
+    layout();
+  }
+
+  /* ---------- injected per-face layers ---------- */
+  cards.forEach(function(el){
+    Array.prototype.forEach.call(el.querySelectorAll('.face'), function(f){
+      f.insertAdjacentHTML('beforeend','<div class="veil" aria-hidden="true"></div>');
+    });
+    var front = el.querySelector('.face.front');
+    if (front) front.insertAdjacentHTML('beforeend','<div class="shine" aria-hidden="true"></div>');
+  });
+
+  /* ---------- pointer tilt + holographic sweep ---------- */
+  var tilt = {x:0, y:0, tx:0, ty:0, lift:0, tlift:0, spin:0};
+  var pointerInside = false;
+
+  function onMove(e){
+    var f = cards[focus];
+    var r = f.getBoundingClientRect();
+    var nx = ((e.clientX - (r.left + r.width/2)) / (r.width/2));
+    var ny = ((e.clientY - (r.top + r.height/2)) / (r.height/2));
+    tilt.tx = Math.max(-1.35, Math.min(1.35, nx));
+    tilt.ty = Math.max(-1.35, Math.min(1.35, ny));
+    tilt.tlift = Math.min(1, Math.hypot(nx, ny) * .8);
+    pointerInside = true;
+  }
+  function onLeave(){ tilt.tx = 0; tilt.ty = 0; tilt.tlift = 0; pointerInside = false; }
+
+  window.addEventListener('pointermove', onMove, {passive:true});
+  document.addEventListener('pointerleave', onLeave);
+  document.addEventListener('blur', onLeave);
+
+  function backOut(p){ var c = 1.9; var q = p - 1; return 1 + c*q*q*q + (c-1.05)*q*q; }
+
+  var deal = null;
+  function startDeal(el){
+    deal = {t0: performance.now(), dur: 900, el: el};
+    el.classList.add('is-dealing');
+  }
+
+  function frame(now){
+    /* ease the tilt toward the pointer */
+    var k = reduce ? 1 : .11;
+    tilt.x += (tilt.tx - tilt.x) * k;
+    tilt.y += (tilt.ty - tilt.y) * k;
+    tilt.lift += (tilt.tlift - tilt.lift) * k;
+    tilt.spin += pointerInside ? 1.9 : .5;
+
+    var f = cards[focus];
+    var t = f.querySelector('.card__tilt');
+    var dx = 0, dy = 0, dz = 0, rot = 0, sc = 1;
+
+    if (deal){
+      var p = (now - deal.t0) / deal.dur;
+      if (p >= 1){
+        deal.el.classList.remove('is-dealing');
+        deal = null;
+      } else {
+        var q = 1 - backOut(Math.max(0, p));
+        dy = q * (window.innerHeight * .42);
+        dz = q * -420;
+        rot = q * -13;
+        sc = 1 - q * .18;
+      }
+    }
+
+    var tform = '';
+    if (dy || dz || rot || sc !== 1){
+      tform += 'translate3d(' + dx.toFixed(1) + 'px,' + dy.toFixed(1) + 'px,' + dz.toFixed(1) + 'px) rotateZ(' + rot.toFixed(2) + 'deg) scale(' + sc.toFixed(3) + ') ';
+    }
+    tform += 'rotateX(' + (-tilt.y * 10).toFixed(2) + 'deg) rotateY(' + (tilt.x * 13).toFixed(2) + 'deg)';
+    t.style.transform = tform;
+
+    var ang = (Math.atan2(tilt.y, tilt.x) * 180 / Math.PI) || 0;
+    f.style.setProperty('--gx', (tilt.x * 22).toFixed(1) + '%');
+    f.style.setProperty('--gy', (tilt.y * 22).toFixed(1) + '%');
+    f.style.setProperty('--sweep', (128 + tilt.x * 62).toFixed(1) + 'deg');
+    f.style.setProperty('--tiltA', ang.toFixed(1) + 'deg');
+    f.style.setProperty('--lift', tilt.lift.toFixed(3));
+    f.style.setProperty('--spin', tilt.spin.toFixed(1));
+
+    requestAnimationFrame(frame);
+  }
+
+  /* ---------- flip ---------- */
+  function flip(el, force){
+    if (!el) return;
+    var to = typeof force === 'boolean' ? force : !el.classList.contains('is-flipped');
+    el.classList.toggle('is-flipped', to);
+    document.getElementById('flipBtn').setAttribute('aria-pressed', String(to && el === cards[focus]));
+  }
+
+  /* ---------- focus + click ---------- */
+  var downAt = null;
+  cards.forEach(function(el, i){
+    el.addEventListener('pointerdown', function(e){ downAt = {x:e.clientX, y:e.clientY, i:i}; });
+    el.addEventListener('click', function(e){
+      var moved = downAt && Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) > 9;
+      downAt = null;
+      if (moved) return;
+      if (i !== focus){ focus = i; layout(); flip(cards[focus], false); }
+      else { flip(el); }
+    });
+    el.addEventListener('keydown', function(e){
+      if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); if (i === focus) flip(el); }
+    });
+  });
+
+  document.getElementById('prev').addEventListener('click', function(){ go(-1); flip(cards[focus], false); });
+  document.getElementById('next').addEventListener('click', function(){ go(1);  flip(cards[focus], false); });
+  document.getElementById('flipBtn').addEventListener('click', function(){ flip(cards[focus]); });
+
+  document.addEventListener('keydown', function(e){
+    switch (e.key){
+      case 'ArrowRight': case 'ArrowDown': e.preventDefault(); go(1);  flip(cards[focus], false); break;
+      case 'ArrowLeft':  case 'ArrowUp':   e.preventDefault(); go(-1); flip(cards[focus], false); break;
+      case 'Home': e.preventDefault(); focus = 0; layout(); break;
+      case 'End':  e.preventDefault(); focus = cards.length - 1; layout(); break;
+      case 'f': case 'F': flip(cards[focus]); break;
+      case 'o': case 'O': pull(); break;
+    }
+  });
+
+  /* ---------- pack opening ---------- */
+  function pull(){
+    if (pulling) return;
+    pulling = true;
+    var roll = Math.random();
+    var tier = roll < .18 ? 'MYTHIC' : (roll < .58 ? 'RARE' : 'COMMON');
+    var pool = cards.map(function(c, i){ return {c:c, i:i}; }).filter(function(o){
+      return o.c.dataset.rarity === tier;
+    });
+    var pick = pool[Math.floor(Math.random() * pool.length)] || {c:cards[0], i:0};
+    focus = pick.i;
+    layout();
+    flip(cards[focus], false);
+    startDeal(pick.c);
+
+    var color = TIER_COLOR[tier] || '#ffffff';
+    flash.style.setProperty('--fc', color);
+    flash.classList.remove('on');
+    void flash.offsetWidth;
+    flash.classList.add('on');
+
+    var n = (parseInt(pullCount.textContent, 10) || 0) + 1;
+    pullCount.textContent = String(n);
+    lastPull.textContent = pick.c.dataset.name.split(',')[0] + ' · ' + tier;
+
+    var chip = document.createElement('div');
+    chip.className = 'tray__chip';
+    chip.style.setProperty('--tc', color);
+    chip.textContent = 'Pulled · ' + pick.c.dataset.name.split(',')[0];
+    tray.appendChild(chip);
+    while (tray.children.length > 5) tray.removeChild(tray.firstChild);
+    setTimeout(function(){ if (chip.parentNode) chip.parentNode.removeChild(chip); }, 7200);
+
+    setTimeout(function(){ pulling = false; }, reduce ? 260 : 1050);
+  }
+  document.getElementById('openPack').addEventListener('click', pull);
+
+  /* ---------- boot ---------- */
+  var rt;
+  window.addEventListener('resize', function(){ clearTimeout(rt); rt = setTimeout(layout, 140); });
+  layout();
+  requestAnimationFrame(frame);
+  if (!reduce) startDeal(cards[0]);
+})();
+</script>
+</body>
+</html>
+
+
+
+
+

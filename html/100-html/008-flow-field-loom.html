@@ -1,0 +1,1188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<meta name="description" content="A generative flow-field weaving studio: hand-written value-noise fBm field, thousands of accumulating translucent strokes, four weave modes and four palettes.">
+<title>Flow Field Loom — Generative Weaving Studio Nº 8</title>
+<style>
+/* ============================================================
+   FLOW FIELD LOOM — generative weaving studio
+   Ground (default) #0b0d12 · ink set per palette · strip #0d0f14
+   ============================================================ */
+
+:root{
+  --bg:#0b0d12;
+  --ink:#e9e6dd;
+  --ink-inv:#0b0d12;
+  --dim:rgba(233,230,221,.56);
+  --faint:rgba(233,230,221,.3);
+  --hair:rgba(233,230,221,.16);
+  --hair2:rgba(233,230,221,.3);
+  --accent:#c8a24a;
+  --panel:rgba(13,15,20,.72);
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Courier New",monospace;
+  --disp:"Futura","Avenir Next","Century Gothic","Helvetica Neue",system-ui,sans-serif;
+  --serif:Didot,"Bodoni MT",Baskerville,Palatino,Georgia,serif;
+  --pad:clamp(10px,1.5vw,20px);
+  --strip-h:clamp(58px,7.4vh,76px);
+}
+
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0;
+  min-height:100vh;
+  font-family:var(--mono);
+  color:var(--ink);
+  background:var(--bg);
+  overflow:hidden;
+  overscroll-behavior:none;
+  -webkit-font-smoothing:antialiased;
+  transition:background-color .9s linear;
+}
+
+/* ---------- canvas ---------- */
+
+#loom{
+  position:fixed;
+  inset:0;
+  display:block;
+  width:100%;
+  height:100%;
+  z-index:0;
+  touch-action:none;
+  cursor:crosshair;
+}
+
+/* fibre texture + vignette laid over the weave */
+.veil{
+  position:fixed;
+  inset:0;
+  z-index:1;
+  pointer-events:none;
+  mix-blend-mode:soft-light;
+  opacity:.55;
+  background-image:
+    repeating-linear-gradient(90deg, rgba(255,255,255,.05) 0 1px, rgba(0,0,0,.05) 1px 2px, rgba(0,0,0,0) 2px 4px),
+    repeating-linear-gradient(0deg, rgba(255,255,255,.035) 0 1px, rgba(0,0,0,.045) 1px 2px, rgba(0,0,0,0) 2px 5px),
+    repeating-linear-gradient(45deg, rgba(255,255,255,.022) 0 1px, rgba(0,0,0,0) 1px 7px);
+}
+.vig{
+  position:fixed;
+  inset:0;
+  z-index:1;
+  pointer-events:none;
+  background:radial-gradient(126% 96% at 50% 44%, rgba(0,0,0,0) 46%, rgba(0,0,0,.42) 100%);
+}
+
+.sr-only{
+  position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;
+  clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap;border:0;
+}
+
+/* ---------- masthead ---------- */
+
+.mark{
+  position:fixed;
+  top:var(--pad);
+  left:var(--pad);
+  z-index:5;
+  max-width:min(46vw,420px);
+  pointer-events:none;
+}
+.mark h1{
+  margin:0;
+  font-family:var(--disp);
+  font-weight:700;
+  font-size:clamp(15px,2.05vw,30px);
+  letter-spacing:.2em;
+  line-height:1;
+  text-transform:uppercase;
+  color:var(--ink);
+  text-shadow:0 1px 22px rgba(0,0,0,.6);
+}
+.mark h1 em{
+  font-family:var(--serif);
+  font-style:italic;
+  font-weight:400;
+  letter-spacing:.04em;
+  text-transform:none;
+  color:var(--accent);
+}
+.mark .sub{
+  margin:.7em 0 0;
+  font-size:clamp(8.5px,.72vw,10.5px);
+  letter-spacing:.24em;
+  text-transform:uppercase;
+  color:var(--dim);
+}
+.mark .sub b{color:var(--ink);font-weight:400}
+
+/* corner rules that frame the "loom" */
+.frame{position:fixed;inset:clamp(8px,1.1vw,16px);z-index:4;pointer-events:none}
+.frame i{position:absolute;width:clamp(14px,1.7vw,26px);height:clamp(14px,1.7vw,26px);border:1px solid var(--hair2)}
+.frame i:nth-child(1){top:0;left:0;border-right:0;border-bottom:0}
+.frame i:nth-child(2){top:0;right:0;border-left:0;border-bottom:0}
+.frame i:nth-child(3){bottom:0;left:0;border-right:0;border-top:0}
+.frame i:nth-child(4){bottom:0;right:0;border-left:0;border-top:0}
+
+/* ---------- specimen wall label ---------- */
+
+.specimen{
+  position:fixed;
+  top:var(--pad);
+  right:var(--pad);
+  z-index:6;
+  width:min(34vw,268px);
+  padding:clamp(9px,1vw,14px) clamp(10px,1.2vw,16px);
+  background:var(--panel);
+  border:1px solid var(--hair);
+  border-top:2px solid var(--accent);
+  backdrop-filter:blur(7px) saturate(120%);
+  -webkit-backdrop-filter:blur(7px) saturate(120%);
+  font-size:clamp(8.4px,.68vw,10px);
+  line-height:1.66;
+  letter-spacing:.06em;
+}
+.specimen .ttl{
+  font-family:var(--serif);
+  font-size:clamp(11px,1.02vw,15px);
+  letter-spacing:.02em;
+  line-height:1.25;
+  margin:0 0 .5em;
+  color:var(--ink);
+}
+.specimen dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:.18em .8em}
+.specimen dt{color:var(--faint);text-transform:uppercase;letter-spacing:.16em;font-size:.86em;padding-top:.15em}
+.specimen dd{margin:0;color:var(--dim)}
+.specimen dd b{color:var(--ink);font-weight:400}
+.specimen .foot{
+  margin:.75em 0 0;
+  padding-top:.6em;
+  border-top:1px solid var(--hair);
+  color:var(--faint);
+  letter-spacing:.14em;
+  text-transform:uppercase;
+}
+
+/* ---------- floating control strip ---------- */
+
+.strip{
+  position:fixed;
+  left:50%;
+  bottom:clamp(12px,2vh,26px);
+  transform:translateX(-50%);
+  z-index:8;
+  display:flex;
+  align-items:stretch;
+  max-width:calc(100vw - 2 * var(--pad));
+  background:var(--panel);
+  border:1px solid var(--hair);
+  backdrop-filter:blur(9px) saturate(130%);
+  -webkit-backdrop-filter:blur(9px) saturate(130%);
+  box-shadow:0 22px 60px -30px rgba(0,0,0,.9);
+}
+.cell{
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  gap:6px;
+  padding:9px clamp(10px,1.05vw,15px) 10px;
+  border-left:1px solid var(--hair);
+  min-width:0;
+}
+.cell:first-child{border-left:0}
+.cell > .lbl{
+  display:flex;
+  align-items:baseline;
+  gap:7px;
+  font-size:8.6px;
+  letter-spacing:.2em;
+  text-transform:uppercase;
+  color:var(--faint);
+  white-space:nowrap;
+}
+.cell > .lbl .n{color:var(--accent);font-size:9.4px;letter-spacing:.08em}
+.cell > .lbl .v{margin-left:auto;color:var(--ink);letter-spacing:.1em}
+
+/* sliders */
+.knob{
+  -webkit-appearance:none;
+  appearance:none;
+  width:clamp(74px,8.4vw,132px);
+  height:14px;
+  background:transparent;
+  cursor:ew-resize;
+  display:block;
+}
+.knob::-webkit-slider-runnable-track{
+  height:1px;
+  background:var(--hair2);
+}
+.knob::-webkit-slider-thumb{
+  -webkit-appearance:none;
+  width:9px;height:9px;
+  margin-top:-4px;
+  border-radius:50%;
+  background:var(--ink);
+  border:0;
+  box-shadow:0 0 0 3px rgba(13,15,20,.7);
+  transition:background-color .18s linear,transform .18s ease-out;
+}
+.knob:hover::-webkit-slider-thumb{background:var(--accent);transform:scale(1.22)}
+.knob::-moz-range-track{height:1px;background:var(--hair2)}
+.knob::-moz-range-thumb{
+  width:9px;height:9px;border:0;border-radius:50%;background:var(--ink);
+}
+.knob:hover::-moz-range-thumb{background:var(--accent)}
+.knob:focus-visible{outline:1px solid var(--accent);outline-offset:3px}
+
+/* segmented controls */
+.seg{display:flex;gap:0;border:1px solid var(--hair2)}
+.seg button{
+  font-family:var(--mono);
+  font-size:8.8px;
+  letter-spacing:.16em;
+  text-transform:uppercase;
+  color:var(--dim);
+  background:transparent;
+  border:0;
+  border-left:1px solid var(--hair);
+  padding:5px clamp(6px,.7vw,10px);
+  cursor:pointer;
+  white-space:nowrap;
+  transition:color .16s linear,background-color .16s linear;
+}
+.seg button:first-child{border-left:0}
+.seg button:hover{color:var(--ink);background:rgba(233,230,221,.07)}
+.seg button[aria-pressed="true"]{background:var(--ink);color:#0b0d12}
+.seg button:focus-visible{outline:1px solid var(--accent);outline-offset:1px}
+
+/* palette presets */
+.pal{display:flex;gap:8px;align-items:center}
+.chip{
+  position:relative;
+  padding:0;
+  border:1px solid var(--hair2);
+  background:transparent;
+  cursor:pointer;
+  width:clamp(30px,3.1vw,42px);
+  height:22px;
+  overflow:hidden;
+  transition:transform .2s ease-out,border-color .2s linear;
+}
+.chip .sw{position:absolute;inset:0}
+.chip .sw i{position:absolute;top:0;bottom:0;display:block}
+.chip:hover{transform:translateY(-2px);border-color:var(--ink)}
+.chip[aria-pressed="true"]{border-color:var(--accent)}
+.chip[aria-pressed="true"]::after{
+  content:"";
+  position:absolute;left:0;right:0;bottom:0;height:2px;background:var(--accent);
+}
+.chip:focus-visible{outline:1px solid var(--accent);outline-offset:2px}
+.chip .name{
+  position:absolute;
+  bottom:calc(100% + 8px);
+  left:50%;
+  transform:translate(-50%,3px);
+  padding:3px 6px;
+  background:var(--ink);
+  color:#0b0d12;
+  font-size:8.4px;
+  letter-spacing:.16em;
+  text-transform:uppercase;
+  white-space:nowrap;
+  opacity:0;
+  pointer-events:none;
+  transition:opacity .18s linear,transform .18s ease-out;
+}
+.chip:hover .name,.chip:focus-visible .name{opacity:1;transform:translate(-50%,0)}
+
+/* action buttons */
+.acts{display:flex;gap:6px;align-items:center}
+.btn{
+  font-family:var(--mono);
+  font-size:9px;
+  letter-spacing:.2em;
+  text-transform:uppercase;
+  color:var(--ink);
+  background:transparent;
+  border:1px solid var(--hair2);
+  padding:7px clamp(8px,.9vw,13px);
+  cursor:pointer;
+  white-space:nowrap;
+  transition:background-color .16s linear,color .16s linear,border-color .16s linear;
+}
+.btn:hover{background:var(--ink);color:#0b0d12}
+.btn[aria-pressed="true"]{background:var(--accent);color:#12130f;border-color:var(--accent)}
+.btn:focus-visible{outline:1px solid var(--accent);outline-offset:2px}
+
+/* seed readout */
+.seed{
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  gap:3px;
+  padding:9px clamp(10px,1.05vw,15px);
+  border-left:1px solid var(--hair);
+  font-size:8.6px;
+  letter-spacing:.2em;
+  text-transform:uppercase;
+  color:var(--faint);
+  white-space:nowrap;
+}
+.seed b{
+  font-size:clamp(11px,1.05vw,14px);
+  letter-spacing:.14em;
+  color:var(--accent);
+  font-weight:400;
+}
+.seed .threads{letter-spacing:.1em;color:var(--dim)}
+
+/* hint line */
+.hint{
+  position:fixed;
+  left:50%;
+  bottom:calc(clamp(12px,2vh,26px) + var(--strip-h) + 12px);
+  transform:translateX(-50%);
+  z-index:7;
+  margin:0;
+  font-size:8.6px;
+  letter-spacing:.22em;
+  text-transform:uppercase;
+  color:var(--faint);
+  text-align:center;
+  pointer-events:none;
+  transition:opacity .5s linear;
+}
+.hint.gone{opacity:0}
+
+/* toast */
+.toast{
+  position:fixed;
+  left:50%;
+  top:calc(var(--pad) + 4px);
+  transform:translate(-50%,-6px);
+  z-index:9;
+  padding:7px 14px;
+  background:var(--ink);
+  color:#0b0d12;
+  font-size:9px;
+  letter-spacing:.2em;
+  text-transform:uppercase;
+  opacity:0;
+  pointer-events:none;
+  transition:opacity .24s linear,transform .24s ease-out;
+  max-width:min(78vw,460px);
+  text-align:center;
+}
+.toast.is-on{opacity:1;transform:translate(-50%,0)}
+
+/* DENIM lays its weave on a light ground: JS flips --ink/--ink-inv so that
+   anything painted on top of --ink stays legible on both grounds. */
+.seg button[aria-pressed="true"]{color:var(--ink-inv)}
+.btn:hover,.btn[aria-pressed="true"]{color:var(--ink-inv)}
+.chip .name{color:var(--ink-inv)}
+.toast{color:var(--ink-inv)}
+
+/* ---------- responsive ---------- */
+
+@media (max-width:1120px){
+  .specimen{width:min(44vw,238px)}
+  .mark{max-width:52vw}
+}
+
+@media (max-width:900px){
+  .strip{
+    left:var(--pad);
+    right:var(--pad);
+    transform:none;
+    max-width:none;
+    flex-wrap:wrap;
+    max-height:46vh;
+    overflow:auto;
+  }
+  .cell{flex:1 1 42%;border-left:1px solid var(--hair)}
+  .cell:first-child,.cell:nth-child(3){border-left:0}
+  .cell.c-pal,.cell.c-acts,.cell.c-seed{flex:1 1 100%}
+  .hint{display:none}
+  .toast{top:auto;bottom:calc(var(--pad) + 4px)}
+}
+
+@media (max-width:680px){
+  .specimen{
+    position:fixed;
+    top:auto;
+    bottom:auto;
+    left:var(--pad);
+    right:var(--pad);
+    top:calc(var(--pad) + clamp(56px,9vw,74px));
+    width:auto;
+    font-size:8.6px;
+  }
+  .specimen dl{grid-template-columns:auto 1fr}
+  .mark{max-width:none}
+  .cell{flex:1 1 100%;border-left:0;border-top:1px solid var(--hair)}
+  .cell:first-child{border-top:0}
+  .knob{width:100%}
+}
+
+@media (max-width:420px){
+  .specimen dd,.specimen dt{letter-spacing:.04em}
+  .seg button{padding:6px 7px;letter-spacing:.1em}
+}
+
+@media (min-width:1900px){
+  :root{--pad:26px}
+  .strip{bottom:34px}
+  .specimen{font-size:10.5px}
+}
+
+@media (prefers-reduced-motion:reduce){
+  body{transition:none}
+  .chip,.btn,.seg button,.knob::-webkit-slider-thumb,.chip .name,.toast,.hint{transition:none}
+}
+</style>
+</head>
+<body>
+<canvas id="loom" role="img" aria-label="Flow field weave canvas"></canvas>
+<div class="veil" aria-hidden="true"></div>
+<div class="vig" aria-hidden="true"></div>
+<div class="frame" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+
+<header class="mark">
+  <h1>Flow Field <em>loom</em></h1>
+  <p class="sub">Generative weaving studio · <b>Nº 8</b> · hand-rolled fBm curl field</p>
+</header>
+
+<aside class="specimen" aria-label="Wall label">
+  <p class="ttl">Untitled Weave Nº 8 —<br>accumulation on a drifting field</p>
+  <dl>
+    <dt>Technique</dt>
+    <dd>translucent thread laid along a <b>value-noise fBm</b> curl field, accumulated in place, never cleared</dd>
+    <dt>Symmetry</dt>
+    <dd>no mirror axis; <b id="m-sym">two-fold antisymmetry</b> in the curl term, translational drift along the weft</dd>
+    <dt>Structure</dt>
+    <dd><b id="m-mode">Silk</b> weave · <b id="m-pal">Indigo Dusk</b> ground · α <b id="m-alpha">0.14</b></dd>
+    <dt>Field</dt>
+    <dd>4 octaves · λ <b id="m-lam">180 px</b> · curl <b id="m-curl">0.62</b></dd>
+    <dt>Threads</dt>
+    <dd><b id="m-threads">0</b> live · <b id="m-strokes">0</b> strokes laid</dd>
+    <dt>Dimensions</dt>
+    <dd>single panel, <b id="m-dims">— × — px</b> at <b id="m-dpr">1×</b></dd>
+  </dl>
+  <p class="foot">Seed <span id="m-seed">—</span> · woven in-browser · no external assets</p>
+</aside>
+
+<p class="hint" id="hint">Draw the pointer across the cloth to part the threads · 1–4 palette · M weave mode · R re-warp · Space pause</p>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<div class="strip" role="group" aria-label="Loom controls">
+  <div class="cell">
+    <span class="lbl"><span class="n">01</span>Field scale<span class="v" id="v-scale">180 px</span></span>
+    <input class="knob" id="s-scale" type="range" min="40" max="520" step="2" value="180" aria-label="Field scale, pixels per noise cell">
+  </div>
+  <div class="cell">
+    <span class="lbl"><span class="n">02</span>Curl<span class="v" id="v-curl">0.62</span></span>
+    <input class="knob" id="s-curl" type="range" min="0" max="1" step="0.01" value="0.62" aria-label="Curl of the field">
+  </div>
+  <div class="cell">
+    <span class="lbl"><span class="n">03</span>Stroke alpha<span class="v" id="v-alpha">0.14</span></span>
+    <input class="knob" id="s-alpha" type="range" min="0.02" max="0.60" step="0.01" value="0.14" aria-label="Stroke alpha">
+  </div>
+  <div class="cell">
+    <span class="lbl"><span class="n">04</span>Density<span class="v" id="v-density">800</span></span>
+    <input class="knob" id="s-density" type="range" min="120" max="2400" step="20" value="800" aria-label="Thread density">
+  </div>
+  <div class="cell">
+    <span class="lbl"><span class="n">05</span>Weave mode</span>
+    <div class="seg" id="seg-mode" role="group" aria-label="Weave mode">
+      <button type="button" data-mode="silk" aria-pressed="true">Silk</button>
+      <button type="button" data-mode="twill" aria-pressed="false">Twill</button>
+      <button type="button" data-mode="denim" aria-pressed="false">Denim</button>
+    </div>
+  </div>
+  <div class="cell c-pal">
+    <span class="lbl"><span class="n">06</span>Palette<span class="v" id="v-pal">Indigo Dusk</span></span>
+    <div class="pal" id="pal-row" role="group" aria-label="Palette preset"></div>
+  </div>
+  <div class="cell c-acts">
+    <span class="lbl"><span class="n">07</span>Loom</span>
+    <div class="acts">
+      <button type="button" class="btn" id="btn-warp">Re-warp</button>
+      <button type="button" class="btn" id="btn-pause" aria-pressed="false">Pause</button>
+    </div>
+  </div>
+  <div class="cell seed c-seed">
+    <span>Seed</span>
+    <b id="v-seed">—</b>
+    <span class="threads" id="v-threads">0 threads · 0 strokes</span>
+  </div>
+</div>
+
+<noscript><p class="sr-only">This studio needs JavaScript to weave; without it the loom stays empty.</p></noscript>
+
+<script>
+(function(){
+'use strict';
+
+/* ---------- 1. tables: palettes (ground + hue bands) and weave modes ---------- */
+
+var PALETTES = [
+  { name:'Indigo Dusk', ground:'#0b0d12', bands:[[228,16],[268,20]], sat:[44,88], lig:[36,74], ash:.14, accent:'#c8a24a' },
+  { name:'Ash & Ember', ground:'#100e0d', bands:[[13,12],[38,15]],   sat:[40,92], lig:[34,70], ash:.24, accent:'#e2743a' },
+  { name:'Sea Glass',   ground:'#08130f', bands:[[162,22],[196,20]], sat:[28,72], lig:[42,78], ash:.12, accent:'#84d6bd' },
+  { name:'Kobo',        ground:'#0d0e12', bands:[[344,14],[42,16]],  sat:[34,82], lig:[32,68], ash:.18, accent:'#d8b26a' }
+];
+
+/* each mode genuinely re-sets stroke length, jitter, composite and ground */
+var MODES = {
+  silk : { label:'Silk',  speed:2.6, sub:2, life:[70,190], width:[0.5,1.2], alpha:0.34, jitter:0.5,
+           comp:'screen',      dash:[],   biasK:0.20, biasVecs:[[0,1],[1,0]],        light:false },
+  twill: { label:'Twill', speed:1.25, sub:1, life:[7,18],  width:[0.7,1.6], alpha:0.90, jitter:1.15,
+           comp:'overlay',     dash:[],   biasK:0.55, biasVecs:[[0.7071,0.7071],[0.7071,-0.7071]], light:false },
+  denim: { label:'Denim', speed:1.8,  sub:1, life:[10,30], width:[1.2,2.6], alpha:0.85, jitter:1.9,
+           comp:'source-over', dash:[6,9], biasK:0.42, biasVecs:[[0.8,0.6],[0.8,-0.6]], light:true }
+};
+var MODE_ORDER = ['silk','twill','denim'];
+
+var st = {
+  scale:180, curl:0.62, alpha:0.14, density:800,
+  mode:'silk', pal:0, seed:0,
+  time:120, strokes:0, fadeMul:1, wipe:0, paused:false
+};
+
+/* ---------- 2. deterministic pseudo-random + hand-written 2D value noise ---------- */
+
+function mulberry32(a){
+  return function(){
+    a = (a + 0x6D2B79F5) | 0;
+    var t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) * 2.3283064365386963e-10;
+  };
+}
+var rng = mulberry32(1);
+var nseed = 0, OCT = 4;
+
+/* integer lattice hash -> [0,1) */
+function h2(ix, iy, k){
+  var h = Math.imul(ix | 0, 374761393) + Math.imul(iy | 0, 668265263) + Math.imul(k | 0, 1442695041);
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  h = h ^ (h >>> 16);
+  return (h >>> 0) * 2.3283064365386963e-10;
+}
+/* bilinear value noise on that lattice */
+function vn(x, y){
+  var ix = Math.floor(x), iy = Math.floor(y);
+  var fx = x - ix, fy = y - iy;
+  var u = fx * fx * (3 - 2 * fx), v = fy * fy * (3 - 2 * fy);
+  var a = h2(ix, iy, nseed), b = h2(ix + 1, iy, nseed);
+  var c = h2(ix, iy + 1, nseed), d = h2(ix + 1, iy + 1, nseed);
+  var ab = a + (b - a) * u, cd = c + (d - c) * u;
+  return ab + (cd - ab) * v;
+}
+/* fractal Brownian motion: 4 octaves, lacunarity 2.03, gain 0.5 */
+function fbm(x, y){
+  var s = 0, n = 0, amp = 0.5, f = 1;
+  for (var o = 0; o < OCT; o++){
+    s += amp * vn(x * f + o * 17.31, y * f - o * 11.17);
+    n += amp; amp *= 0.5; f *= 2.03;
+  }
+  return s / n;
+}
+
+/* ---------- 3. canvas, devicePixelRatio handling, palette theming ---------- */
+
+var canvas = document.getElementById('loom');
+var ctx = canvas.getContext('2d', {alpha:false});
+var root = document.documentElement;
+var schemeMeta = document.querySelector('meta[name="color-scheme"]');
+var W = 0, H = 0, DPR = 1, GND = '#0b0d12', ACCENT = '#c8a24a';
+
+function hexRgb(hex){
+  var v = parseInt(hex.slice(1), 16);
+  return [(v >> 16) & 255, (v >> 8) & 255, v & 255];
+}
+function rgba(hex, a){
+  var c = hexRgb(hex);
+  return 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',' + a + ')';
+}
+function shade(hex, k){
+  var c = hexRgb(hex);
+  return '#' + [c[0], c[1], c[2]].map(function(v){
+    var s = Math.max(0, Math.min(255, Math.round(v * k))).toString(16);
+    return s.length < 2 ? '0' + s : s;
+  }).join('');
+}
+function hsl2hex(h, s, l){
+  s /= 100; l /= 100;
+  var c = (1 - Math.abs(2 * l - 1)) * s;
+  var x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+  var m = l - c / 2, r = 0, g = 0, b = 0;
+  if (h < 60){ r = c; g = x; } else if (h < 120){ r = x; g = c; }
+  else if (h < 180){ g = c; b = x; } else if (h < 240){ g = x; b = c; }
+  else if (h < 300){ r = x; b = c; } else { r = c; b = x; }
+  var t = [r, g, b].map(function(v){
+    var s2 = Math.round((v + m) * 255).toString(16);
+    return s2.length < 2 ? '0' + s2 : s2;
+  });
+  return '#' + t.join('');
+}
+
+/* push the palette (and the light ground of DENIM) into the CSS custom properties */
+function applyTheme(){
+  var P = PALETTES[st.pal], light = MODES[st.mode].light;
+  GND = light ? hsl2hex(P.bands[0][0], 14, 87) : P.ground;
+  ACCENT = light ? shade(P.accent, 0.62) : P.accent;
+  var ink = light ? '#171a20' : '#e9e6dd';
+  var s = root.style;
+  s.setProperty('--bg', GND);
+  s.setProperty('--ink', ink);
+  s.setProperty('--ink-inv', light ? '#f3f1e9' : '#0b0d12');
+  s.setProperty('--dim', rgba(ink, .58));
+  s.setProperty('--faint', rgba(ink, light ? .46 : .34));
+  s.setProperty('--hair', rgba(ink, .17));
+  s.setProperty('--hair2', rgba(ink, .34));
+  s.setProperty('--accent', ACCENT);
+  s.setProperty('--panel', light ? 'rgba(246,244,238,.74)' : 'rgba(13,15,20,.72)');
+  if (schemeMeta) schemeMeta.content = light ? 'light' : 'dark';
+}
+
+function paintGround(a){
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = GND;
+  if (a === undefined || a >= 1) ctx.fillRect(0, 0, W, H);
+  else { ctx.globalAlpha = a; ctx.fillRect(0, 0, W, H); ctx.globalAlpha = 1; }
+}
+
+function applyDash(){
+  ctx.setLineDash(MODES[st.mode].dash);
+}
+
+/* DPR-correct resize: snapshot the accumulated cloth, re-make the backing
+   store at the new ratio, scale the context, and stretch the old weave back. */
+function resize(){
+  var w = Math.max(1, window.innerWidth), h = Math.max(1, window.innerHeight);
+  var dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+  var snap = null;
+  if (W > 0 && canvas.width > 0 && canvas.height > 0){
+    snap = document.createElement('canvas');
+    snap.width = canvas.width; snap.height = canvas.height;
+    snap.getContext('2d').drawImage(canvas, 0, 0);
+  }
+  DPR = dpr; W = w; H = h;
+  canvas.width = Math.round(w * dpr);
+  canvas.height = Math.round(h * dpr);
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  paintGround();
+  if (snap) ctx.drawImage(snap, 0, 0, W, H);
+  applyDash();
+  /* the vortex scales with the panel, and the stroke budget with the real pixel load */
+  ptr.r = Math.max(80, Math.min(240, Math.min(W, H) * 0.19));
+  var px = W * H * DPR * DPR;
+  BASECAP = Math.max(520, Math.min(1600, Math.round(1600 * Math.min(1, 6000000 / px))));
+  if (cap > BASECAP) cap = BASECAP;
+  setDims();
+}
+
+/* ---------- 4. the field: fBm angle layer blended with curl of an fBm potential ---------- */
+
+var ptr = { x:-1e4, y:-1e4, s:0, want:0, r:150, burst:0 };
+var DV = { x:1, y:0, rim:0 };
+
+function psi(x, y){
+  var F = 2.2 / st.scale, t = st.time * 0.055;
+  return fbm(x * F + t * 0.6, y * F - t * 0.35);
+}
+
+function flow(x, y){
+  var M = MODES[st.mode];
+  var F = 2.2 / st.scale, t = st.time * 0.055;
+  var a = fbm(x * F + t * 0.55, y * F - t * 0.30) * 12.566370614;   /* 4 pi turns */
+  var vx = Math.cos(a), vy = Math.sin(a);
+  var k = st.curl, m;
+
+  if (k > 0.002){
+    var e = Math.max(1.5, st.scale * 0.05);
+    var dY = psi(x, y + e) - psi(x, y - e);
+    var dX = psi(x + e, y) - psi(x - e, y);
+    m = Math.sqrt(dX * dX + dY * dY);
+    if (m > 1e-6){                                     /* curl(psi) = (dY, -dX) */
+      vx = vx * (1 - k) + (dY / m) * k * 1.5;
+      vy = vy * (1 - k) + (-dX / m) * k * 1.5;
+      m = Math.sqrt(vx * vx + vy * vy) || 1;
+      vx /= m; vy /= m;
+    }
+  }
+
+  /* loom structure: pull the direction toward the nearest warp/weft or twill rib */
+  var bv = M.biasVecs, best = -1, bi = 0, i, d;
+  for (i = 0; i < bv.length; i++){
+    d = Math.abs(vx * bv[i][0] + vy * bv[i][1]);
+    if (d > best){ best = d; bi = i; }
+  }
+  var bx = bv[bi][0], by = bv[bi][1];
+  var sgn = (vx * bx + vy * by) < 0 ? -1 : 1;
+  vx += (bx * sgn - vx) * M.biasK;
+  vy += (by * sgn - vy) * M.biasK;
+  m = Math.sqrt(vx * vx + vy * vy) || 1;
+  vx /= m; vy /= m;
+
+  /* pointer: a repulsion vortex that parts the threads, plus a strained rim */
+  DV.rim = 0;
+  if (ptr.s > 0.002){
+    var dx = x - ptr.x, dy = y - ptr.y;
+    var d2 = dx * dx + dy * dy;
+    var lim = ptr.r * 2.2;
+    if (d2 < lim * lim){
+      var dist = Math.sqrt(d2) + 1e-4;
+      var f = 1 - dist / lim;
+      f = f * f * (3 - 2 * f) * ptr.s * (1 + ptr.burst);
+      var nx = dx / dist, ny = dy / dist;
+      vx += nx * f * 2.4 - ny * f * 1.9;                 /* push out + swirl */
+      vy += ny * f * 2.4 + nx * f * 1.9;
+      m = Math.sqrt(vx * vx + vy * vy) || 1;
+      vx /= m; vy /= m;
+      var band = Math.abs(dist - ptr.r * 0.82) / (ptr.r * 0.3);
+      if (band < 1) DV.rim = (1 - band) * ptr.s;
+    }
+  }
+  DV.x = vx; DV.y = vy;
+}
+
+/* ---------- 5. readout handles ---------- */
+
+function id(x){ return document.getElementById(x); }
+var hintEl = id('hint'), toastEl = id('toast');
+var out = {
+  scale:id('v-scale'), curl:id('v-curl'), alpha:id('v-alpha'), density:id('v-density'),
+  pal:id('v-pal'), seed:id('v-seed'), threads:id('v-threads'),
+  mode:id('m-mode'), palL:id('m-pal'), alphaL:id('m-alpha'), lam:id('m-lam'),
+  curlL:id('m-curl'), threadsL:id('m-threads'), strokesL:id('m-strokes'),
+  dims:id('m-dims'), dpr:id('m-dpr'), seedL:id('m-seed'), sym:id('m-sym')
+};
+function grp(n){ return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' '); }
+function fmtSeed(s){
+  var t = s.toString(36).toUpperCase();
+  while (t.length < 5) t = '0' + t;
+  return '#' + t;
+}
+var toastT = 0;
+function toast(msg){
+  toastEl.textContent = msg;
+  toastEl.classList.add('is-on');
+  clearTimeout(toastT);
+  toastT = setTimeout(function(){ toastEl.classList.remove('is-on'); }, 1800);
+}
+function setDims(){
+  out.dims.textContent = W + ' × ' + H + ' px';
+  out.dpr.textContent = (Math.round(DPR * 100) / 100) + '×';
+}
+
+/* ---------- 6. threads: spawn, advect, lay one segment ---------- */
+
+var parts = [];
+function makeP(){
+  return { x:0, y:0, px:0, py:0, age:0, life:1, w:1, spd:1, glow:1, fresh:1, col:'#fff', colHi:'#fff' };
+}
+
+function respawn(p){
+  var M = MODES[st.mode], P = PALETTES[st.pal], light = M.light, x, y;
+  if (rng() < 0.4){
+    /* 40% of the warp is dressed in quantised vertical columns, like a real loom */
+    var cols = Math.max(8, Math.round(W / 26));
+    x = Math.floor(rng() * cols) * (W / cols) + (rng() - 0.5) * 10;
+    y = rng() * H;
+  } else {
+    x = rng() * W;
+    y = rng() * H;
+  }
+  p.x = x; p.px = x; p.y = y; p.py = y;
+  p.age = 0; p.fresh = 1;
+
+  var ash = rng() < P.ash;
+  var band = P.bands[rng() < 0.5 ? 0 : 1];
+  var h = ((band[0] + (rng() * 2 - 1) * band[1]) % 360 + 360) % 360;
+  var sat = ash ? 4 + rng() * 9 : P.sat[0] + rng() * (P.sat[1] - P.sat[0]);
+  var lig = light ? (ash ? 34 + rng() * 16 : 17 + rng() * 25)
+                  : P.lig[0] + rng() * (P.lig[1] - P.lig[0]);
+  p.col = 'hsl(' + h.toFixed(1) + ',' + sat.toFixed(1) + '%,' + lig.toFixed(1) + '%)';
+  var hi = light ? Math.max(8, lig - 13) : Math.min(88, lig + 22);
+  p.colHi = 'hsl(' + h.toFixed(1) + ',' + Math.min(100, sat + 12).toFixed(1) + '%,' + hi.toFixed(1) + '%)';
+  p.w = M.width[0] + rng() * (M.width[1] - M.width[0]);
+  p.life = Math.round(M.life[0] + rng() * (M.life[1] - M.life[0]));
+  p.spd = 0.72 + rng() * 0.56;
+  p.glow = 0.72 + rng() * 0.6;
+}
+
+function ensure(n){
+  while (parts.length < n){ var p = makeP(); respawn(p); parts.push(p); }
+  if (parts.length > n) parts.length = n;
+}
+
+function advance(p){
+  var M = MODES[st.mode];
+  var sub = M.sub, sp = M.speed * p.spd / sub;
+  p.age++;
+  var t = p.age / p.life; if (t > 1) t = 1;
+  var f = Math.sin(Math.PI * t); if (f < 0.03) f = 0.03;   /* taper both ends */
+  f = Math.pow(f, 0.42) * st.fadeMul;
+  var base = st.alpha * M.alpha * p.glow * f;
+
+  for (var k = 0; k < sub; k++){
+    flow(p.x, p.y);
+    var vx = DV.x, vy = DV.y, rim = DV.rim;
+    var j = (vn(p.x * 0.021 + 311.7, p.y * 0.021 - 77.3) - 0.5) * M.jitter * 2.4;
+    p.px = p.x; p.py = p.y;
+    p.x += vx * sp - vy * j;
+    p.y += vy * sp + vx * j;
+    if (p.fresh){ p.fresh = 0; continue; }
+    if (base < 0.004) continue;
+    var a = base;
+    if (rim > 0.02){ ctx.strokeStyle = p.colHi; a = base * (1 + rim * 1.8); }
+    else ctx.strokeStyle = p.col;
+    ctx.globalAlpha = a > 1 ? 1 : a;
+    ctx.lineWidth = p.w;
+    ctx.beginPath();
+    ctx.moveTo(p.px, p.py);
+    ctx.lineTo(p.x, p.y);
+    ctx.stroke();
+    st.strokes++;
+  }
+
+  if (p.age >= p.life || p.x < -30 || p.x > W + 30 || p.y < -30 || p.y > H + 30) respawn(p);
+}
+
+/* the 60 fps budget: cap is the ceiling on strokes laid per frame */
+var BASECAP = 1600, cap = 1600, ema = 2;
+function targetLive(){
+  return Math.max(24, Math.min(st.density, Math.floor(cap / MODES[st.mode].sub)));
+}
+function runThreads(){
+  var M = MODES[st.mode];
+  ensure(targetLive());
+  ctx.globalCompositeOperation = M.comp;
+  for (var i = 0, n = parts.length; i < n; i++) advance(parts[i]);
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+/* ---------- 7. RE-WARP: ground wash + a beater comb sweeping the shed ---------- */
+
+var WIPE_MS = 980;
+function wipeStep(dt){
+  var k = 1 - st.wipe;
+  st.fadeMul = Math.max(0, 1 - k * 1.05);
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.globalAlpha = 1;
+  ctx.setLineDash([]);
+  ctx.fillStyle = rgba(GND, 0.10 + 0.15 * k);
+  ctx.fillRect(0, 0, W, H);
+  var half = Math.max(40, 0.16 * W);
+  var bx = -half + k * (W + 2 * half);
+  var g = ctx.createLinearGradient(bx - half, 0, bx + half, 0);
+  g.addColorStop(0, rgba(GND, 0));
+  g.addColorStop(0.5, rgba(ACCENT, 0.2));
+  g.addColorStop(1, rgba(GND, 0));
+  ctx.fillStyle = g;
+  ctx.fillRect(bx - half, 0, half * 2, H);
+  ctx.setLineDash(MODES[st.mode].dash);
+  st.wipe -= dt / WIPE_MS;
+  if (st.wipe <= 0){
+    st.wipe = 0;
+    st.fadeMul = 1;
+    paintGround();
+    reseed();
+    toast('New warp · seed ' + fmtSeed(st.seed));
+  }
+}
+
+/* ---------- 8. the loop ---------- */
+
+var raf = 0, last = 0, frames = 0, running = false;
+function loop(now){
+  raf = requestAnimationFrame(loop);
+  var dt = now - last;
+  if (!(dt > 0)) dt = 16.7;
+  if (dt > 60) dt = 60;
+  last = now;
+
+  st.time += dt * 0.06;
+  ptr.burst *= 0.9;
+  ptr.s += (ptr.want - ptr.s) * Math.min(1, dt * 0.012);
+
+  /* 60 fps budget: time the WORK, not the frame delta — dt sits at ~16.7 ms on
+     any vsync-locked display, so measuring it would throttle a healthy machine. */
+  var t0 = performance.now();
+  if (st.wipe > 0) wipeStep(dt);
+  runThreads();
+  var work = performance.now() - t0;
+
+  ema = ema * 0.88 + work * 0.12;
+  if (ema > 10) cap = Math.max(320, cap * 0.93);        /* dropping frames: thin out */
+  else if (ema < 6.5) cap = Math.min(BASECAP, cap * 1.06);
+
+  frames++;
+  if ((frames & 7) === 0) updateReadouts();
+}
+function updateReadouts(){
+  out.threads.textContent = grp(parts.length) + ' threads · ' + grp(st.strokes) + ' strokes';
+  out.threadsL.textContent = grp(parts.length);
+  out.strokesL.textContent = grp(st.strokes);
+}
+
+/* ---------- 9. seeding, labels, mode and palette switching ---------- */
+
+var SYM = {
+  silk:'two-fold antisymmetry',
+  twill:'a 2₁ screw along the rib',
+  denim:'a 3/1 warp-faced rib'
+};
+
+function reseed(s){
+  if (s === undefined) s = (Math.random() * 0x1000000) >>> 0;
+  st.seed = s >>> 0;
+  nseed = (st.seed ^ 0x9e3779b9) | 0;      /* noise lattice keyed to the seed */
+  rng = mulberry32(st.seed);               /* spawns keyed to the same seed    */
+  st.strokes = 0;
+  st.time = 60 + (st.seed % 900);
+  parts.length = 0;
+  var fs = fmtSeed(st.seed);
+  out.seed.textContent = fs;
+  out.seedL.textContent = fs;
+  updateReadouts();
+}
+
+function syncLabels(){
+  var P = PALETTES[st.pal], M = MODES[st.mode];
+  out.scale.textContent = st.scale + ' px';
+  out.lam.textContent = st.scale + ' px';
+  out.curl.textContent = st.curl.toFixed(2);
+  out.curlL.textContent = st.curl.toFixed(2);
+  out.alpha.textContent = st.alpha.toFixed(2);
+  out.alphaL.textContent = st.alpha.toFixed(2);
+  out.density.textContent = grp(st.density);
+  out.pal.textContent = P.name;
+  out.palL.textContent = P.name;
+  out.mode.textContent = M.label;
+  out.sym.textContent = SYM[st.mode];
+}
+
+var modeBtns = [], chips = [];
+function setMode(key, announce){
+  if (!MODES[key] || key === st.mode) return;
+  var wasLight = MODES[st.mode].light, M = MODES[key];
+  st.mode = key;
+  applyTheme();
+  applyDash();
+  syncLabels();
+  for (var i = 0; i < modeBtns.length; i++)
+    modeBtns[i].setAttribute('aria-pressed', String(modeBtns[i].dataset.mode === key));
+  if (announce) toast(M.label + ' weave · ' + M.life[0] + '–' + M.life[1] + ' px stroke · ' + M.comp);
+  /* DENIM changes the ground itself, so the cloth has to be re-warped first */
+  if (RMOK || wasLight !== M.light) reWarp();
+}
+
+function setPal(i, announce){
+  if (!(i >= 0) || i >= PALETTES.length) return;
+  st.pal = i;
+  applyTheme();
+  syncLabels();
+  for (var k = 0; k < chips.length; k++)
+    chips[k].setAttribute('aria-pressed', String(parseInt(chips[k].dataset.pal, 10) === i));
+  if (RMOK) staticRefresh();
+  if (announce) toast('Palette · ' + PALETTES[i].name);
+}
+
+function reWarp(){
+  if (RMOK){ paintGround(); reseed(); composeStatic(true); return; }
+  if (st.paused) setPause(false);
+  st.wipe = 1;
+}
+
+function setPause(v){
+  st.paused = v;
+  pauseBtn.setAttribute('aria-pressed', String(v));
+  pauseBtn.textContent = v ? 'Resume' : 'Pause';
+  if (v){
+    if (raf) cancelAnimationFrame(raf);
+    raf = 0; running = false;
+    updateReadouts();
+  } else if (!RMOK && !running){
+    running = true;
+    last = performance.now();
+    raf = requestAnimationFrame(loop);
+  }
+}
+
+/* ---------- 10. palette chips, built from the table so no markup drifts ---------- */
+
+function bandColor(P, bi, f){
+  var b = P.bands[bi];
+  return 'hsl(' + b[0] + ',' +
+    Math.round(P.sat[0] + (P.sat[1] - P.sat[0]) * f) + '%,' +
+    Math.round(P.lig[0] + (P.lig[1] - P.lig[0]) * (0.35 + 0.55 * f)) + '%)';
+}
+function buildChips(){
+  var row = id('pal-row');
+  for (var i = 0; i < PALETTES.length; i++){
+    (function(P, i){
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'chip';
+      b.dataset.pal = String(i);
+      b.setAttribute('aria-label', 'Palette: ' + P.name);
+      b.setAttribute('title', P.name);   /* the CSS name bubble is clipped by the scrolling strip at <=900px */
+      b.setAttribute('aria-pressed', i === st.pal ? 'true' : 'false');
+      var sw = document.createElement('span');
+      sw.className = 'sw';
+      var cols = [P.ground, bandColor(P, 0, 0.45), bandColor(P, 1, 0.85), P.accent];
+      for (var j = 0; j < cols.length; j++){
+        var e = document.createElement('i');
+        e.style.left = (j * 25) + '%';
+        e.style.width = '25%';
+        e.style.background = cols[j];
+        sw.appendChild(e);
+      }
+      var nm = document.createElement('span');
+      nm.className = 'name';
+      nm.textContent = P.name;
+      b.appendChild(sw); b.appendChild(nm);
+      b.addEventListener('click', function(){ setPal(i, true); });
+      row.appendChild(b);
+      chips.push(b);
+    })(PALETTES[i], i);
+  }
+}
+
+/* ---------- 11. reduced motion: one composed static weave, no loop ---------- */
+
+var rmq = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
+var RMOK = !!(rmq && rmq.matches);
+var staticRaf = 0, staticT = 0;
+
+function composeStatic(quiet){
+  if (staticRaf) cancelAnimationFrame(staticRaf);
+  if (st.wipe) st.wipe = 0;
+  st.fadeMul = 1;
+  paintGround();
+  parts.length = 0;
+  var i = 0, total = 20;
+  (function chunk(){
+    for (var r = 0; r < 3; r++){ st.time += 2.4; runThreads(); }
+    if (++i < total) staticRaf = requestAnimationFrame(chunk);
+    else {
+      staticRaf = 0;
+      updateReadouts();
+      if (!quiet) toast('Static weave composed · reduced motion honoured');
+    }
+  })();
+}
+function staticRefresh(){
+  clearTimeout(staticT);
+  staticT = setTimeout(function(){ composeStatic(true); }, 240);
+}
+
+/* ---------- 12. input: sliders, buttons, pointer vortex, keyboard ---------- */
+
+var pauseBtn = id('btn-pause');
+var sScale = id('s-scale'), sCurl = id('s-curl'), sAlpha = id('s-alpha'), sDensity = id('s-density');
+var idleT = 0;
+
+function markPtr(x, y, burst){
+  ptr.x = x; ptr.y = y; ptr.want = 1;
+  if (burst) ptr.burst = 1.1;
+  hintEl.classList.add('gone');
+  clearTimeout(idleT);
+  idleT = setTimeout(function(){ ptr.want = 0; }, 1500);
+}
+
+window.addEventListener('pointermove', function(e){ markPtr(e.clientX, e.clientY, 0); }, {passive:true});
+window.addEventListener('pointerdown', function(e){ markPtr(e.clientX, e.clientY, 1); }, {passive:true});
+window.addEventListener('pointerup', function(e){ markPtr(e.clientX, e.clientY, 1); }, {passive:true});
+window.addEventListener('blur', function(){ ptr.want = 0; });
+document.addEventListener('mouseleave', function(){ ptr.want = 0; });
+
+function bindSlider(el, key, isInt){
+  el.addEventListener('input', function(){
+    var v = parseFloat(el.value);
+    st[key] = isInt ? Math.round(v) : v;
+    syncLabels();
+    if (RMOK) staticRefresh();
+  });
+}
+
+id('btn-warp').addEventListener('click', function(){ reWarp(); });
+pauseBtn.addEventListener('click', function(){
+  if (RMOK){ toast('Reduced motion · a single static weave, no loop to pause'); return; }
+  setPause(!st.paused);
+});
+modeBtns = Array.prototype.slice.call(document.querySelectorAll('#seg-mode button'));
+for (var mb = 0; mb < modeBtns.length; mb++){
+  (function(b){ b.addEventListener('click', function(){ setMode(b.dataset.mode, true); }); })(modeBtns[mb]);
+}
+
+window.addEventListener('keydown', function(e){
+  var tag = (e.target && e.target.tagName) || '';
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+  var k = e.key;
+  if (k === ' ' || k === 'Spacebar'){
+    e.preventDefault();
+    if (RMOK) toast('Reduced motion · a single static weave, no loop to pause');
+    else setPause(!st.paused);
+  } else if (k === 'r' || k === 'R') reWarp();
+  else if (k === 'm' || k === 'M'){
+    var i = (MODE_ORDER.indexOf(st.mode) + 1) % MODE_ORDER.length;
+    setMode(MODE_ORDER[i], true);
+  } else if (k >= '1' && k <= '4' && Number(k) <= PALETTES.length) setPal(Number(k) - 1, true);
+});
+
+var rzT = 0;
+window.addEventListener('resize', function(){
+  clearTimeout(rzT);
+  rzT = setTimeout(function(){
+    resize();
+    if (RMOK) composeStatic(true);
+  }, 150);
+});
+document.addEventListener('visibilitychange', function(){
+  if (RMOK || st.paused) return;
+  if (document.hidden){
+    if (raf) cancelAnimationFrame(raf);
+    raf = 0; running = false;
+  } else if (!running){
+    running = true;
+    last = performance.now();
+    raf = requestAnimationFrame(loop);
+  }
+});
+
+/* ---------- 13. init ---------- */
+
+function init(){
+  buildChips();
+  bindSlider(sScale, 'scale', true);
+  bindSlider(sCurl, 'curl', false);
+  bindSlider(sAlpha, 'alpha', false);
+  bindSlider(sDensity, 'density', true);
+  applyTheme();
+  resize();
+  syncLabels();
+  reseed(0x1A2B3C);
+  updateReadouts();
+  if (RMOK){ composeStatic(false); return; }
+  running = true;
+  last = performance.now();
+  raf = requestAnimationFrame(loop);
+  setTimeout(function(){ hintEl.classList.add('gone'); }, 12000);
+}
+init();
+})();
+</script>
+</body>
+</html>

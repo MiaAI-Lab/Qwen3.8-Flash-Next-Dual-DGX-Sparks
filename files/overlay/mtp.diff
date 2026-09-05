@@ -1,0 +1,18 @@
+--- files/overlay/mtp.py.orig	2026-09-02 15:27:42.745435798 +0300
++++ files/overlay/mtp.py	2026-09-02 15:27:42.762445425 +0300
+@@ -225,6 +225,7 @@
+             hc_config,
+             use_combine=False,
+             prefix=maybe_prefix(prefix, "hyper_connection_mixer"),
++            quant_config=draft_vllm_config.quant_config,  # [fp8dense overlay]
+         )
+         self.make_empty_intermediate_tensors = make_empty_intermediate_tensors_factory(
+             ["hidden_states"], self.hidden_size * self.hc_count
+@@ -391,6 +392,7 @@
+                 self.lm_head = ParallelLMHead(
+                     config.vocab_size,
+                     config.hidden_size,
++                    quant_config=self.quant_config,  # [fp8dense overlay]
+                     prefix=maybe_prefix(prefix, "lm_head"),
+                 )
+         else:

@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Ninth Range — A Layered Paper Diorama</title>
+<style>
+/* ============================================================
+   NINTH RANGE — paper diorama tokens
+   ============================================================ */
+:root{
+  --geo:"Futura","Avenir Next",Optima,"Trebuchet MS","Helvetica Neue",system-ui,sans-serif;
+  --mono:ui-monospace,Menlo,Consolas,"Courier New",monospace;
+  --serif:"Hoefler Text",Palatino,Georgia,serif;
+
+  /* default palette = DAWN */
+  --sky-a:#3a2c4a; --sky-b:#b96a6a; --sky-c:#f6c9a8;
+  --haze:rgba(246,201,168,.20);
+  --edge:rgba(255,229,206,.55);
+  --cut:rgba(26,12,34,.45);
+  --sun-x:22%; --sun-y:62%; --sun-r:126px;
+  --sun-c:#ffd9a8; --sun-c2:#e08a4e; --sun-glow:#f6c9a8; --sun-halo:.55;
+  --star:0.10; --win:0.18; --rim:1;
+
+  --l1:#b08a9b; --l2:#9c7389; --l3:#85607c; --l4:#6d4e6e; --l5:#573d5f;
+  --l6:#43304f; --l7:#332541; --l8:#271c33; --l9:#1b1326;
+  --cloud:#f6c9a8; --cloud-o:.55; --bird:#2a1f38;
+
+  --ink:#fdf3ea; --ink-dim:rgba(253,243,234,.66); --ink-faint:rgba(253,243,234,.42);
+  --persp:1300px;
+}
+
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0;background:#140f1e;color:var(--ink);font-family:var(--geo);
+  letter-spacing:.02em;overflow-x:hidden;-webkit-font-smoothing:antialiased;
+}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+:focus-visible{outline:2px solid var(--sun-c);outline-offset:4px;border-radius:2px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+
+/* ============================================================
+   Scroller + viewport (scroll drives the camera deeper)
+   ============================================================ */
+.scroller{position:relative;height:255vh}
+.viewport{
+  position:sticky;top:0;height:100vh;height:100svh;overflow:hidden;isolation:isolate;
+  perspective:var(--persp);perspective-origin:50% 48%;
+}
+.sky{
+  position:absolute;inset:-2%;
+  background:linear-gradient(180deg,var(--sky-a) 0%,var(--sky-b) 52%,var(--sky-c) 100%);
+  transition:background 120ms linear;
+}
+.sky::after{
+  content:"";position:absolute;inset:0;
+  background:radial-gradient(120% 78% at var(--sun-x) var(--sun-y),var(--sun-glow) 0%,transparent 46%);
+  opacity:calc(.34 + var(--sun-halo) * .4);mix-blend-mode:screen;
+}
+.stars{position:absolute;inset:0;opacity:var(--star);transform:translateZ(-820px) scale(1.631);transition:opacity 120ms linear}
+.star{position:absolute;width:2px;height:2px;border-radius:50%;background:#fff;box-shadow:0 0 4px rgba(255,255,255,.8)}
+.star--lg{width:3px;height:3px;box-shadow:0 0 8px rgba(200,220,255,.95)}
+.twinkle{animation:tw 4.5s ease-in-out infinite}
+@keyframes tw{0%,100%{opacity:.35}50%{opacity:1}}
+
+/* ============================================================
+   The stacked paper plane
+   ============================================================ */
+.diorama{
+  position:absolute;inset:0;transform-style:preserve-3d;
+  transform:translateZ(calc(var(--cam,0) * 400px)) scale(calc(1 + var(--cam,0) * .05))
+            rotateX(var(--tX,0deg)) rotateY(var(--tY,0deg));
+  will-change:transform;
+}
+.lyr{
+  position:absolute;inset:0;width:100%;height:100%;display:block;overflow:visible;
+  transform:translate3d(calc(var(--px,0) * var(--pf) * 1px),calc(var(--py,0) * var(--pf) * .42px),var(--z)) scale(var(--k));
+  will-change:transform;
+}
+.cast{fill:var(--cut);transform:translateY(-15px);filter:blur(9px);opacity:.95}
+.hi{fill:none;stroke:var(--edge);stroke-width:2.4;transform:translateY(-1.3px);opacity:var(--rim)}
+.pp{fill:var(--l);transition:none}
+.pp,.tex,.sh{stroke:none}
+.tex{fill:url(#tooth)}
+.sh{fill:url(#depth)}
+
+/* sun / moon disc: paper cut with a lighter top edge and its own cast shadow */
+.sun{
+  position:absolute;left:var(--sun-x);top:var(--sun-y);width:var(--sun-r);height:var(--sun-r);
+  margin-left:calc(var(--sun-r) / -2);margin-top:calc(var(--sun-r) / -2);
+  border-radius:50%;transform:translateZ(-760px) scale(1.585);
+  background:radial-gradient(120% 120% at 32% 22%,#fff 0%,var(--sun-c) 46%,var(--sun-c2) 100%);
+  box-shadow:0 -10px 34px rgba(0,0,0,.28),inset 0 3px 0 rgba(255,255,255,.5);
+}
+.sun::before{
+  content:"";position:absolute;inset:-38%;border-radius:50%;
+  background:radial-gradient(closest-side,var(--sun-glow),transparent 72%);
+  opacity:var(--sun-halo);mix-blend-mode:screen;
+}
+.sun::after{
+  content:"";position:absolute;inset:0;border-radius:50%;
+  background-image:repeating-linear-gradient(104deg,rgba(255,255,255,.10) 0 1px,transparent 1px 5px);
+  mix-blend-mode:overlay;
+}
+
+/* clouds: slit-like paper lenses, each band drifting at its own rate */
+.cloudpath{fill:var(--cloud);stroke:none}
+.cloudedge{fill:none;stroke:var(--edge);stroke-width:1.6;transform:translateY(-1.1px);opacity:.75}
+.cloudbar{fill:var(--cut);transform:translateY(-12px);filter:blur(7px);opacity:.5}
+.band{animation:drift linear infinite;will-change:transform}
+@keyframes drift{from{transform:translateX(-340px)}to{transform:translateX(1340px)}}
+
+/* birds: three paper cuts on a looped bezier, wings flapping */
+.bird .w{fill:var(--bird);transform-box:view-box;transform-origin:0 0;animation:flap .52s ease-in-out infinite alternate}
+.bird .body{fill:var(--bird)}
+.cab{fill:var(--l8)}
+.bird .w2{animation-delay:.06s}
+@keyframes flap{from{transform:scaleY(1)}to{transform:scaleY(.18)}}
+
+/* cabin windows */
+.win{fill:#ffcf7a;opacity:var(--win)}
+.winglow{fill:#ffb457;opacity:calc(var(--win) * .55);filter:blur(7px)}
+
+/* atmosphere between sheets */
+.haze{
+  position:absolute;inset:-4%;pointer-events:none;
+  background:linear-gradient(180deg,var(--haze) 0%,transparent 44%);
+  opacity:calc(.5 + var(--cam,0) * .5);mix-blend-mode:screen;
+}
+.vignette{
+  position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(126% 92% at 50% 46%,transparent 46%,rgba(10,6,16,.42) 84%,rgba(6,4,10,.7) 100%);
+}
+.grain{
+  position:absolute;inset:-10%;pointer-events:none;opacity:.55;mix-blend-mode:overlay;
+  background-image:
+    repeating-linear-gradient(96deg,rgba(255,255,255,.05) 0 1px,transparent 1px 4px),
+    repeating-linear-gradient(4deg,rgba(0,0,0,.05) 0 1px,transparent 1px 5px),
+    radial-gradient(rgba(255,255,255,.05) 1px,transparent 1.4px);
+  background-size:auto,auto,4px 4px;
+}
+.seam{
+  position:absolute;left:0;right:0;top:0;height:2px;background:rgba(255,255,255,.10);
+  mix-blend-mode:overlay;pointer-events:none;
+}
+
+/* ============================================================
+   Overlay furniture
+   ============================================================ */
+.ui{position:absolute;inset:0;pointer-events:none;z-index:20;
+  display:grid;grid-template-columns:1fr auto;grid-template-rows:auto 1fr auto;
+  padding:clamp(1rem,3.4vw,2.6rem);gap:1rem}
+.ui > *{pointer-events:auto}
+
+.mast{grid-column:1;grid-row:1;align-self:start;max-width:min(46ch,60vw)}
+.eyebrow{margin:0 0 .7rem;font-family:var(--mono);font-size:.58rem;letter-spacing:.36em;
+  text-transform:uppercase;color:var(--ink-faint)}
+h1{margin:0;font-weight:300;line-height:.9;letter-spacing:.06em;text-transform:uppercase;
+  font-size:clamp(2.1rem,7vw,5.1rem);text-shadow:0 6px 30px rgba(8,4,14,.45)}
+h1 em{display:block;font-family:var(--serif);font-style:italic;text-transform:none;font-weight:400;
+  letter-spacing:.01em;font-size:.3em;color:var(--ink-dim);margin-top:.55em;text-shadow:none}
+.lede{margin:1.1rem 0 0;max-width:34ch;font-size:.86rem;line-height:1.6;color:var(--ink-dim);
+  text-shadow:0 2px 14px rgba(8,4,14,.5)}
+
+/* time-of-day control */
+.clock{grid-column:2;grid-row:1;justify-self:end;align-self:start;
+  display:flex;flex-direction:column;align-items:flex-end;gap:.5rem}
+.clock__lab{font-family:var(--mono);font-size:.54rem;letter-spacing:.32em;text-transform:uppercase;color:var(--ink-faint)}
+.clock__seg{display:flex;gap:.18rem;padding:.24rem;border-radius:99px;
+  background:rgba(14,9,22,.34);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.14),0 10px 26px rgba(8,4,14,.4)}
+.tbtn{padding:.5rem .9rem;border-radius:99px;font-size:.62rem;letter-spacing:.22em;text-transform:uppercase;
+  color:var(--ink-dim);transition:color .35s,background .45s,box-shadow .45s,transform .3s}
+.tbtn:hover{color:var(--ink);transform:translateY(-1px)}
+.tbtn[aria-checked="true"]{color:#1b1226;background:linear-gradient(180deg,#fffaf3,var(--sun-c));
+  box-shadow:0 3px 0 rgba(0,0,0,.18),0 0 22px rgba(255,222,170,.45)}
+
+/* legend */
+.legend{grid-column:2;grid-row:3;justify-self:end;align-self:end;width:min(30ch,44vw);
+  font-family:var(--mono);font-size:.56rem;letter-spacing:.1em;
+  background:rgba(12,8,18,.30);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);
+  border-radius:4px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.12);padding:.7rem .8rem}
+.legend h2{margin:0 0 .5rem;font-size:.54rem;letter-spacing:.3em;text-transform:uppercase;
+  font-weight:400;color:var(--ink-faint)}
+.legend ul{margin:0;padding:0;list-style:none;display:grid;gap:.16rem;max-height:min(42vh,340px);overflow:auto}
+.legend li{display:grid;grid-template-columns:auto 1fr auto;gap:.5rem;align-items:baseline;
+  color:var(--ink-dim);padding:.12rem 0}
+.legend li i{width:9px;height:9px;border-radius:2px;background:var(--sw);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.5),0 1px 2px rgba(0,0,0,.4);transform:translateY(1px)}
+.legend li b{font-weight:400;color:var(--ink)}
+.legend li s{text-decoration:none;color:var(--ink-faint);font-variant-numeric:tabular-nums}
+
+/* credit + cue */
+.credit{grid-column:1;grid-row:3;align-self:end;display:grid;gap:.42rem;max-width:40ch}
+.credit__rule{width:52px;height:1px;background:var(--edge)}
+.credit p{margin:0;font-family:var(--mono);font-size:.56rem;letter-spacing:.28em;text-transform:uppercase;color:var(--ink-dim)}
+.credit small{font-family:var(--serif);font-style:italic;font-size:.82rem;letter-spacing:.01em;
+  text-transform:none;color:var(--ink-faint)}
+.cue{position:absolute;left:50%;bottom:clamp(.9rem,3vw,2rem);transform:translateX(-50%);
+  display:grid;justify-items:center;gap:.4rem;font-family:var(--mono);font-size:.5rem;
+  letter-spacing:.3em;text-transform:uppercase;color:var(--ink-faint);pointer-events:none}
+.cue i{display:block;width:1px;height:26px;background:linear-gradient(var(--edge),transparent);
+  animation:sink 2.6s ease-in-out infinite}
+@keyframes sink{0%,100%{opacity:.2;transform:translateY(-6px)}50%{opacity:1;transform:translateY(6px)}}
+.depth{position:absolute;left:50%;top:clamp(.9rem,3vw,2rem);transform:translateX(-50%);
+  font-family:var(--mono);font-size:.5rem;letter-spacing:.3em;text-transform:uppercase;color:var(--ink-faint)}
+.depth b{font-weight:400;color:var(--ink)}
+
+@media (max-width:860px){
+  .ui{grid-template-columns:1fr;grid-template-rows:auto auto 1fr auto;gap:.7rem}
+  .mast{grid-column:1;grid-row:1;max-width:none}
+  .clock{grid-column:1;grid-row:2;justify-self:start;align-items:flex-start}
+  .legend{grid-column:1;grid-row:4;justify-self:stretch;width:auto}
+  .legend ul{grid-auto-flow:column;grid-auto-columns:max-content;overflow-x:auto;max-height:none;gap:1rem}
+  .legend li{grid-template-columns:auto auto;gap:.35rem}
+  .legend li s{display:none}
+  .credit{grid-row:5;display:none}
+  .depth{display:none}
+}
+@media (max-width:520px){
+  h1{font-size:clamp(1.9rem,11vw,2.8rem)}
+  .lede{display:none}
+  .tbtn{padding:.42rem .58rem;font-size:.54rem;letter-spacing:.14em}
+}
+@media (min-width:1900px){
+  :root{--persp:1600px}
+  h1{font-size:5.8rem}
+}
+
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.001ms !important;animation-iteration-count:1 !important;
+    transition-duration:.001ms !important}
+  .cue{display:none}
+  .scroller{height:100vh}
+}
+</style>
+</head>
+<body>
+
+<!-- shared paper textures: tooth pattern + sheet depth shading -->
+<svg width="0" height="0" aria-hidden="true" focusable="false" style="position:absolute">
+  <defs>
+    <pattern id="tooth" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(12)">
+      <path d="M0 0V6" stroke="rgba(255,255,255,.055)" stroke-width=".7"/>
+      <path d="M0 3H6" stroke="rgba(0,0,0,.055)" stroke-width=".7"/>
+      <circle cx="4.2" cy="1.6" r=".5" fill="rgba(255,255,255,.05)"/>
+      <circle cx="1.4" cy="4.4" r=".42" fill="rgba(0,0,0,.05)"/>
+    </pattern>
+    <linearGradient id="depth" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="rgba(255,255,255,.10)"/>
+      <stop offset=".38" stop-color="rgba(0,0,0,0)"/>
+      <stop offset="1" stop-color="rgba(0,0,0,.30)"/>
+    </linearGradient>
+    <path id="slitP" d="M0 0c34-13 116-13 150 0-34 14-116 14-150 0Z"/>
+    <g id="slit">
+      <use href="#slitP" class="cloudbar"/>
+      <use href="#slitP" class="cloudedge"/>
+      <use href="#slitP" class="cloudpath"/>
+    </g>
+  </defs>
+</svg>
+
+<main class="scroller">
+  <div class="viewport" id="viewport">
+    <div class="sky" aria-hidden="true"></div>
+    <div class="stars" id="stars" aria-hidden="true"></div>
+
+    <div class="diorama" id="diorama">
+      <div class="sun" id="sun" aria-hidden="true"></div>
+
+      <!-- cloud sheet · high · 700 mm back -->
+      <svg class="lyr" viewBox="0 0 1000 600" preserveAspectRatio="xMidYMax slice" style="--z:-700px;--k:1.538;--pf:.03;opacity:var(--cloud-o)" aria-hidden="true">
+        <g class="band" style="animation-duration:158s;animation-delay:-40s">
+          <use href="#slit" transform="translate(0 96) scale(1.15)"/>
+          <use href="#slit" transform="translate(140 138) scale(.72)"/>
+          <use href="#slit" transform="translate(-90 168) scale(.5)"/>
+        </g>
+      </svg>
+
+      <!-- sheet 1 · far ridge · 660 mm back -->
+      <svg class="lyr" viewBox="0 0 1000 600" preserveAspectRatio="xMidYMax slice" style="--z:-660px;--k:1.508;--pf:.083;--l:var(--l1)" aria-hidden="true">
+        <defs><path id="r1" d="M-80 296 40 232 126 268 232 190 318 244 420 176 512 232 616 164 716 236 824 198 928 254 1080 208 1080 620 -80 620Z"/></defs>
+        <use href="#r1" class="cast"/><use href="#r1" class="hi"/><use href="#r1" class="pp"/><use href="#r1" class="tex"/><use href="#r1" class="sh"/>
+      </svg>
+
+      <!-- sheet 2 · second ridge · 580 mm back -->
+      <svg class="lyr" viewBox="0 0 1000 600" preserveAspectRatio="xMidYMax slice" style="--z:-580px;--k:1.446;--pf:.194;--l:var(--l2)" aria-hidden="true">
+        <defs><path id="r2" d="M-80 338 60 272 156 316 276 240 372 302 484 246 588 308 700 252 812 318 936 264 1080 322 1080 620 -80 620Z"/></defs>
+        <use href="#r2" class="cast"/><use href="#r2" class="hi"/><use href="#r2" class="pp"/><use href="#r2" class="tex"/><use href="#r2" class="sh"/>
+      </svg>
+
+      <!-- cloud sheet · middle · 540 mm back -->
+      <svg class="lyr" viewBox="0 0 1000 600" preserveAspectRatio="xMidYMax slice" style="--z:-540px;--k:1.415;--pf:.25;opacity:calc(var(--cloud-o) * 1.1)" aria-hidden="true">
+        <g class="band" style="animation-duration:112s;animation-delay:-70s">
+          <use href="#slit" transform="translate(0 250) scale(1.45 .82)"/>
+          <use href="#slit" transform="translate(180 296) scale(.9 .7)"/>
+        </g>
+      </svg>
+
+      <!-- sheet 3 · shoulder ridge · 500 mm back -->
+      <svg class="lyr" viewBox="0 0 1000 600" preserveAspectRatio="xMidYMax slice" style="--z:-500px;--k:1.385;--pf:.306;--l:var(--l3)" aria-hidden="true">
+        <defs><path id="r3" d="M-80 392 104 316 196 366 322 288 436 358 548 312 664 378 796 326 932 386 1080 350 1080 620 -80 620Z"/></defs>
+        <use href="#r3" class="cast"/><use href="#r3" class="hi"/><use href="#r3" class="pp"/><use href="#r3" class="tex"/><use href="#r3" class="sh"/>
+      </svg>
+
+      <!-- sheet 4 · low ridge · 420 mm back -->
+      <svg class="lyr" viewBox="0 0 1000 600" preserveAspectRatio="xMidYMax slice" style="--z:-420px;--k:1.323;--pf:.417;--l:var(--l4)" aria-hidden="true">
+        <defs><path id="r4" d="M-80 434 96 388 208 428 336 374 458 430 586 386 700 432 842 390 982 434 1080 412 1080 620 -80 620Z"/></defs>
+        <use href="#r4" class="cast"/><use href="#r4" class="hi"/><use href="#r4" class="pp"/><use href="#r4" class="tex"/><use href="#r4" class="sh"/>
+      </svg>
+
+      <!-- sheet 5 · first fir line · 340 mm back -->
+      <svg class="lyr" viewBox="0 0 1000 600" preserveAspectRatio="xMidYMax slice" style="--z:-340px;--k:1.262;--pf:.528;--l:var(--l5)" aria-hidden="true">
+        <defs><path id="r5" d="M-80 520V486l16-30 16 30 14-20 14 20 18-36 18 36 12-22 12 22 16-30 16 30 14-20 14 20 18-36 18 36 12-22 12 22 16-30 16 30 14-20 14 20 18-36 18 36 12-22 12 22 16-30 16 30 14-20 14 20 18-36 18 36 12-22 12 22 16-30 16 30 14-20 14 20 18-36 18 36 12-22 12 22 16-30 16 30 14-20 14 20 18-36 18 36 12-22 12 22 16-30 16 30 14-20 14 20 18-36 18 36 12-22 12 22 16-30 16 30 14-20 14 20 18-36 18 36 12-22 12 22 16-30 16 30 14-20 14 20 18-36 18 36 12-22 12 22 16-30 16 30 14-20 14 20 18-36 18 36 12-22 12 22V520Z"/></defs>
+        <use href="#r5" class="cast"/><use href="#r5" class="hi"/><use href="#r5" class="pp"/><use href="#r5" class="tex"/><use href="#r5" class="sh"/>
+      </svg>
+
+      <!-- cloud sheet · low mist · 300 mm back -->
+      <svg class="lyr" viewBox="0 0 1000 600" preserveAspectRatio="xMidYMax slice" style="--z:-300px;--k:1.231;--pf:.583;opacity:calc(var(--cloud-o) * .8)" aria-hidden="true">
+        <g class="band" style="animation-duration:78s;animation-delay:-16s">
+          <use href="#slit" transform="translate(0 404) scale(1.9 .5)"/>
+          <use href="#slit" transform="translate(260 438) scale(1.2 .38)"/>
+        </g>
+      </svg>
+
+      <!-- sheet 6 · second fir line · 260 mm back -->
+      <svg class="lyr" viewBox="0 0 1000 600" preserveAspectRatio="xMidYMax slice" style="--z:-260px;--k:1.2;--pf:.639;--l:var(--l6)" aria-hidden="true">
+        <defs><path id="r6" d="M-100 556V524l12-22 12 22 10-15 10 15 14-26 14 26 9-12 9 12 12-22 12 22 10-15 10 15 14-26 14 26 9-12 9 12 12-22 12 22 10-15 10 15 14-26 14 26 9-12 9 12 12-22 12 22 10-15 10 15 14-26 14 26 9-12 9 12 12-22 12 22 10-15 10 15 14-26 14 26 9-12 9 12 12-22 12 22 10-15 10 15 14-26 14 26 9-12 9 12 12-22 12 22 10-15 10 15 14-26 14 26 9-12 9 12 12-22 12 22 10-15 10 15 14-26 14 26 9-12 9 12 12-22 12 22 10-15 10 15 14-26 14 26 9-12 9 12 12-22 12 22 10-15 10 15 14-26 14 26 9-12 9 12 12-22 12 22 10-15 10 15 14-26 14 26 9-12 9 12 12-22 12 22 10-15 10 15 14-26 14 26 9-12 9 12 12-22 12 22 10-15 10 15 14-26 14 26 9-12 9 12 12-22 12 22 10-15 10 15 14-26 14 26 9-12 9 12V556Z"/></defs>
+        <use href="#r6" class="cast"/><use href="#r6" class="hi"/><use href="#r6" class="pp"/><use href="#r6" class="tex"/><use href="#r6" class="sh"/>
+      </svg>
+
+      <!-- three paper birds on a looped bezier -->
+      <svg class="lyr" viewBox="0 0 1000 600" preserveAspectRatio="xMidYMax slice" style="--z:-160px;--k:1.123;--pf:.778" aria-hidden="true">
+        <g class="bird">
+          <g transform="scale(.9)">
+            <path class="w" d="M2 1-17-11-1 4Z"/><path class="w w2" d="M2 1 17-11 5 4Z"/>
+            <path class="body" d="M-2 1c4-4 13-4 18 1-6 5-14 6-18 2Z"/>
+          </g>
+          <animateMotion dur="38s" repeatCount="indefinite"
+            path="M-70 214C160 150 320 258 500 200S780 132 1070 186C880 258 640 214 470 258S160 286-70 232Z"/>
+        </g>
+        <g class="bird">
+          <g transform="scale(.62)">
+            <path class="w" d="M2 1-17-11-1 4Z"/><path class="w w2" d="M2 1 17-11 5 4Z"/>
+            <path class="body" d="M-2 1c4-4 13-4 18 1-6 5-14 6-18 2Z"/>
+          </g>
+          <animateMotion dur="38s" begin="-9s" repeatCount="indefinite"
+            path="M-70 236C160 172 320 280 500 222S780 154 1070 208C880 280 640 236 470 280S160 308-70 254Z"/>
+        </g>
+        <g class="bird">
+          <g transform="scale(.48)">
+            <path class="w" d="M2 1-17-11-1 4Z"/><path class="w w2" d="M2 1 17-11 5 4Z"/>
+            <path class="body" d="M-2 1c4-4 13-4 18 1-6 5-14 6-18 2Z"/>
+          </g>
+          <animateMotion dur="38s" begin="-21s" repeatCount="indefinite"
+            path="M-70 196C160 128 320 240 500 182S780 112 1070 168C880 240 640 196 470 240S160 268-70 214Z"/>
+        </g>
+      </svg>
+
+      <!-- sheet 7 · meadow & cabin · 180 mm back -->
+      <svg class="lyr" viewBox="0 0 1000 600" preserveAspectRatio="xMidYMax slice" style="--z:-180px;--k:1.138;--pf:.75;--l:var(--l7)" aria-hidden="true">
+        <defs><path id="r7" d="M-80 552C120 524 250 556 420 540S760 514 1080 548L1080 620-80 620Z"/></defs>
+        <use href="#r7" class="cast"/><use href="#r7" class="hi"/><use href="#r7" class="pp"/><use href="#r7" class="tex"/><use href="#r7" class="sh"/>
+        <g class="cabin">
+          <ellipse class="winglow" cx="300" cy="538" rx="34" ry="20"/>
+          <path class="cab" d="M258 543l8-20 8 20z"/><path class="cab" d="M340 542l7-17 7 17z"/>
+          <path class="cab" d="M283 545h34v-15h-34z"/>
+          <path class="cab" d="M311 523h5v-11h-5z"/>
+          <path class="cab" d="M278 531 300 516 322 531Z"/>
+          <path class="hi" d="M278 531 300 516 322 531"/>
+          <rect class="win" x="290" y="535" width="7" height="7" rx="1"/>
+          <rect class="win" x="304" y="535" width="6" height="7" rx="1"/>
+        </g>
+      </svg>
+
+      <!-- sheet 8 · near hill · 110 mm back -->
+      <svg class="lyr" viewBox="0 0 1000 600" preserveAspectRatio="xMidYMax slice" style="--z:-110px;--k:1.085;--pf:.847;--l:var(--l8)" aria-hidden="true">
+        <defs><path id="r8" d="M-80 578C180 550 400 592 620 568S900 548 1080 580L1080 620-80 620Z"/></defs>
+        <use href="#r8" class="cast"/><use href="#r8" class="hi"/><use href="#r8" class="pp"/><use href="#r8" class="tex"/><use href="#r8" class="sh"/>
+      </svg>
+
+      <!-- sheet 9 · foreground cut · 40 mm back -->
+      <svg class="lyr" viewBox="0 0 1000 600" preserveAspectRatio="xMidYMax slice" style="--z:-40px;--k:1.031;--pf:.944;--l:var(--l9)" aria-hidden="true">
+        <defs><path id="r9" d="M-80 604C140 580 360 610 580 594S880 576 1080 606L1080 660-80 660Z"/></defs>
+        <use href="#r9" class="cast"/><use href="#r9" class="hi"/><use href="#r9" class="pp"/><use href="#r9" class="tex"/><use href="#r9" class="sh"/>
+        <g class="grass" stroke="var(--cut)" stroke-width="3" stroke-linecap="round" fill="none">
+          <path d="M120 604c4-16 2-26-6-36M132 604c-3-14-1-24 6-32M62 606c5-12 4-22-2-30"/>
+          <path d="M742 596c5-16 3-26-5-36M756 596c-3-14-1-22 7-30M790 598c4-12 3-20-3-28"/>
+        </g>
+      </svg>
+    </div>
+
+    <div class="haze" aria-hidden="true"></div>
+    <div class="vignette" aria-hidden="true"></div>
+    <div class="grain" aria-hidden="true"></div>
+    <div class="seam" aria-hidden="true"></div>
+
+    <div class="ui">
+      <div class="mast">
+        <p class="eyebrow">Sheet study № 18 · nine cuts, one horizon</p>
+        <h1>Ninth Range<em>a diorama cut from paper, lit by hand</em></h1>
+        <p class="lede">Every ridge is a separate sheet: a lighter top edge, a shadow cast down onto the sheet behind it, and a tooth you can feel at arm's length. Move to look around the stack; scroll to walk into it.</p>
+      </div>
+
+      <div class="clock">
+        <span class="clock__lab">Time of day</span>
+        <div class="clock__seg" role="radiogroup" aria-label="Time of day">
+          <button class="tbtn" type="button" role="radio" aria-checked="true" data-time="dawn">Dawn</button>
+          <button class="tbtn" type="button" role="radio" aria-checked="false" data-time="midday">Midday</button>
+          <button class="tbtn" type="button" role="radio" aria-checked="false" data-time="dusk">Dusk</button>
+          <button class="tbtn" type="button" role="radio" aria-checked="false" data-time="night">Night</button>
+        </div>
+      </div>
+
+      <aside class="legend">
+        <h2>Sheet stack</h2>
+        <ul>
+          <li><i style="--sw:#e8eeff"></i><b>Star field</b><s>820 mm</s></li>
+          <li><i style="--sw:var(--cloud)"></i><b>Cloud sheet · high</b><s>700 mm</s></li>
+          <li><i style="--sw:var(--l1)"></i><b>Far ridge</b><s>660 mm</s></li>
+          <li><i style="--sw:var(--l2)"></i><b>Second ridge</b><s>580 mm</s></li>
+          <li><i style="--sw:var(--cloud)"></i><b>Cloud sheet · middle</b><s>540 mm</s></li>
+          <li><i style="--sw:var(--l3)"></i><b>Shoulder ridge</b><s>500 mm</s></li>
+          <li><i style="--sw:var(--l4)"></i><b>Low ridge</b><s>420 mm</s></li>
+          <li><i style="--sw:var(--l5)"></i><b>First fir line</b><s>340 mm</s></li>
+          <li><i style="--sw:var(--cloud)"></i><b>Mist slit band</b><s>300 mm</s></li>
+          <li><i style="--sw:var(--l6)"></i><b>Second fir line</b><s>260 mm</s></li>
+          <li><i style="--sw:var(--l7)"></i><b>Meadow &amp; cabin</b><s>180 mm</s></li>
+          <li><i style="--sw:var(--l8)"></i><b>Near hill</b><s>110 mm</s></li>
+          <li><i style="--sw:var(--l9)"></i><b>Foreground cut</b><s>40 mm</s></li>
+        </ul>
+      </aside>
+
+      <div class="credit">
+        <span class="credit__rule" aria-hidden="true"></span>
+        <p>Paper Studio — layered diorama, 2026</p>
+        <small>Cotton stock, 300 gsm, cut with a No. 11 blade and lit from a single warm source.</small>
+      </div>
+    </div>
+
+    <p class="depth">Camera depth <b id="depthVal">0 mm</b> · <span id="timeVal">dawn</span></p>
+    <p class="cue">Scroll<i aria-hidden="true"></i></p>
+  </div>
+</main>
+
+<script>
+(function(){
+  "use strict";
+  var root = document.documentElement;
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var diorama  = document.getElementById('diorama');
+  var viewport = document.getElementById('viewport');
+  var sun      = document.getElementById('sun');
+  var starsEl  = document.getElementById('stars');
+  var depthVal = document.getElementById('depthVal');
+  var timeVal  = document.getElementById('timeVal');
+
+  /* ---------- four hand-mixed light settings ---------- */
+  var KEYS = ['skyA','skyB','skyC','haze','edge','cut','sunC','sunC2','sunGlow','cloud','bird',
+              'l1','l2','l3','l4','l5','l6','l7','l8','l9'];
+  var NUMS = ['sunX','sunY','sunR','star','win','rim','cloudO','halo'];
+  var MAP  = {skyA:'--sky-a',skyB:'--sky-b',skyC:'--sky-c',haze:'--haze',edge:'--edge',cut:'--cut',
+              sunC:'--sun-c',sunC2:'--sun-c2',sunGlow:'--sun-glow',cloud:'--cloud',bird:'--bird',
+              sunX:'--sun-x',sunY:'--sun-y',sunR:'--sun-r',star:'--star',win:'--win',rim:'--rim',
+              cloudO:'--cloud-o',halo:'--sun-halo'};
+
+  var P = {
+    dawn:{ skyA:'#3a2c4a', skyB:'#b96a6a', skyC:'#f6c9a8',
+      haze:'rgba(246,201,168,.20)', edge:'rgba(255,229,206,.55)', cut:'rgba(26,12,34,.45)',
+      sunC:'#ffd9a8', sunC2:'#e08a4e', sunGlow:'#f6c9a8', cloud:'#f2c6a8', bird:'#2a1f38',
+      l1:'#b08a9b', l2:'#9c7389', l3:'#85607c', l4:'#6d4e6e', l5:'#573d5f',
+      l6:'#43304f', l7:'#332541', l8:'#271c33', l9:'#1b1326',
+      sunX:22, sunY:62, sunR:126, star:.10, win:.18, rim:1, cloudO:.55, halo:.55 },
+
+    midday:{ skyA:'#7fb0d0', skyB:'#bfd9e4', skyC:'#eef3ec',
+      haze:'rgba(224,240,246,.26)', edge:'rgba(255,255,255,.62)', cut:'rgba(20,34,30,.40)',
+      sunC:'#fffdf2', sunC2:'#ffe6b4', sunGlow:'#e9f4ff', cloud:'#ffffff', bird:'#2b3a44',
+      l1:'#b8c6c9', l2:'#a3b6b8', l3:'#8ba4a4', l4:'#74918f', l5:'#5d7d78',
+      l6:'#49675f', l7:'#3a5548', l8:'#2d4338', l9:'#22332a',
+      sunX:64, sunY:16, sunR:96, star:0, win:0, rim:.85, cloudO:.8, halo:.4 },
+
+    dusk:{ skyA:'#2e2340', skyB:'#8a4a5e', skyC:'#f2a06a',
+      haze:'rgba(255,150,110,.18)', edge:'rgba(255,196,150,.62)', cut:'rgba(16,8,22,.50)',
+      sunC:'#ffb26b', sunC2:'#e2603a', sunGlow:'#ff8f5e', cloud:'#e9a184', bird:'#241a2e',
+      l1:'#a46a72', l2:'#8b5566', l3:'#71455c', l4:'#593752', l5:'#452b45',
+      l6:'#342137', l7:'#261a2b', l8:'#1c1421', l9:'#130e18',
+      sunX:79, sunY:56, sunR:138, star:.20, win:.5, rim:1, cloudO:.62, halo:.7 },
+
+    night:{ skyA:'#05070f', skyB:'#121a30', skyC:'#22304a',
+      haze:'rgba(120,150,210,.14)', edge:'rgba(186,208,255,.52)', cut:'rgba(2,4,10,.62)',
+      sunC:'#e8eeff', sunC2:'#9fb4e8', sunGlow:'#8fa8e0', cloud:'#3b4a6c', bird:'#2b3552',
+      l1:'#2b3552', l2:'#242d47', l3:'#1e263c', l4:'#181f31', l5:'#131926',
+      l6:'#0f141e', l7:'#0b0f17', l8:'#080b11', l9:'#05070c',
+      sunX:30, sunY:20, sunR:56, star:1, win:1, rim:.8, cloudO:.45, halo:.5 }
+  };
+
+  /* ---------- tiny colour parser so every channel can be tweened ---------- */
+  function parse(c){
+    if (c.charAt(0) === '#'){
+      var h = c.slice(1);
+      if (h.length === 3) h = h.charAt(0)+h.charAt(0)+h.charAt(1)+h.charAt(1)+h.charAt(2)+h.charAt(2);
+      return [parseInt(h.substr(0,2),16), parseInt(h.substr(2,2),16), parseInt(h.substr(4,2),16), 1];
+    }
+    var m = c.replace(/rgba?\(/,'').replace(/\)/,'').split(',');
+    return [parseFloat(m[0]), parseFloat(m[1]), parseFloat(m[2]), m.length>3 ? parseFloat(m[3]) : 1];
+  }
+  function lerpArr(a, b, t){
+    return [a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t, a[2]+(b[2]-a[2])*t, a[3]+(b[3]-a[3])*t];
+  }
+  function fmt(c){
+    return 'rgba(' + Math.round(c[0]) + ',' + Math.round(c[1]) + ',' + Math.round(c[2]) + ',' + c[3].toFixed(3) + ')';
+  }
+  function unit(k, v){
+    if (k === 'sunX' || k === 'sunY') return v.toFixed(2) + '%';
+    if (k === 'sunR') return v.toFixed(1) + 'px';
+    return v.toFixed(3);
+  }
+  function apply(a){
+    KEYS.forEach(function(k){ root.style.setProperty(MAP[k], fmt(a[k])); });
+    NUMS.forEach(function(k){ root.style.setProperty(MAP[k], unit(k, a[k])); });
+  }
+
+  /* state is a flat object of parsed colours + numbers, so any pair can be interpolated */
+  var state = {}, from = {}, to = {}, tw = null;
+  (function seed(){
+    var d = P.dawn;
+    KEYS.forEach(function(k){ state[k] = parse(d[k]); });
+    NUMS.forEach(function(k){ state[k] = d[k]; });
+    apply(state);
+  })();
+
+  function snapshot(src){
+    var o = {};
+    KEYS.forEach(function(k){ o[k] = parse(src[k]); });
+    NUMS.forEach(function(k){ o[k] = src[k]; });
+    return o;
+  }
+  function ease(t){ return t < .5 ? 4*t*t*t : 1 - Math.pow(-2*t + 2, 3) / 2; }
+
+  function setTime(name, immediate){
+    if (!P[name]) return;
+    timeVal.textContent = name;
+    from = {};
+    KEYS.forEach(function(k){ from[k] = state[k].slice(); });
+    NUMS.forEach(function(k){ from[k] = state[k]; });
+    to = snapshot(P[name]);
+    if (immediate || reduce){ state = to; apply(state); tw = null; return; }
+    tw = { t0: performance.now(), dur: 1600, name: name };
+  }
+
+  /* ---------- the control ---------- */
+  var btns = Array.prototype.slice.call(document.querySelectorAll('.tbtn'));
+  function pick(btn){
+    btns.forEach(function(b){ b.setAttribute('aria-checked', String(b === btn)); b.tabIndex = b === btn ? 0 : -1; });
+    setTime(btn.dataset.time);
+  }
+  btns.forEach(function(b, i){
+    b.addEventListener('click', function(){ pick(b); });
+    b.addEventListener('keydown', function(e){
+      var n = null;
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') n = btns[(i+1) % btns.length];
+      if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')   n = btns[(i-1+btns.length) % btns.length];
+      if (n){ e.preventDefault(); n.focus(); pick(n); }
+    });
+  });
+  btns.forEach(function(b, i){ if (i) b.tabIndex = -1; });
+
+  /* ---------- star field ---------- */
+  (function stars(){
+    var host = starsEl, frag = document.createDocumentFragment(), i;
+    for (i = 0; i < 110; i++){
+      var s = document.createElement('span');
+      s.className = 'star' + (Math.random() > .84 ? ' star--lg' : '') + (Math.random() > .55 ? ' twinkle' : '');
+      s.style.left = (Math.random()*100).toFixed(2) + '%';
+      s.style.top  = (Math.random()*62).toFixed(2) + '%';
+      s.style.animationDelay = (-Math.random()*5).toFixed(2) + 's';
+      frag.appendChild(s);
+    }
+    host.appendChild(frag);
+  })();
+
+  /* ---------- pointer parallax + overall tilt ---------- */
+  var pt = {x:0, y:0}, p = {x:0, y:0};
+  var camT = 0, cam = 0, lastShown = -99;
+
+  function onMove(e){
+    var r = viewport.getBoundingClientRect();
+    pt.x = ((e.clientX - r.left) / r.width  - .5) * 2;
+    pt.y = ((e.clientY - r.top)  / r.height - .5) * 2;
+  }
+  function onLeave(){ pt.x = 0; pt.y = 0; }
+
+  function readScroll(){
+    var max = document.documentElement.scrollHeight - window.innerHeight;
+    camT = max > 4 ? Math.max(0, Math.min(1, window.scrollY / max)) : 0;
+  }
+
+  if (!reduce){
+    window.addEventListener('pointermove', onMove, {passive:true});
+    document.addEventListener('pointerleave', onLeave);
+    window.addEventListener('blur', onLeave);
+
+    var step = function(){
+      /* colour temperature tween */
+      if (tw){
+        var q = Math.min(1, (performance.now() - tw.t0) / tw.dur), e = ease(q);
+        KEYS.forEach(function(k){ state[k] = lerpArr(from[k], to[k], e); });
+        NUMS.forEach(function(k){ state[k] = from[k] + (to[k] - from[k]) * e; });
+        apply(state);
+        if (q >= 1) tw = null;
+      }
+
+      /* eased parallax */
+      p.x += (pt.x - p.x) * .06;
+      p.y += (pt.y - p.y) * .06;
+      cam += (camT - cam) * .08;
+
+      diorama.style.setProperty('--px', (p.x * 54).toFixed(2));
+      diorama.style.setProperty('--py', (p.y * 40).toFixed(2));
+      diorama.style.setProperty('--tX', (-p.y * 4).toFixed(2) + 'deg');
+      diorama.style.setProperty('--tY', ( p.x * 6).toFixed(2) + 'deg');
+      diorama.style.setProperty('--cam', cam.toFixed(4));
+
+      sun.style.transform   = 'translate3d(' + (p.x * 7).toFixed(1) + 'px,' + (p.y * 6).toFixed(1) + 'px,-760px) scale(1.585)';
+      starsEl.style.transform = 'translate3d(' + (p.x * 3).toFixed(1) + 'px,' + (p.y * 3).toFixed(1) + 'px,-820px) scale(1.631)';
+
+      var mm = Math.round(cam * 400);
+      if (Math.abs(mm - lastShown) >= 5){ lastShown = mm; depthVal.textContent = mm + ' mm'; }
+
+      requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  } else {
+    /* motion is off: no drift, no tilt, camera follows scroll directly */
+    Array.prototype.forEach.call(document.querySelectorAll('svg'), function(s){
+      if (s.pauseAnimations) { try { s.pauseAnimations(); } catch (err){} }
+    });
+    window.addEventListener('scroll', function(){
+      readScroll();
+      diorama.style.setProperty('--cam', camT.toFixed(3));
+      depthVal.textContent = Math.round(camT * 400) + ' mm';
+    }, {passive:true});
+  }
+  if (!reduce) window.addEventListener('scroll', readScroll, {passive:true});
+  readScroll();
+  diorama.style.setProperty('--cam', camT.toFixed(3));
+  depthVal.textContent = Math.round(camT * 400) + ' mm';
+})();
+</script>
+</body>
+</html>
+
+
+
+
+

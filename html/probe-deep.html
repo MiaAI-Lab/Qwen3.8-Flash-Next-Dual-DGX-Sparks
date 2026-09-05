@@ -1,0 +1,114 @@
+<!doctype html>
+<!--
+  Strict layout diagnostic for the 100-html gallery. Unlike probe.html this does
+  NOT skip position:fixed or clipped-subtree elements, and it prints a parent
+  chain, so it can explain a docScroll > innerWidth case where probe.html
+  reports culprits:[].
+
+  Usage (from html/):
+    B=~/.cache/ms-playwright/chromium-1208/chrome-linux/chrome
+    for W in 390 768 1440; do
+      timeout 60 "$B" --headless --disable-gpu --no-sandbox --allow-file-access-from-files \
+        --virtual-time-budget=20000 --window-size=560,1000 \
+        --dump-dom "file://$PWD/probe-deep.html#file://$PWD/100-html/013-volcano-cross-section.html|$W" \
+        2>/dev/null | grep -o 'DEEP {[^<]*' | tail -1
+    done
+-->
+<meta charset="utf-8">
+<style>html,body{margin:0;font:12px/1.35 monospace}iframe{border:0;display:block}</style>
+<body><iframe id="f"></iframe><pre id="out">pending</pre>
+<script>
+var parts = decodeURIComponent(location.hash.slice(1)).split('|');
+var W = parseInt(parts[1] || '390', 10);
+var f = document.getElementById('f');
+f.style.width = W + 'px';
+f.style.height = '1000px';
+
+function report(t) {
+  document.getElementById('out').textContent = t;
+  document.title = t.slice(0, 180);
+}
+function name(e) {
+  if (!e || !e.tagName) return '';
+  var cls = (e.className && e.className.toString) ? e.className.toString().trim().split(/\s+/)[0] : '';
+  return e.tagName.toLowerCase() + (cls ? '.' + cls : '') + (e.id ? '#' + e.id : '');
+}
+function chain(e, d) {
+  var out = [], p = e, n = 0;
+  while (p && p !== d.body && n < 5) { out.push(name(p)); p = p.parentElement; n++; }
+  return out.join(' ~ ');
+}
+function measure() {
+  var d, w;
+  try { d = f.contentDocument; w = f.contentWindow; } catch (e) { return report('DEEP_ERR ' + e.message); }
+  if (!d || !d.body) return setTimeout(measure, 200);
+  var iw = w.innerWidth;
+  var se = d.scrollingElement || d.documentElement;
+  var rows = [];
+  var all = d.querySelectorAll('body *');
+  for (var i = 0; i < all.length; i++) {
+    var e = all[i], cs = w.getComputedStyle(e);
+    var r = e.getBoundingClientRect();
+    if (!r.width && !r.height) continue;
+    var spill = Math.round(r.right - iw);
+    if (spill <= 4) continue;
+    var clip = 'no', p;
+    for (p = e; p && p !== d.body; p = p.parentElement) {
+      var ox = w.getComputedStyle(p).overflowX;
+      if (ox === 'hidden' || ox === 'clip' || ox === 'auto' || ox === 'scroll') { clip = name(p) + ':' + ox; break; }
+    }
+    if (clip !== 'no') continue;
+    rows.push({
+      spill: spill,
+      el: name(e),
+      w: Math.round(r.width),
+      left: Math.round(r.left),
+      pos: cs.position,
+      xf: cs.transform === 'none' ? '-' : cs.transform,
+      clip: clip,
+      chain: chain(e, d)
+    });
+  }
+  rows.sort(function (a, b) { return b.spill - a.spill; });
+  // Box-level growth: which NON-clipping box actually carries the wide content.
+  // rect.left + scrollWidth approximates the right edge of that box's content.
+  var grow = [];
+  (function walk(el, depth) {
+    for (var i = 0; i < el.children.length; i++) {
+      var c = el.children[i], cs = w.getComputedStyle(c), ox = cs.overflowX;
+      var passthrough = (ox !== 'hidden' && ox !== 'clip' && ox !== 'auto' && ox !== 'scroll');
+      var rc = c.getBoundingClientRect();
+      var contentRight = Math.round(rc.left + Math.max(c.scrollWidth, c.offsetWidth));
+      if (passthrough && contentRight > iw + 4) {
+        grow.push({
+          el: name(c), left: Math.round(rc.left), sw: c.scrollWidth, ow: c.offsetWidth,
+          cw: c.clientWidth, right: contentRight, d: depth,
+          clipPath: cs.clipPath === 'none' ? '-' : 'YES', contain: cs.contain || '-'
+        });
+      }
+      if (passthrough && depth < 5) walk(c, depth + 1);
+    }
+  })(d.body, 0);
+  grow.sort(function (a, b) { return b.right - a.right; });
+  report('DEEP ' + JSON.stringify({
+    iw: iw,
+    docScroll: se.scrollWidth,
+    bodyScroll: d.body.scrollWidth,
+    overflow: se.scrollWidth - iw,
+    top: rows.slice(0, 6),
+    grow: grow.slice(0, 6),
+    art: (function () {
+      var q = function (s) { return d.querySelectorAll(s).length; };
+      return {
+        svg: q('svg'), canvas: q('canvas'), path: q('path'), circle: q('circle'),
+        ellipse: q('ellipse'), rect: q('rect'), line: q('line'),
+        polygon: q('polygon'), polyline: q('polyline'), text: q('text'),
+        elems: d.querySelectorAll('body *').length
+      };
+    })()
+  }, null, 0).replace(/\n/g, ' '));
+}
+f.addEventListener('load', function () { setTimeout(measure, 400); });
+f.src = parts[0];
+setTimeout(function () { if (!/DEEP \{/.test(document.getElementById('out').textContent)) measure(); }, 3000);
+</script>

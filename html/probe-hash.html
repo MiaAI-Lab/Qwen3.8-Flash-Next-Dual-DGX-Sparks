@@ -1,0 +1,44 @@
+<!doctype html>
+<!-- Tooling, NOT a deliverable. Measures whether a #fragment deep link actually lands on the
+     target element inside a page whose content is built by JS after load.
+     Usage:
+       chrome --headless --disable-gpu --no-sandbox --allow-file-access-from-files \
+         --virtual-time-budget=9000 --window-size=1440,900 \
+         --dump-dom "file://$PWD/probe-hash.html#file://$PWD/100-html/FILE.html#plate-alga|1440" \
+         | grep -o 'HASHPROBE {[^<]*' | tail -1
+     hash param before the '|' is the fragment to request; expect landed:true and a scrollY > 0. -->
+<meta charset="utf-8">
+<div id="out">pending</div>
+<script>
+(function () {
+  var raw = decodeURIComponent(location.href.split('#').slice(1).join('#'));
+  var bits = raw.split('|');
+  var target = bits[0];
+  var w = parseInt(bits[1] || '1440', 10);
+  var frag = '';
+  var cut = target.indexOf('#');
+  if (cut > -1) { frag = target.slice(cut); target = target.slice(0, cut); }
+  var id = frag.replace(/^#/, '');
+  var f = document.createElement('iframe');
+  f.style.cssText = 'width:' + w + 'px;height:900px;border:0;position:absolute;left:0;top:0';
+  document.body.appendChild(f);
+  f.src = target + frag;
+  f.onload = function () {
+    setTimeout(function () {
+      var r = { frag: id, scrollY: 0, targetTop: null, inView: false, landed: false, err: '' };
+      try {
+        var d = f.contentDocument, w1 = f.contentWindow;
+        var el = d.getElementById(id);
+        r.scrollY = Math.round(w1.scrollY || w1.pageYOffset || 0);
+        if (el) {
+          var b = el.getBoundingClientRect();
+          r.targetTop = Math.round(b.top);
+          r.inView = b.top < w1.innerHeight * 0.9 && b.bottom > 0;
+          r.landed = r.inView && Math.abs(b.top - (w1.innerHeight / 2 - b.height / 2)) < w1.innerHeight * 0.5;
+        } else { r.err = 'no such id'; }
+      } catch (e) { r.err = String(e).slice(0, 120); }
+      document.getElementById('out').textContent = 'HASHPROBE ' + JSON.stringify(r);
+    }, 2500);
+  };
+})();
+</script>

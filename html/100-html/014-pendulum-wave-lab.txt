@@ -1,0 +1,105 @@
+TITLE: Pendulum Wave Laboratory — 24 brass bobs on a quadratic length taper, RK4-integrated
+
+PROMPT: Build a single self-contained HTML page (all CSS in one <style>, all JS in one <script>, no
+external requests, no webfonts, no libraries, system font stacks only) that is a working pendulum
+wave machine you can actually operate.
+
+LAYOUT. A nameplate header, then one column of lab furniture. (1) Header: a monospace eyebrow row
+("Apparatus 014 · Pendulum wave machine · 24 brass bobs · quadratic length taper"), a colossal
+condensed uppercase title whose middle line is stroke-only outline type ("Wave"), a Georgia deck
+paragraph that states the equation being solved, and a bordered FORMULA CARD on the right typesetting
+T_n = 2π√(L_n/g) with real CSS — an italic serif variable, a "√" glyph and a radicand carried under a
+true vinculum (a span with border-top) wrapping a stacked fraction (two block <b>s, the lower one
+bordered on top) — plus the design law L_n = g·[T_beat / 2π(14+n)]² as a sub-caption. (2) THE BAY: a
+bordered panel holding the machine as one inline SVG, viewBox 0 0 1500 640, preserveAspectRatio
+xMidYMid meet, with a corner tag ("Bay 014 · optical bench") and a status lamp top-right that turns
+brass and glows when integrating. (3) A CONTROL RACK: three groups (Transport / Gravity / Release &
+losses) of buttons, sliders and preset chips. (4) A GAUGE ROW of five framed instruments. (5) A
+PHASE STRIP of 24 thin bars with an index row beneath. (6) Two prose cards, one of them the
+instruction card with <kbd> keys. (7) A WIRE SCHEDULE: 24 auto-fill cells with bob number, swings per
+beat, length in mm and live period.
+
+THE MACHINE (SVG). Graph-paper ground: two nested <pattern> grids (25 px hairlines at rgba(232,227,216,
+.055), 125 px at .11) over #101418, with a floor line at y=596 and a tick plus "BOB n" label at every
+sixth station. A fabrication frame: two gradient uprights with bolt holes and machined feet. A
+carriage bar across the top drawn from a four-stop steel <linearGradient> with a highlight rule, a
+shadow rule, engraved monospace text ("CARRIAGE BAR · INVAR · 1 268 mm", "24 STATIONS · PITCH 33.9"),
+bolts, and 24 pivot bushings at x = 360 → 1140 (pitch 33.9). Per bob: a hairline wire stroked with a
+vertical fade gradient, and a bob group of a circle filled with a brass radialGradient (#fbe6bb →
+#d7a13c → #9b7024 → #4d3812), a rim stroke, and a small rotated white <ellipse> specular highlight.
+Dimension brackets with rotated labels measure L₁ = 994 mm and L₂₄ = 155 mm; a dashed sampled
+polyline shows the ±34° swing envelope of the fastest and slowest bob; hairline guides drop from every
+pivot to the floor. Three tiers of <polyline> per bob (opacity .10 / .22 / .46, brass) form the
+fading trail. PX_PER_M = 400 so the 0.994 m wire hangs 398 px without touching the floor.
+
+PHYSICS. 24 lengths from the quadratic design law, L_n = g₀·[T_beat/(2π(14+n))]² with T_beat = 30 s
+and g₀ = 9.81, so bob 1 swings 15 times per beat and bob 24 exactly 38 times: lengths 994 → 155 mm,
+periods 2.000 → 0.789 s. Integrate the FULL equation θ̈ = −(g/L)·sin θ − c·θ̇ with fourth-order
+Runge–Kutta on the state (θ, ω) at a fixed 1/480 s step, burned from an accumulator that is capped at
+20 steps per frame and flushed if it ever saturates, so the time-scale slider (0.10×–2.00×) changes
+only the burn rate and never the trajectory. The countdown is amplitude-corrected: T ≈ T₀(1 + θ₀²/16
++ 11θ₀⁴/3072), which was checked against this same integrator and puts the predicted return within a
+few milliseconds of the simulated truth. Coherence is a Kuramoto order parameter R over the 24
+phases, φ = atan2(−ω/ω₀, θ).
+
+GAUGES. Five framed instruments, tabular numerals: a hero "NEXT CONVERGENCE IN t t.s" with a meter
+filling across the beat; "BEAT PERIOD" that relabels itself for gravity AND shows the amplitude
+correction percentage; "SIM CLOCK" with per-bob swing counts; "COHERENCE" R to three decimals with a
+meter; "PERIOD SPREAD" with T₁ → T₂₄ and Δf in Hz. The 24-channel strip bars plot |sin θ| normalised
+to the loudest channel, and the bar whose value exceeds 0.93 switches to a brighter brass gradient.
+
+PALETTE. void #101418 / #0b0f12, panel #151b21 / #1a2228, rules #232e35 / #2f3d46, paper ink #e8e3d8,
+muted #8d949a, brass #d7a13c with highlight #f3d495 and shadow #7a5a1f, steel #3a4148 / #78848b.
+Colour is used only for brass and paper: the machine is the accent.
+
+TYPOGRAPHY. ui-monospace/Menlo/Consolas for every number, label and engraving, with 9.5–11 px
+uppercase letter-spacing up to .3em; Haettenschweiler/Arial Narrow/Impact condensed for the title and
+card headings (line-height .84–.94); Georgia for body prose and for the formula, which is the only
+place italic serif appears. Fluid sizing via clamp() throughout.
+
+RESPONSIVE & MOTION. 360 px → 2560 px: rack collapses 3→1 columns, gauge row auto-fits, bars drop to
+12 columns and lose their index row under 420 px, header stacks under 760 px. prefers-reduced-motion
+suppresses autoplay and all CSS transitions; the machine then sits still until START is pressed, and
+the integrator (which is scroll-independent) still runs on demand.
+
+DESIGN: The page is an instrument bench, not an article: everything is drawn as a machining drawing
+so that the reader trusts the numbers before they trust the animation. Graph paper, engraved
+dimensions, brass on a dark sheet and a lamp that only lights when the state is live give the object
+the authority of a laboratory plate, while the huge condensed headline and the outline word keep it
+readable as editorial. Restraint is the point — two colours, one accent, tabular figures — so that
+when 24 independent clocks finally snap back into one straight line, the only moving thing in the
+frame is the physics.
+
+TECHNIQUES:
+- Fixed-timestep accumulator with a 1/480 s RK4 step on the full non-linear pendulum equation, capped
+  at 20 steps/frame so tab stalls and 2× time scale cannot blow up the state
+- Quadratic length taper L_n ∝ 1/(14+n)² giving integer swing counts per beat (15…38) and an exact
+  30 s recurrence at the design gravity
+- Amplitude correction 1 + θ₀²/16 + 11θ₀⁴/3072 applied to the countdown, so the displayed "next
+  convergence" matches the simulated truth instead of the small-angle idealisation
+- Pure-CSS mathematical typesetting: stacked fraction plus √ glyph plus a border-top vinculum
+- Inline SVG machine built once in JS with createElementNS: patterns, linear/radial gradients,
+  gradient-stroked wires, layered brass bob with an elliptical specular highlight
+- Three-tier polyline trails (near/mid/far opacity) as a cheap SVG stand-in for motion blur
+- Live Kuramoto order parameter computed from (θ, ω) via φ = atan2(−ω/ω₀, θ)
+- Frame-budget partitioning: geometry every frame, bars every 2nd frame, gauges every 4th
+- Keyboard control surface (Space, R, G, T, [ ], ←/→) with INPUT-focus guard, aria-pressed toggles,
+  labelled range inputs, role="img" + title/desc on the SVG
+- IntersectionObserver releases the fan the first time the bay scrolls into view
+- Two nested SVG grid patterns for graph paper at two scales; sampled polyline instead of SVG arcs to
+  avoid sweep-flag ambiguity; no URL-shaped literal anywhere (SVG namespace assembled with .concat())
+
+INTERACTION:
+- START/PAUSE (button or Space) with a status lamp and label that change; RESET (button or R) returns
+  every bob to the release angle and zeroes the clock without altering the phase plan.
+- GRAVITY slider 0.6–26 m s⁻² plus preset chips Moon 1.62 / Mars 3.72 / Earth 9.81 / Jupiter 24.79
+  (also cycled by G): all 24 frequencies scale by √(g/9.81), so the pattern is preserved and only the
+  beat period relabels itself — 73.8 s, 48.7 s, 30.0 s, 18.9 s — shown live in the beat gauge.
+- DAMPING slider 0–0.6 s⁻¹ (linear drag) and RELEASE ANGLE 2–34°, which visibly degrades a
+  convergence, and SWEPT RELEASE PHASE 0–180°, which re-launches the fan from a chirped angle: 0° is
+  the released line, 180° is the alternating standing wave; the strip header names the mode.
+- TRAILS toggle (button or T) leaves three-tier fading brass paths behind the bobs.
+- TIME SCALE 0.10×–2.00× (slider or [ / ]) proves the fixed-step claim: same trajectory, different burn.
+- Continuous readouts: convergence countdown and meter, beat period with amplitude correction,
+  sim clock with per-bob swing counts, coherence meter, period spread, and 24 phase bars; hovering a
+  cell in the wire schedule highlights it while its live period ticks.

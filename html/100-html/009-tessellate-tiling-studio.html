@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>009 — Tessellate: Escher-style Tiling Studio</title>
+<meta name="description" content="An interactive tessellation studio: edit one hand-drawn silhouette edge and watch the tile interlock and repeat across the plane in real time.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<!--@@FONTS@@-->
+<style>
+/* ---- base scaffolding (tokens arrive with the concept palette) ---- */
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;min-height:100vh;overflow-x:hidden;background:var(--bg);color:var(--ink);font-family:var(--font-body);line-height:1.55;font-size:clamp(14px,.92rem,17px)}
+img,svg,canvas{display:block;max-width:100%}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer;background:none;border:0}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.sr{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+.wrap{width:min(1240px,100% - clamp(16px,4vw,48px));margin-inline:auto}
+
+/* ---- shell ---- */
+header.masthead{position:relative;z-index:3;padding:clamp(18px,3.4vw,40px) 0 clamp(10px,1.6vw,18px)}
+.mast-grid{display:flex;flex-wrap:wrap;align-items:flex-end;gap:clamp(10px,2vw,28px);justify-content:space-between}
+.wordmark{display:flex;align-items:baseline;gap:.5ch;font-family:var(--font-display);font-weight:var(--wd-heavy);letter-spacing:var(--ls-tight);line-height:.92;margin:0}
+.wordmark .a{font-size:clamp(30px,7.2vw,74px)}
+.wordmark .b{font-size:clamp(11px,1.5vw,15px);letter-spacing:.34em;text-transform:uppercase;font-weight:600;color:var(--ink-2)}
+.kicker{font-family:var(--font-mono);font-size:clamp(10px,1.1vw,12px);letter-spacing:.26em;text-transform:uppercase;color:var(--ink-3);margin:0 0 .6em}
+.lede{max-width:62ch;margin:.9em 0 0;color:var(--ink-2);font-size:clamp(14px,1.15vw,18px)}
+.lede b{color:var(--ink);font-weight:600}
+.tag{font-family:var(--font-mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-3);border:1px solid var(--line);padding:.42em .7em;border-radius:999px;white-space:nowrap}
+
+/* ---- studio frame ---- */
+main{padding-bottom:clamp(28px,5vw,72px)}
+.studio{display:grid;gap:clamp(12px,1.6vw,20px);grid-template-columns:minmax(0,1fr);align-items:start}
+@media (min-width:1040px){.studio{grid-template-columns:minmax(0,1fr) 336px}}
+.panel{border:1px solid var(--line);border-radius:var(--radius);background:var(--panel);overflow:hidden;position:relative}
+.panel > .bar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 12px;border-bottom:1px solid var(--line);background:var(--panel-2)}
+.bar .ttl{font-family:var(--font-mono);font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-2)}
+.bar .n{font-family:var(--font-mono);font-size:11px;color:var(--ink-3);letter-spacing:.1em}
+.stage{position:relative;background:var(--stage);contain:paint}
+#plane{width:100%;height:clamp(360px,58vh,640px);touch-action:none;cursor:grab}
+#plane.dragging{cursor:grabbing}
+.stage .hint{position:absolute;left:12px;bottom:10px;font-family:var(--font-mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);pointer-events:none;text-shadow:0 1px 0 var(--stage-hi)}
+.stage .badge{position:absolute;right:12px;top:10px;font-family:var(--font-mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);pointer-events:none}
+
+/* ---- rail ---- */
+.rail{display:grid;gap:clamp(12px,1.6vw,20px)}
+.grp{padding:13px 14px;border-bottom:1px solid var(--line)}
+.grp:last-child{border-bottom:0}
+.grp > h3{margin:0 0 10px;font-family:var(--font-mono);font-size:10.5px;letter-spacing:.22em;text-transform:uppercase;color:var(--ink-3);display:flex;justify-content:space-between;align-items:center;gap:8px}
+.grp > h3 .v{color:var(--ink-2);letter-spacing:.08em}
+.row{display:flex;flex-wrap:wrap;gap:7px}
+.btn{border:1px solid var(--line);border-radius:8px;padding:.5em .78em;background:var(--panel-2);font-size:12.5px;letter-spacing:.02em;color:var(--ink-2);transition:background .16s,border-color .16s,color .16s,transform .16s}
+.btn:hover{background:var(--chip-hover);color:var(--ink);border-color:var(--line-2)}
+.btn:active{transform:translateY(1px)}
+.btn[aria-pressed="true"],.btn.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent-ink)}
+.btn.wide{flex:1 1 auto;text-align:center}
+input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:22px;background:transparent;margin:0}
+input[type=range]::-webkit-slider-runnable-track{height:3px;border-radius:2px;background:var(--line-2)}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:15px;height:15px;margin-top:-6px;border-radius:50%;background:var(--accent);border:2px solid var(--panel);box-shadow:0 0 0 1px var(--line-2)}
+input[type=range]::-moz-range-track{height:3px;border-radius:2px;background:var(--line-2)}
+input[type=range]::-moz-range-thumb{width:13px;height:13px;border:2px solid var(--panel);border-radius:50%;background:var(--accent)}
+.sw{display:flex;gap:5px;flex-wrap:wrap}
+.sw button{width:26px;height:26px;border-radius:7px;border:1px solid var(--line);padding:0;position:relative;transition:transform .16s,border-color .16s}
+.sw button:hover{transform:translateY(-2px)}
+.sw button[aria-pressed="true"]{border-color:var(--ink);box-shadow:0 0 0 2px var(--panel),0 0 0 3px var(--ink)}
+.readout{font-family:var(--font-mono);font-size:11.5px;line-height:1.7;color:var(--ink-3);margin:0}
+.readout b{color:var(--ink-2);font-weight:500}
+/* @@NEXT@@ */
+</style>
+</head>

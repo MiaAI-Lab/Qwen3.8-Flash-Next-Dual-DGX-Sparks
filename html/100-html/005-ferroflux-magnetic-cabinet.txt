@@ -1,0 +1,89 @@
+TITLE:  Ferroflux — Normal-Field Instability Cabinet (exhibit RF-05)
+
+PROMPT:  Author one premium self-contained page about a ferrofluid demonstration
+cabinet: the Rosensweig normal-field instability, spike formation, coil geometry and
+colloid composition. Art direction: a pale, precise laboratory ground — warm graph
+paper, NOT a dark neon scene — where one black mirror pool is the only dark mass and
+hairline field lines appear in a single accent; the register is a scientific exhibit
+panel, not sci-fi. Palette: #f1eee7 #e3ded2 #1a1815 #0d0c0b (the fluid) plus one accent
+(#4a5fc7) and a neutral #8b8578. Type: display Didot, "Bodoni MT", "Hoefler Text",
+Optima, serif; body "Helvetica Neue", Helvetica, system-ui; readouts ui-monospace, Menlo.
+Layout: a fluid canvas stage as the hero with a right-hand instrument column (field mT,
+coil current, gap, composition) and three lower diagram plates — surfactant-coated
+nanoparticle colloid, the force balance that sets spike spacing, a coil cross-section —
+plus an exhibition caption carrying real numbers. Motion: the field ramp must genuinely
+transition flat mirror -> ridges -> rising spikes with a travelling specular highlight,
+using your own metaball/marching-squares field plus value noise; reduced-motion renders
+the settled state only. Interaction: a field slider 0-400 mT driving a computed spike
+wavelength (surface tension vs magnetic stress vs gravity) that refuses spikes below
+onset, a coil geometry selector, a gap slider, a field-pulse button, click-a-spike to
+read height and local field, and hover on the composition plate to reveal layer labels.
+
+DESIGN:  The page is drawn like a museum bench card that happens to be running an
+experiment. Everything sits on warm graph paper (#f1eee7 with a 9 px minor and 45 px
+major ruled grid painted by four repeating-linear-gradients), so the only saturated dark
+mass on screen is the pool itself (#0d0c0b with a #211e1b sheen at its surface); the
+pole piece, the coil windings and the colloid bodies in the plates are engineering
+section-hatching in #e3ded2 and #8b8578 rather than solid blacks, which keeps the dark
+pool unique and reads as laboratory drawing. #4a5fc7 is the single accent and is used
+only for field: field lines, dimension rules, the selected-wavenumber marker, the live
+field value. Didot/Bodoni carries the masthead, deck and plate titles at high contrast
+against Helvetica body text and monospace instrument values, so the hierarchy is
+"wall label / paragraph / dial". The stage is a bordered 16:9 tank with corner register
+marks, a dashed rest-surface line, a 10 mm scale bar and a λ dimension rule; the
+instrument column is a dial strip with tabular numerals and a 12 s B(t) trace whose
+dashed onset line the trace visibly crosses. Horizontal scale in the tank is true 1:1
+across the 96 mm specimen; only the vertical gap is exaggerated, by a flat 1.35x printed
+in the plate's own note ("gap drawn x1.35"), so the dimension rule, the ceiling and the
+pole plate all move together and the drawing never claims a scale it is not using.
+
+TECHNIQUES:  Canvas 2D stage with DPR scaling. Free-surface profile: a phase
+accumulator integrates 1/lambda(x) so a radially non-uniform coil field bends the crest
+array; crest shape blends a cosine ridge into a rounded cone ((1-|s|)^2 + r^2)^0.5 - r
+with the mix driven by overdrive, so the ramp genuinely passes mirror -> ridge -> spike;
+three-octave value noise (hashed lattice, cosine interpolation) jitters amplitude, adds
+the sub-onset capillary dimple field and drives the wall envelope. The surface is then
+re-embedded as a metaball scalar field (flat term y - profile plus one compact
+poly6-style ball per tip) sampled on a 6 px grid; a hand-written 16-case marching-squares
+pass with bilinear edge interpolation emits the isocline segments, which are stroked as
+a rim-lit hairline inside the clipped fluid path, while the fill polygon comes from the
+topmost phi = 0 crossing per css column (two smoothing passes). Specular: per-column
+surface normals from the silhouette are compared with a slowly rotating 2-D light
+direction, pow(n.l, 26), summed with a gaussian band whose centre travels as
+0.5 + 0.62*sin(0.30 t), drawn as short pale strokes on top of the black — plus radial
+gradient glints at each crest. Field lines are streamlines integrated 460 steps at a time
+through a superposition of the uniform normal field and one attractor per crest, so flux
+genuinely concentrates into the spikes. Physics: Langevin M(H) from the real 9.4 nm
+particle moment; driving stress S = COUPLE * mu0 * INT M dH (cumulative Simpson over a
+260-point field grid, one constant fitted to the measured 17.5 mT onset); dispersion
+rho*omega^2 = sigma*k^3 + rho*g*k - S*k^2; k_c = sqrt(rho*g/sigma) and S_c =
+2*sqrt(rho*g*sigma) give lambda_c = 8.60 mm at onset and lambda = lambda_c *
+exp(-0.155*sqrt(Bo_m - 1)) above it; crest height is room*tanh(0.22*overdrive + 0.05) with
+room = min(0.42 x gap, 0.55 x lambda_c), so spikes saturate instead of piercing the pole
+piece; tip field from crest sharpness; coil current from the Helmholtz axis formula with a
+per-geometry factor. Plate I and III are built with createElementNS (radial surfactant
+tails, head groups, carrier molecules, dipole arrows, scale bar; clipped diagonal
+hatching, winding cross-sections with turn circles, conical pole polygons, computed gap
+field paths). Plate II redraws the omega^2/k curve, its unstable lobe and the selected k
+from the live field every ~420 ms. SVG trace polyline for B(t).
+
+INTERACTION:  Field slider 0-400 mT sets the target field; the displayed field
+exponentially approaches it (rate 4.6/s) so the surface moves through mirror, ridges and
+spikes rather than switching. Gap slider 3-24 mm moves the hatched pole plate, its
+dimension rule and the crest ceiling. Three coil-geometry buttons (Helmholtz k=1.00,
+bore solenoid k=0.86, conical poles k=1.35) switch aria-pressed state, change the radial
+field gradient used by the profile and the streamline/plate drawings, and rebuild Plate
+III and its caption. "Field pulse" runs a 2.6 s raised-cosine 0->400->rest sequence that
+also drags the slider; "Return to mirror" ramps to 0; "Step to onset" parks at 1.04 x B_c;
+"Clear probe" dismisses the callout. Clicking the stage probes the nearest crest and
+shows height, local flux density, local wavelength and distance from the wall in a
+bordered callout; clicking below onset instead states that no crest exists and quotes the
+onset. Hovering or focusing a nanoparticle in Plate I reveals its core/shell/carrier
+label strip and an accent ring. Readouts, the B(t) trace, Plate II's dispersion curve and
+the exhibition caption numbers all recompute from the same functions, so every number on
+the page is derived from sigma, rho, the particle moment and the two sliders.
+prefers-reduced-motion renders one settled frame (no rAF, fixed specular phase, controls
+still work via an immediate re-render). The boot always paints one frame synchronously and
+the animation loop keeps a 34 ms setTimeout alongside requestAnimationFrame, skipping a
+timer tick whenever rAF is alive, so the cabinet still animates in hosts that never
+service rAF (headless capture, some embedded webviews).

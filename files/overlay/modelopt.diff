@@ -1,0 +1,58 @@
+--- files/overlay/modelopt.py.orig	2026-09-02 15:27:42.740730627 +0300
++++ files/overlay/modelopt.py	2026-09-02 15:27:42.761577361 +0300
+@@ -2263,7 +2263,7 @@
+             exclude_modules=[],
+         )
+ 
+-        return cls(
++        cfg = cls(
+             kv_cache_quant_method=kv_cache_quant_method,
+             exclude_modules=exclude_modules,
+             quantized_layers=quantized_layers,
+@@ -2272,6 +2272,21 @@
+             w4a16_nvfp4_config=w4a16_nvfp4_config,
+             mxfp8_config=mxfp8_config,
+         )
++        # [fp8dense overlay] sibling configs for per-channel / per-block FP8 dense
++        # layers (dynamic per-token activations, no calibration scales needed).
++        cfg.fp8_pcpt_config = ModelOptFp8Config(
++            quant_method="FP8_PER_CHANNEL_PER_TOKEN",
++            is_checkpoint_fp8_serialized=True,
++            kv_cache_quant_method=kv_cache_quant_method,
++            exclude_modules=[],
++        )
++        cfg.fp8_pbwo_config = ModelOptFp8Config(
++            quant_method="FP8_PB_WO",
++            is_checkpoint_fp8_serialized=True,
++            kv_cache_quant_method=kv_cache_quant_method,
++            exclude_modules=[],
++        )
++        return cfg
+ 
+     def _resolve_quant_algo(self, prefix: str) -> str | None:
+         """Look up the quant_algo for a vLLM-side layer prefix.
+@@ -2366,6 +2381,12 @@
+             candidates.append(
+                 "language_model.model." + prefix[len("model.language_model.") :]
+             )
++        elif prefix.startswith("model."):
++            # [fp8dense overlay] text-only entry point (Qwen3_8FlashNextForCausalLM)
++            # strips "model.language_model." to "model."; keep the HF spelling too.
++            candidates.append("model.language_model." + prefix[len("model.") :])
++        if prefix.startswith("language_model.lm_head") or prefix == "lm_head":
++            candidates.append("lm_head")
+ 
+         return tuple(dict.fromkeys(candidates))
+ 
+@@ -2390,6 +2411,11 @@
+         if isinstance(layer, (LinearBase, ParallelLMHead)):
+             if quant_algo == "FP8":
+                 return ModelOptFp8LinearMethod(self.fp8_config)
++            # [fp8dense overlay]
++            if quant_algo == "FP8_PER_CHANNEL_PER_TOKEN":
++                return ModelOptFp8PcPtLinearMethod(self.fp8_pcpt_config)
++            if quant_algo == "FP8_PB_WO":
++                return ModelOptFp8PbWoLinearMethod(self.fp8_pbwo_config)
+             if quant_algo == "NVFP4":
+                 return ModelOptNvFp4LinearMethod(self.nvfp4_config)
+             if quant_algo == "W4A16_NVFP4":

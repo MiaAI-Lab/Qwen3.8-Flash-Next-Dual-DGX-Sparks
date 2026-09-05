@@ -1,0 +1,66 @@
+TITLE: The Clockwork Orrery — a brass-and-ebony dial of 1893, solved rather than geared
+
+PROMPT: Build a single self-contained HTML page: an 1893 London clockwork orrery presented as an
+exhibition plate. Ground: warm near-black #120d08 with an ebony case #1b1410/#171009, a fixed radial
+vignette (body::before, warm #4a3216 glow at 50% 22% fading to #060402) and an ultra-fine grain made by
+an inline <svg> feTurbulence filter (fractalNoise baseFrequency 0.86, numOctaves 3, saturate 0) fixed
+over the page at opacity .06, mix-blend-mode overlay. Metals only as SVG gradients: brass #d9a441, dark
+brass #8a5a1f, highlight #f3d39b, screw/hub radial #f6dfae→#c8922e→#6a4315, patina #6f7d5f. Type:
+display stack Didot/"Bodoni MT"/"Hoefler Text"/"Iowan Old Style"/Palatino/Baskerville/Georgia for the
+wordmark, section heads, engraved caps and buttons; body stack "Iowan Old Style"/Palatino/Baskerville/
+Georgia; readouts in ui-monospace/SFMono-Regular/Menlo/Consolas/"Courier New" with font-variant-numeric
+tabular-nums. Masthead: double brass rule (the upper one with a slow sheen sweep), a letterspaced
+kicker line, a huge two-line wordmark "The Clockwork / Orrery" with a small-caps em subtitle, a lede
+paragraph, and an engraved brass plate reading "ANNO MDCCCXCIII · LONDON".
+
+The instrument is one <section class="case"> holding: a lid line (title + catalogue line "Div. 1° ·
+radius 15 in. · lever escapement, dead-beat · No. 47"); a dial, which is one SVG (viewBox 0 0 1000 760,
+centre CX=500 CY=372, vertical squash K=0.52, 21 px per dial inch) with a radial ground gradient, an
+engraved bezel at r=404 (black groove + url(#gBezel) metal + inner glint), a graduated circle drawn
+every 2° with emphasised ticks at 5°, 10° and 30° (lengths 5/13/19/26), twelve roman zone numerals at
+r=394 and cardinal "0°/90°/180°/270°" labels at r=426 plus a "° VER" mark on the equinox line; seven
+planet rings; bodies; roman-numeral labels; and case furniture (four brass corner brackets with slotted
+screws, and a rivetted brass plate engraved "ANNO MDCCCXCIII · LONDON" over "OPUS HOROLOGIORUM ·
+NUM. XLVII · DIV. UNI GRADUM", plus an "ESCAPEMENT HELD" tag that fades in when the clock is held).
+
+Orbits must be TRUE ellipses, not circles: elements (a, e, T, longitude of perihelion, mean longitude at
+J2000, inclination) for Mercury…Uranus are hard-coded (Neptune is deliberately omitted by the maker and
+the copy says why). Each frame, for the simulated Julian day jd = 2412464.5 + days (epoch 1893 Jan 1.0),
+compute mean longitude, mean anomaly M, then solve Kepler's M = E − e sin E by Newton's iteration
+(seed E = M for e < 0.8 else π; tolerance 1e-12 rad; at most 12 visits), then true anomaly
+ν = 2·atan2(√(1+e)·sin(E/2), √(1−e)·cos(E/2)) and radius r = a(1 − e cos E). Rings are drawn from the
+SAME E-parametrisation as the planets (x = a cos E − a e, y = a√(1−e²) sin E, squashed by K), so a planet
+can never drift off its own engraved ellipse and the Sun sits exactly at the focus. Each planet is a
+radial-gradient sphere carrying a per-planet linear-gradient "night" overlay whose gradientTransform is
+set every frame to rotate(atan2 of the anti-solar direction), giving a terminator that genuinely points
+away from the Sun; Saturn adds a back ring ellipse plus a front arc; Earth carries a dashed lunar circle
+and a Moon on a 27.321661 d orbit with its own terminator. Behind every body draw a brightened trail
+path spanning an equal interval of time (clamp(0.028·T, 5, 34) days) so its length evidences the second
+law. The Sun is a corona radial gradient, sixteen engraved rays and a #gSun disc labelled CENTRUM SOLIS.
+
+In the lower-left corner of the case, a glazed "reveal window" shows a real gear train: three wheels
+generated in JS as toothed paths on a common module MOD = 2.3 (addendum 0.95 m, dedendum 1.2 m; root
+arc → straight flank → tip arc → flank per tooth) with 54, 24 and 36 teeth, centre distances
+(r1 + r2) so they mesh, and angular velocities ω = 1, −2.25, +1.5 (inverse tooth counts, alternating
+sign). Wheels get lightening holes, hubs, arbors and shadow discs. A second window (hidden below
+1000 px) shows a lever escapement: a 15-tooth escape wheel that ratchets 12° per beat with a cubic-eased
+engage, a dead-beat anchor with patina pallet stones rocking at 0.82× the pendulum's ±5.2°, a crutch and
+bob on a 2 s period, a 1 Hz beat lamp and a FREE/HELD word. Below the dial a brass control rail holds
+rate buttons 1×/60×/360×/1800× (aria-pressed), Hold/Resume and Epoch buttons, and mono readouts for the
+dial date (Julian Day → Gregorian by the 2299161 algorithm), the Julian day to 3 dp and days from epoch.
+Under the instrument: an engraved schedule table of the elements (a, e, T, ϖ, i, dial radius in inches,
+driver/planet wheel teeth) built from the same data; a two-column method section stating Kepler's
+equation and the Newton update with a live iteration panel printing the seed, every E_n to 12 dp, the
+correction, the visit count and the resulting ν; a three-column provenance essay (Graham and Rowley,
+the Earl of Orrery, Benjamin Martin's universal orrery, Herschel's Georgium Sidus); and a footer.
+
+ANIMATION: requestAnimationFrame; days += rate·dt with rate in days of ephemeris per real second
+(1× = 1 day/s, 1800× = 5 years/s); text readouts refreshed at ~8 Hz, the trace at 2.5 Hz; gear speed
+clamped to 1.6–210 °/s; prefers-reduced-motion starts the clock held, freezes the pendulum/gears and
+kills all CSS transitions and the rule sheen.
+
+DESIGN: An exhibition plate rather than a dashboard: the whole page is warm black lacquer and hand-divided brass, and every affordance is a piece of the instrument (a reveal window, a rivetted maker's plate, a control rail of milled buttons). The only brightness is metal — engraved rings, screw slots, a gilt Sun — so the black ground reads as ebony and the page feels lit by one lamp in a museum case. The typography does the period work (Didot caps engraved with light-on-dark text-shadows, mono for anything numerical, Palatino text at 1.66 leading), and the copy stays in character throughout, admitting honestly that the orbit radii are reduced for the dial while the anomalies are left true.
+
+TECHNIQUES: one <style> and one <script>, no external references, no images (grain = inline feTurbulence; vignette = radial-gradient; all artwork = SVG/Canvas); SVG geometry generated in JS via createElementNS; Kepler's equation solved by Newton iteration each frame; ellipse rings and planet positions sharing one eccentric-anomaly parametrisation; per-planet linear-gradient terminators rotated by gradientTransform about the objectBoundingBox centre; equal-time trail arcs as evidence of Kepler's second law; JS-generated involute-ish gear tooth paths on a common module with true ω ∝ 1/N ratios and meshing centre distances; ratcheted escape wheel (floor + cubic-eased fraction) for a plausible dead-beat escapement; Julian-Day↔Gregorian conversion for a live 1893 date; live Newton-iteration printout; tabular-nums mono readouts; clamp()-based fluid typography and spacing; inline gradient-filled case furniture (corner brackets, slotted screws, maker's plate) instead of images.
+
+INTERACTION: drag horizontally on the dial to scrub the ephemeris (2.4 days per px, 0.25 px-1 with Shift; the clock does not accumulate while dragging); click empty dial to hold or release the escapement (beat lamp freezes, the window reads HELD, the engraved ESCAPEMENT HELD tag fades in); click a planet to raise the engraved brass plate with sidereal period, eccentricity, live true anomaly ν, radius vector in AU and heliocentric longitude, clamped inside the stage so it can never overflow; hover a planet to retarget the Newton iteration panel to it; click a row of the schedule table to select that planet and highlight its ring; rate buttons 1×/60×/360×/1800× (any rate button also releases the hold); Hold/Resume and Epoch (returns to 1893 Jan 1.0); keyboard on the focused dial — ←/→ step one day (Shift 30), Space/Enter hold; Escape/planet name labels follow their bodies; layout reflows at 1000/660/420 px (the escapement window is dropped below 1000 px and the gear window shrinks on phones); prefers-reduced-motion boots the instrument held and fully painted.
