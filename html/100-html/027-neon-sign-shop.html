@@ -1,0 +1,1715 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vessel &amp; Filament — Neon Sign Works, Closing Time</title>
+<style>
+/* ============================================================
+   VESSEL & FILAMENT — a neon sign workshop at closing time.
+   Everything hand-drawn: brick from gradients, tubes from
+   layered text-shadow, street from masks + SVG displacement.
+   ============================================================ */
+
+:root{
+  /* wall + night */
+  --brick-dark:#0b0908;
+  --brick-mid:#170f0c;
+  --brick-face:#2a1a14;
+  --brick-lip:#3a2419;
+  --mortar:#120c09;
+  --night:#050409;
+  --street:#08080c;
+  --kerb:#131318;
+
+  /* gas — mutated by the palette */
+  --gas:#35c8ff;
+  --gas-hot:#ffffff;
+  --gas-soft:rgba(53,200,255,.55);
+  --gas-far:rgba(53,200,255,.22);
+
+  --burn:1;            /* burn rate 0.45 .. 1.25 */
+  --damp:0;            /* rain dimming 0 .. 1     */
+
+  /* bench */
+  --bench:#131114;
+  --steel:#292830;
+  --steel-hi:#4a4855;
+  --phenolic:#1d1a17;
+  --ink:#ece5da;
+  --dim:#96897c;
+  --warn:#ffb42e;
+
+  --shadow-cut:0 1px 0 rgba(255,255,255,.06), 0 -1px 0 rgba(0,0,0,.6);
+  --ease-soft:cubic-bezier(.22,.61,.36,1);
+}
+
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+html{-webkit-text-size-adjust:100%}
+body{
+  min-height:100vh;
+  background:
+    radial-gradient(120% 80% at 50% -10%, #171021 0%, transparent 60%),
+    radial-gradient(90% 60% at 12% 110%, rgba(53,200,255,.07) 0%, transparent 60%),
+    var(--night);
+  color:var(--ink);
+  font-family:"Avenir Next","Helvetica Neue",Futura,system-ui,sans-serif;
+  line-height:1.5;
+  overflow-x:hidden;
+}
+::selection{background:var(--gas-soft);color:#fff}
+:focus-visible{outline:2px solid var(--gas);outline-offset:3px}
+
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Courier New",monospace}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+
+/* ---------- shell ---------- */
+.stage{
+  max-width:1560px;
+  margin:0 auto;
+  padding:clamp(14px,2.2vw,34px);
+  display:grid;
+  grid-template-columns:minmax(0,1fr) 372px;
+  grid-template-areas:"top top" "front bench" "foot foot";
+  gap:clamp(14px,1.6vw,26px);
+  position:relative;
+  z-index:2;
+}
+
+/* ---------- top rail ---------- */
+.rail{
+  grid-area:top;
+  display:flex;flex-wrap:wrap;align-items:baseline;gap:14px 22px;
+  padding-bottom:14px;
+  border-bottom:1px solid rgba(255,255,255,.08);
+}
+.rail .mark{
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Courier New",monospace;
+  font-size:11px;letter-spacing:.34em;text-transform:uppercase;color:var(--dim);
+}
+.rail .mark b{color:var(--ink);font-weight:600}
+.rail h1{
+  margin:0;font-size:clamp(15px,1.5vw,19px);font-weight:500;letter-spacing:.16em;
+  text-transform:uppercase;
+}
+.rail h1 em{font-style:normal;color:var(--gas);text-shadow:0 0 18px var(--gas-soft)}
+.rail .clock{
+  margin-left:auto;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Courier New",monospace;
+  font-size:13px;letter-spacing:.18em;color:var(--dim);
+}
+.rail .clock i{font-style:normal;color:var(--warn)}
+
+/* ============================================================
+   THE STOREFRONT
+   ============================================================ */
+.front{
+  grid-area:front;
+  position:relative;
+  border:1px solid rgba(255,255,255,.07);
+  background:var(--brick-dark);
+  overflow:hidden;
+  isolation:isolate;
+}
+
+/* wet brick: two offset courses + a grime wash + specular sheen */
+.wall{
+  position:relative;
+  padding:clamp(20px,3vw,44px) clamp(14px,2.6vw,42px) 0;
+  min-height:clamp(430px,52vh,620px);
+  background:
+    /* damp blotches */
+    radial-gradient(46% 30% at 18% 8%, rgba(140,180,220,.055) 0%, transparent 70%),
+    radial-gradient(38% 26% at 86% 22%, rgba(120,160,210,.045) 0%, transparent 70%),
+    radial-gradient(70% 40% at 50% 108%, rgba(0,0,0,.65) 0%, transparent 70%),
+    /* brick courses, staggered */
+    repeating-linear-gradient(0deg,
+      var(--mortar) 0 2px, transparent 2px 34px),
+    repeating-linear-gradient(90deg,
+      var(--mortar) 0 2px, transparent 2px 96px),
+    repeating-linear-gradient(0deg,
+      var(--mortar) 0 2px, transparent 2px 34px),
+    linear-gradient(178deg, var(--brick-mid) 0%, var(--brick-dark) 62%, #060505 100%);
+}
+.wall::before{
+  /* the offset half-course so joints break like real brick */
+  content:"";position:absolute;inset:0;pointer-events:none;
+  background:
+    repeating-linear-gradient(90deg,
+      var(--mortar) 0 2px, transparent 2px 96px);
+  background-position:48px 17px;
+  -webkit-mask-image:repeating-linear-gradient(0deg,#000 0 17px,transparent 17px 34px);
+  mask-image:repeating-linear-gradient(0deg,#000 0 17px,transparent 17px 34px);
+  opacity:.95;
+}
+.wall::after{
+  /* each brick gets a lit top lip and a shadowed bottom */
+  content:"";position:absolute;inset:0;pointer-events:none;mix-blend-mode:screen;
+  background:
+    repeating-linear-gradient(0deg,
+      rgba(255,236,214,.05) 0 1px,
+      transparent 1px 18px,
+      rgba(0,0,0,.30) 18px 19px,
+      transparent 19px 34px);
+  opacity:.8;
+}
+.wall-tint{
+  /* the colour the gas throws on the masonry */
+  position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(58% 46% at 46% 34%, var(--gas-soft) 0%, transparent 72%);
+  opacity:calc(.34 * var(--burn) * (1 - .55 * var(--damp)));
+  mix-blend-mode:screen;
+  transition:opacity .5s var(--ease-soft);
+}
+.wall-tint.deep{
+  background:radial-gradient(28% 26% at 46% 34%, var(--gas) 0%, transparent 74%);
+  opacity:calc(.13 * var(--burn));
+}
+
+/* surface grime + drip streaks */
+.grime{
+  position:absolute;inset:0;pointer-events:none;
+  background:
+    linear-gradient(90deg, rgba(0,0,0,.5) 0 3%, transparent 12% 88%, rgba(0,0,0,.55) 100%),
+    repeating-linear-gradient(90deg,
+      rgba(0,0,0,.20) 0 3px, transparent 3px 61px,
+      rgba(0,0,0,.11) 61px 63px, transparent 63px 149px);
+  opacity:.7;
+}
+
+/* ---------- electrical conduit + transformer ---------- */
+.conduit{
+  position:absolute;top:0;right:9%;width:14px;height:44%;
+  background:
+    linear-gradient(90deg,#0a0a0c,#3a3a42 32%,#575762 44%,#22222a 70%,#09090b);
+  border-left:1px solid #000;border-right:1px solid #05050600;
+  box-shadow:0 0 0 1px rgba(0,0,0,.6);
+}
+.conduit::after{
+  content:"";position:absolute;left:-4px;right:-4px;top:0;bottom:0;
+  background:repeating-linear-gradient(0deg,rgba(0,0,0,.55) 0 2px,transparent 2px 46px);
+}
+.trafo{
+  position:absolute;right:calc(9% - 42px);top:calc(44% - 6px);
+  width:98px;height:74px;
+  background:linear-gradient(168deg,#3a3a44,#1a1a20 62%,#0e0e12);
+  border:1px solid #05050a;border-radius:3px;
+  box-shadow:0 14px 26px rgba(0,0,0,.7), inset 0 1px 0 rgba(255,255,255,.12);
+  display:grid;place-items:center;cursor:pointer;
+}
+.trafo .plate{
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Courier New",monospace;
+  font-size:8px;letter-spacing:.14em;color:#8e8b96;text-align:center;
+}
+.trafo .coils{position:absolute;inset:auto 8px 8px;display:flex;gap:3px;justify-content:center}
+.trafo .coils i{width:7px;height:16px;background:linear-gradient(#5a5764,#201f26);border-radius:1px}
+.trafo .spark{
+  position:absolute;left:50%;top:-9px;width:26px;height:16px;transform:translateX(-50%);
+  opacity:0;
+}
+.trafo.arcing .spark{animation:arc .18s steps(2) 3}
+.trafo .led{
+  position:absolute;right:7px;top:7px;width:6px;height:6px;border-radius:50%;
+  background:var(--warn);box-shadow:0 0 8px var(--warn);
+  animation:led 4.6s infinite;
+}
+@keyframes led{0%,88%,100%{opacity:.35}90%,94%{opacity:1}}
+@keyframes arc{0%{opacity:0}40%{opacity:1}100%{opacity:.2}}
+
+/* ---------- the sign itself ---------- */
+.signbay{position:relative;z-index:3;display:flex;flex-direction:column;align-items:center;gap:6px}
+.yoke{
+  width:min(560px,86%);height:16px;position:relative;
+  background:linear-gradient(180deg,#4b4952,#22212a 60%,#101016);
+  border:1px solid #05050a;border-radius:2px;
+  box-shadow:0 6px 16px rgba(0,0,0,.65);
+}
+.yoke::before,.yoke::after{
+  content:"";position:absolute;top:-26px;width:3px;height:26px;
+  background:linear-gradient(90deg,#0b0b0e,#4c4a56,#0b0b0e);
+}
+.yoke::before{left:12%}.yoke::after{right:12%}
+
+.board{
+  position:relative;
+  width:min(760px,94%);
+  padding:clamp(18px,3.2vw,40px) clamp(14px,3vw,38px) clamp(22px,3.4vw,44px);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.03), transparent 30%),
+    radial-gradient(120% 130% at 50% 0%, #191512 0%, #0d0b0a 60%, #080707 100%);
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:4px;
+  box-shadow:
+    inset 0 0 0 1px rgba(0,0,0,.9),
+    inset 0 0 60px rgba(0,0,0,.85),
+    0 26px 44px rgba(0,0,0,.7);
+}
+.board .bolts{position:absolute;inset:8px;pointer-events:none}
+.board .bolts i{
+  position:absolute;width:7px;height:7px;border-radius:50%;
+  background:radial-gradient(circle at 35% 30%,#6d6a76,#211f26 70%);
+  box-shadow:0 0 0 1px #000;
+}
+.board .bolts i:nth-child(1){left:0;top:0}
+.board .bolts i:nth-child(2){right:0;top:0}
+.board .bolts i:nth-child(3){left:0;bottom:0}
+.board .bolts i:nth-child(4){right:0;bottom:0}
+
+/* tube mount wires */
+.hanglines{position:absolute;inset:0;pointer-events:none;opacity:.5}
+.hanglines i{
+  position:absolute;top:0;width:1px;height:26px;
+  background:linear-gradient(180deg,rgba(255,255,255,.28),transparent);
+}
+.hanglines i:nth-child(1){left:22%}
+.hanglines i:nth-child(2){left:47%}
+.hanglines i:nth-child(3){left:74%}
+
+/* the swash: an inline SVG tube bending behind the words */
+.tube-swash{position:absolute;left:5%;right:5%;bottom:14px;height:74px;overflow:visible;pointer-events:none}
+.tube-swash path{
+  fill:none;stroke-linecap:round;
+  stroke:var(--gas);
+  stroke-width:7;
+  opacity:.9;
+  filter:drop-shadow(0 0 4px var(--gas-hot)) drop-shadow(0 0 16px var(--gas-soft)) drop-shadow(0 0 40px var(--gas-far));
+  stroke-dasharray:1400;stroke-dashoffset:0;
+  animation:swashin 2.6s var(--ease-soft) both;
+}
+.tube-swash .fill{stroke-width:2.2;stroke:#fff;opacity:.85}
+.tube-swash .electrode{fill:#1b1b20;stroke:rgba(255,255,255,.35);stroke-width:1}
+@keyframes swashin{from{stroke-dashoffset:1400;opacity:0}to{stroke-dashoffset:0;opacity:.9}}
+
+/* ---------- neon text: layered shadows = hot core, halo, bloom ---------- */
+.tube{
+  --lit:1;
+  color:#fff;
+  -webkit-text-stroke:0;
+  text-shadow:
+    0 0 1px rgba(255,255,255,calc(1 * var(--lit) * var(--burn))),
+    0 0 4px rgba(255,255,255,calc(.9 * var(--lit) * var(--burn))),
+    0 0 9px var(--gas),
+    0 0 18px var(--gas),
+    0 0 34px var(--gas-soft),
+    0 0 68px var(--gas-far),
+    0 0 120px var(--gas-far);
+  filter:brightness(calc(.55 + .55 * var(--burn) - .3 * var(--damp)))
+         saturate(calc(1 + .25 * var(--burn)));
+  transition:filter .45s var(--ease-soft);
+}
+.tube .ch{display:inline-block;position:relative;white-space:pre;transform-origin:50% 60%}
+.tube .ch.dead{
+  color:rgba(120,124,132,.42);
+  text-shadow:0 0 2px rgba(90,95,105,.35);
+  filter:none;
+}
+.tube .ch.jitter{animation:stut .09s steps(1) 2}
+@keyframes stut{0%{opacity:.15}50%{opacity:.85}100%{opacity:.3}}
+
+.tube-line{
+  position:relative;z-index:2;
+  margin:0;text-align:center;
+  font-size:clamp(34px,7.6vw,86px);
+  line-height:1.06;
+  letter-spacing:.055em;
+  min-height:1.1em;
+  outline:none;
+  caret-color:var(--gas);
+  word-break:break-word;
+}
+.tube-sub{
+  position:relative;z-index:2;margin:10px 0 0;text-align:center;
+  font-size:clamp(12px,2.1vw,22px);
+  letter-spacing:.42em;
+  min-height:1.2em;
+  outline:none;caret-color:var(--gas);
+}
+.board [contenteditable]:focus{
+  /* faint "loose tube" cue while editing */
+  text-shadow:
+    0 0 1px #fff,0 0 4px #fff,0 0 9px var(--gas),0 0 18px var(--gas),
+    0 0 34px var(--gas-soft),0 0 68px var(--gas-far);
+}
+.board [contenteditable]:focus-visible{outline:1px dashed rgba(255,255,255,.22);outline-offset:8px}
+
+/* tube character switching */
+.font-script .tube-line{
+  font-family:"Snell Roundhand","Apple Chancery",cursive,Georgia,Palatino,serif;
+  letter-spacing:-.012em;font-weight:400;
+  -webkit-font-smoothing:antialiased;
+}
+.font-script .tube-sub{font-family:"Snell Roundhand","Apple Chancery",cursive,Georgia,serif;letter-spacing:.24em}
+.font-caps .tube-line{
+  font-family:Futura,"Avenir Next","Helvetica Neue",system-ui,sans-serif;
+  font-weight:500;letter-spacing:.17em;text-transform:uppercase;
+}
+.font-caps .tube-sub{font-family:Futura,"Avenir Next","Helvetica Neue",system-ui,sans-serif;letter-spacing:.5em}
+.font-mono .tube-line{
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Courier New",monospace;
+  font-weight:700;letter-spacing:.02em;
+}
+.font-mono .tube-sub{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Courier New",monospace;letter-spacing:.3em}
+
+/* electrode caps at the ends of the run */
+.elec{position:absolute;top:50%;width:12px;height:26px;transform:translateY(-50%);
+  background:linear-gradient(90deg,#191920,#4a4956,#141419);border-radius:2px;
+  box-shadow:0 0 12px var(--gas-far);opacity:.75}
+.elec.l{left:-18px}.elec.r{right:-18px}
+
+/* ---------- flip sign in the doorway ---------- */
+.doorway{
+  position:absolute;left:clamp(10px,3vw,40px);bottom:0;width:132px;height:min(46%,260px);
+  z-index:4;
+}
+.doorway .glass{
+  position:absolute;inset:0;
+  background:linear-gradient(180deg,rgba(30,34,44,.9),rgba(10,12,18,.96));
+  border:1px solid rgba(255,255,255,.09);border-bottom:none;
+  box-shadow:inset 0 30px 40px -30px var(--gas-soft);
+}
+.chains{position:absolute;left:0;right:0;top:26px;height:34px}
+.chains i{position:absolute;top:0;width:1px;height:34px;background:rgba(255,255,255,.2)}
+.chains i:nth-child(1){left:24%}.chains i:nth-child(2){left:76%}
+.flip{
+  position:absolute;left:8%;right:8%;top:58px;height:70px;
+  perspective:600px;cursor:pointer;background:none;border:0;padding:0;
+  font:inherit;color:inherit;
+}
+.flip .leaf{
+  position:relative;width:100%;height:100%;
+  transform-style:preserve-3d;
+  transition:transform 1.05s cubic-bezier(.66,-0.2,.3,1.3);
+}
+.flip[aria-pressed="true"] .leaf{transform:rotateX(-180deg)}
+.flip .face{
+  position:absolute;inset:0;display:grid;place-items:center;
+  backface-visibility:hidden;-webkit-backface-visibility:hidden;
+  border:1px solid rgba(255,255,255,.16);border-radius:2px;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Courier New",monospace;
+  font-size:12px;letter-spacing:.26em;
+}
+.flip .sold{background:linear-gradient(180deg,#2a1216,#160a0c);color:#ff8f9c;box-shadow:inset 0 0 24px rgba(255,77,109,.25)}
+.flip .open{
+  transform:rotateX(180deg);
+  background:linear-gradient(180deg,#0f2730,#08151a);color:#8ff0c6;
+  box-shadow:inset 0 0 24px rgba(120,255,190,.22);
+}
+.flip:hover .face{border-color:var(--gas)}
+
+/* ---------- moth ---------- */
+.moth{
+  position:absolute;left:0;top:0;width:34px;height:34px;z-index:6;
+  pointer-events:none;
+  filter:drop-shadow(0 2px 3px rgba(0,0,0,.8));
+  opacity:0;transition:opacity 1.2s linear;
+}
+.moth.on{opacity:.95}
+.moth .wing{transform-origin:50% 50%;animation:flap .16s ease-in-out infinite alternate}
+.moth .wing.r{transform-origin:46% 50%}
+.moth .wing.l{transform-origin:54% 50%}
+@keyframes flap{from{transform:scaleX(1)}to{transform:scaleX(.34)}}
+.moth .body{fill:#2b2521}
+.moth .wing path{fill:rgba(226,212,190,.62);stroke:rgba(255,255,255,.3);stroke-width:.6}
+
+/* ---------- shop window with bent-tube racks ---------- */
+.shopwin{
+  position:absolute;right:clamp(10px,4vw,56px);bottom:0;width:min(300px,34%);height:min(44%,244px);
+  z-index:3;
+  background:linear-gradient(180deg,rgba(16,20,28,.94),rgba(7,9,14,.97));
+  border:1px solid rgba(255,255,255,.09);border-bottom:none;
+  box-shadow:inset 0 44px 48px -34px var(--gas-far), 0 -8px 26px rgba(0,0,0,.6);
+  overflow:hidden;
+}
+.shopwin .rack{position:absolute;inset:auto 0 0;height:70%;opacity:.55}
+.shopwin .rack path{fill:none;stroke:var(--gas);stroke-width:2.4;opacity:.5;stroke-linecap:round}
+.shopwin .glass{
+  position:absolute;inset:0;
+  background:linear-gradient(112deg,rgba(255,255,255,.10) 0 18%,transparent 18% 40%,rgba(255,255,255,.05) 40% 47%,transparent 47%);
+  mix-blend-mode:screen;
+}
+.shopwin .hours{
+  position:absolute;left:10px;bottom:8px;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Courier New",monospace;
+  font-size:9px;letter-spacing:.16em;color:#7f7a86;
+}
+
+/* ============================================================
+   THE WET STREET  — mirrored, wobbling reflection
+   ============================================================ */
+.street{
+  position:relative;height:clamp(168px,25vh,258px);
+  background:
+    linear-gradient(180deg,#0d0d12 0%, #08080c 26%, #060609 100%);
+  border-top:1px solid rgba(255,255,255,.06);
+  overflow:hidden;
+}
+.kerb{
+  position:absolute;left:0;right:0;top:0;height:12px;
+  background:linear-gradient(180deg,#1c1c22,#0d0d11);
+  box-shadow:0 2px 5px rgba(0,0,0,.8);
+}
+.asphalt{
+  position:absolute;inset:12px 0 0;
+  background:
+    radial-gradient(60% 40% at 50% 0%, rgba(255,255,255,.035), transparent 70%),
+    repeating-linear-gradient(93deg, rgba(255,255,255,.018) 0 1px, transparent 1px 7px),
+    repeating-linear-gradient(177deg, rgba(0,0,0,.35) 0 1px, transparent 1px 11px);
+}
+.puddlepool{
+  position:absolute;left:6%;right:8%;top:22px;bottom:0;
+  background:
+    radial-gradient(70% 60% at 40% 12%, rgba(150,180,220,.09), transparent 72%),
+    radial-gradient(50% 50% at 74% 44%, rgba(120,160,210,.07), transparent 70%);
+  filter:blur(1px);
+}
+/* colour the gas throws on the water */
+.spill{
+  position:absolute;left:12%;right:12%;top:8px;bottom:6px;
+  background:radial-gradient(56% 82% at 50% 0%, var(--gas-soft) 0%, transparent 74%);
+  mix-blend-mode:screen;
+  opacity:calc(.42 * var(--burn) * (1 - .35 * var(--damp)));
+  transition:opacity .5s var(--ease-soft);
+}
+.reflect{
+  position:absolute;left:0;right:0;top:14px;bottom:0;
+  -webkit-mask-image:linear-gradient(180deg,rgba(0,0,0,.95) 0%,rgba(0,0,0,.55) 46%,transparent 96%);
+  mask-image:linear-gradient(180deg,rgba(0,0,0,.95) 0%,rgba(0,0,0,.55) 46%,transparent 96%);
+}
+.reflect-inner{
+  transform:scaleY(-1);
+  transform-origin:50% 0%;
+  filter:blur(1.4px) saturate(1.25) brightness(calc(.72 * var(--burn)));
+  opacity:.66;
+  will-change:transform;
+}
+.reflect .tube{text-align:center;padding-top:6px}
+.reflect .tube-line{font-size:clamp(30px,6.6vw,74px)}
+.reflect .tube-sub{font-size:clamp(10px,1.8vw,18px)}
+.ripples{
+  position:absolute;inset:0;pointer-events:none;mix-blend-mode:overlay;opacity:.5;
+  background:repeating-linear-gradient(180deg,
+    rgba(255,255,255,.09) 0 1px, transparent 1px 9px,
+    rgba(0,0,0,.22) 9px 10px, transparent 10px 20px);
+  animation:ripple 7s linear infinite;
+}
+@keyframes ripple{from{background-position:0 0}to{background-position:0 40px}}
+
+/* ============================================================
+   THE BENCH (control panel)
+   ============================================================ */
+.bench{
+  grid-area:bench;
+  align-self:start;
+  position:sticky;top:16px;
+  background:
+    linear-gradient(180deg,rgba(255,255,255,.05),transparent 22%),
+    repeating-linear-gradient(180deg,rgba(255,255,255,.014) 0 1px,transparent 1px 4px),
+    linear-gradient(168deg,#1d1c22,#131114 55%,#0e0d10);
+  border:1px solid #05050a;
+  border-radius:5px;
+  box-shadow:0 24px 50px rgba(0,0,0,.66), inset 0 1px 0 rgba(255,255,255,.09);
+  padding:16px 16px 18px;
+}
+.bench h2{
+  margin:0 0 2px;font-size:12px;font-weight:600;letter-spacing:.28em;text-transform:uppercase;color:var(--ink);
+}
+.bench .sub{
+  margin:0 0 14px;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Courier New",monospace;
+  font-size:10px;letter-spacing:.16em;color:var(--dim);
+}
+.grp{border-top:1px solid rgba(255,255,255,.07);padding:13px 0 15px}
+.grp:first-of-type{border-top:none}
+.grp > .lab{
+  display:flex;align-items:baseline;gap:8px;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Courier New",monospace;
+  font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:var(--dim);
+  margin-bottom:10px;
+}
+.grp > .lab .val{margin-left:auto;color:var(--warn);letter-spacing:.1em}
+
+/* gas swatches: little glass tubes */
+.gases{display:grid;grid-template-columns:repeat(auto-fit,minmax(60px,1fr));gap:8px}
+.gas{
+  appearance:none;border:1px solid rgba(255,255,255,.1);
+  background:linear-gradient(180deg,#1a191f,#100f13);
+  border-radius:3px;padding:9px 4px 7px;cursor:pointer;color:var(--dim);
+  display:flex;flex-direction:column;align-items:center;gap:7px;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Courier New",monospace;
+  font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;
+  transition:border-color .2s,color .2s,transform .2s var(--ease-soft);
+}
+.gas .bulb{
+  width:100%;height:15px;border-radius:9px/7px;
+  background:linear-gradient(180deg,rgba(255,255,255,.16),rgba(255,255,255,.03));
+  border:1px solid rgba(255,255,255,.16);
+  position:relative;overflow:hidden;
+}
+.gas .bulb::after{
+  content:"";position:absolute;inset:3px;border-radius:8px/6px;
+  background:var(--c);
+  box-shadow:0 0 6px var(--c),0 0 16px var(--c);
+  opacity:.55;transition:opacity .25s,box-shadow .25s;
+}
+.gas:hover{transform:translateY(-2px);color:var(--ink)}
+.gas:hover .bulb::after{opacity:.9}
+.gas[aria-pressed="true"]{color:#fff;border-color:var(--c)}
+.gas[aria-pressed="true"] .bulb::after{opacity:1;box-shadow:0 0 8px var(--c),0 0 22px var(--c),0 0 40px var(--c)}
+
+/* sliders */
+input[type=range]{
+  -webkit-appearance:none;appearance:none;width:100%;height:24px;background:transparent;cursor:pointer;
+}
+input[type=range]::-webkit-slider-runnable-track{
+  height:5px;border-radius:3px;
+  background:linear-gradient(90deg,var(--gas) 0%,var(--gas) var(--fill,50%),#26252c var(--fill,50%),#26252c 100%);
+  box-shadow:inset 0 1px 2px rgba(0,0,0,.8),0 0 10px var(--gas-far);
+}
+input[type=range]::-moz-range-track{
+  height:5px;border-radius:3px;background:#26252c;
+}
+input[type=range]::-moz-range-progress{height:5px;border-radius:3px;background:var(--gas)}
+input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;width:15px;height:19px;margin-top:-7px;border-radius:2px;
+  background:linear-gradient(180deg,#6f6d7c,#2b2a33 60%,#16161b);
+  border:1px solid #05050a;
+  box-shadow:0 1px 0 rgba(255,255,255,.25),0 3px 7px rgba(0,0,0,.7);
+}
+input[type=range]::-moz-range-thumb{
+  width:15px;height:19px;border-radius:2px;border:1px solid #05050a;
+  background:linear-gradient(180deg,#6f6d7c,#2b2a33 60%,#16161b);
+}
+.ticks{
+  display:flex;justify-content:space-between;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Courier New",monospace;
+  font-size:8px;letter-spacing:.1em;color:#5e5860;margin-top:-2px;
+}
+
+/* segmented switches */
+.seg{display:flex;gap:0;border:1px solid rgba(255,255,255,.11);border-radius:3px;overflow:hidden}
+.seg button{
+  flex:1;appearance:none;border:0;border-right:1px solid rgba(255,255,255,.08);
+  background:linear-gradient(180deg,#1b1a20,#111014);
+  color:var(--dim);padding:9px 4px;cursor:pointer;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Courier New",monospace;
+  font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;
+  transition:color .2s,background .2s;
+}
+.seg button:last-child{border-right:0}
+.seg button:hover{color:var(--ink)}
+.seg button[aria-pressed="true"]{
+  color:#0a0a0c;
+  background:linear-gradient(180deg,var(--gas),color-mix(in srgb,var(--gas) 70%,#000));
+  font-weight:700;
+}
+.row{display:flex;gap:8px;align-items:stretch}
+.row > *{flex:1}
+.btn{
+  appearance:none;cursor:pointer;
+  border:1px solid rgba(255,255,255,.13);border-radius:3px;
+  background:linear-gradient(180deg,#242229,#141318);
+  color:var(--ink);padding:11px 10px;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Courier New",monospace;
+  font-size:10px;letter-spacing:.18em;text-transform:uppercase;
+  box-shadow:var(--shadow-cut),inset 0 1px 0 rgba(255,255,255,.07);
+  transition:transform .12s,border-color .2s,color .2s;
+}
+.btn:hover{border-color:var(--gas);color:#fff}
+.btn:active{transform:translateY(1px)}
+.btn[aria-pressed="true"]{border-color:var(--warn);color:var(--warn);box-shadow:inset 0 0 16px rgba(255,180,46,.18)}
+.btn small{display:block;font-size:8px;letter-spacing:.1em;color:var(--dim);margin-top:3px}
+
+/* readouts */
+.meter{
+  display:grid;grid-template-columns:1fr 1fr;gap:1px;background:rgba(255,255,255,.07);
+  border:1px solid rgba(255,255,255,.09);border-radius:3px;overflow:hidden;
+}
+.meter div{background:#0e0d11;padding:8px 9px}
+.meter dt{
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Courier New",monospace;
+  font-size:8px;letter-spacing:.16em;color:#6d6670;margin:0 0 3px;
+}
+.meter dd{
+  margin:0;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Courier New",monospace;
+  font-size:13px;letter-spacing:.05em;color:var(--ink);
+}
+.meter dd.hot{color:var(--gas);text-shadow:0 0 12px var(--gas-soft)}
+.note{
+  margin:12px 0 0;font-size:11.5px;line-height:1.55;color:#8d8579;
+}
+.note b{color:var(--ink);font-weight:600}
+
+/* ---------- foot ---------- */
+.foot{
+  grid-area:foot;display:flex;flex-wrap:wrap;gap:10px 26px;align-items:baseline;
+  border-top:1px solid rgba(255,255,255,.08);padding-top:14px;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Courier New",monospace;
+  font-size:10px;letter-spacing:.14em;color:#6e675f;text-transform:uppercase;
+}
+.foot kbd{
+  font:inherit;border:1px solid rgba(255,255,255,.16);border-radius:2px;padding:1px 5px;color:var(--ink);
+}
+
+/* ---------- rain canvas ---------- */
+#rain{
+  position:fixed;inset:0;width:100%;height:100%;
+  pointer-events:none;z-index:5;opacity:0;transition:opacity 1.4s linear;
+}
+#rain.on{opacity:.85}
+
+/* ---------- responsive ---------- */
+@media (max-width:1080px){
+  .stage{grid-template-columns:minmax(0,1fr);grid-template-areas:"top" "front" "bench" "foot"}
+  .bench{position:static}
+  .shopwin{display:none}
+}
+@media (max-width:640px){
+  .doorway{width:96px;height:34%}
+  .rail .clock{margin-left:0;width:100%}
+  .tube-line{letter-spacing:.03em}
+  .gases{grid-template-columns:repeat(auto-fit,minmax(54px,1fr))}
+}
+@media (max-width:400px){
+  .stage{padding:10px}
+  .bench{padding:12px}
+  .seg button{font-size:8.5px;padding:8px 2px}
+}
+
+/* ---------- reduced motion ---------- */
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{
+    animation-duration:.001ms !important;animation-iteration-count:1 !important;
+    transition-duration:.001ms !important;
+  }
+  .ripples{animation:none}
+  .moth{display:none}
+  .tube-swash path{stroke-dashoffset:0}
+}
+
+/* ---------- lit / unlit master ---------- */
+.powered-off .tube{
+  color:#4a4640;
+  text-shadow:none;
+  filter:none;
+}
+.powered-off .wall-tint,.powered-off .spill{opacity:0}
+.powered-off .tube-swash path{stroke:#39352f;filter:none;opacity:.5}
+.powered-off .gas[aria-pressed="true"] .bulb::after{opacity:.2;box-shadow:none}
+
+/* ============================================================
+   LATE ADDITIONS — bench markup, weather states, sold-out
+   ============================================================ */
+.bench p{margin:0}
+.bench .lab{margin:0 0 10px}
+.bench .note{margin:12px 0 0}
+.foot p{margin:0}
+.meter{margin:0}
+.gas{min-width:0}
+.gas .nm{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.seg{min-width:0}
+.seg button{min-width:0}
+.foot{min-width:0}
+.foot p{min-width:0}
+
+/* rain on the wall: the glow stops being crisp and starts being wet */
+.raining .wall::after{opacity:.98}
+.raining .wall-tint{filter:blur(3px)}
+.raining .shopwin .glass{opacity:.8}
+.raining .trafo{box-shadow:0 14px 26px rgba(0,0,0,.8), inset 0 1px 0 rgba(255,255,255,.06)}
+
+/* the mirror loses its manners when the street floods */
+.reflect-inner{transition:filter .6s var(--ease-soft)}
+.raining .reflect-inner{
+  filter:blur(calc(1.4px + 2.6px * var(--damp))) saturate(1.4) brightness(calc(.6 * var(--burn)));
+}
+/* rain beads dragging down the sign board */
+.board .beads{position:absolute;inset:0;pointer-events:none;opacity:calc(.7 * var(--damp));overflow:hidden;border-radius:4px}
+.board .beads i{
+  position:absolute;top:-12%;width:1px;height:14%;
+  background:linear-gradient(180deg,transparent,rgba(255,255,255,.5) 60%,rgba(255,255,255,.15));
+  border-radius:1px;
+}
+.raining .board .beads i{animation:bead 3.4s linear infinite}
+.board .beads i:nth-child(2){animation-duration:4.8s;animation-delay:-1.1s}
+.board .beads i:nth-child(3){animation-duration:2.7s;animation-delay:-2.2s}
+.board .beads i:nth-child(4){animation-duration:5.6s;animation-delay:-.6s}
+.board .beads i:nth-child(5){animation-duration:3.9s;animation-delay:-3.1s}
+@keyframes bead{from{transform:translateY(-20%)}to{transform:translateY(760%)}}
+
+/* the door sign flipped to SOLD OUT: everything runs at half draw */
+body.sold-out .shopwin .rack{opacity:.2}
+body.sold-out .flip .face.sold{box-shadow:inset 0 0 30px rgba(255,77,109,.45),0 0 26px rgba(255,77,109,.2)}
+body.sold-out .doorway .glass{box-shadow:inset 0 30px 40px -30px rgba(255,77,109,.4)}
+
+/* strike = the bench re-firing a cold tube; the burn var does the acting */
+.striking .wall-tint,.striking .spill{transition:opacity .09s linear}
+.striking .tube{transition:filter .09s linear}
+
+@media (prefers-reduced-motion:reduce){
+  .board .beads i{animation:none !important}
+}
+
+/* ============================================================
+   RENDER FIXES — geometry the earlier pass left unreachable
+   ============================================================ */
+/* .leaf is a <span>: inline, so width/height were ignored and both faces
+   collapsed to 0x0 at the text baseline. Make it a real box. */
+.flip .leaf{display:block}
+/* and pick the face deterministically instead of trusting backface culling */
+.flip .face{transition:opacity .3s linear}
+.flip[aria-pressed="true"] .sold{opacity:0}
+.flip[aria-pressed="false"] .open{opacity:0}
+@media (max-width:640px){
+  .flip .face{font-size:9.5px;letter-spacing:.16em}
+}
+
+/* the swash: left/right 5% never sized an <svg> (auto width comes from the
+   viewBox aspect), and its height put the tube straight through the sub line.
+   Sit it in the board's bottom padding instead. */
+.tube-swash{left:5%;width:90%;height:clamp(22px,3.2vw,44px);bottom:2px}
+/* its draw-in keyframe started at opacity 0, which is where a paused
+   animation stays — pulse it instead, so a paused frame is still a lit tube */
+.tube-swash path{animation:gasflow 6.4s ease-in-out infinite}
+@keyframes gasflow{
+  0%,100%{opacity:.88;stroke-dashoffset:0}
+  50%{opacity:1;stroke-dashoffset:-46}
+}
+
+/* the mirror: scaleY(-1) about the top edge threw the whole reflection above
+   the street, where overflow:hidden ate it. Fold it down into the water and
+   line it up under the board it is mirroring. (JS repeats this transform.) */
+.reflect-inner{
+  width:min(760px,94%);
+  margin:0 auto;
+  transform:translateY(100%) scaleY(-1);
+}
+/* the moth faded in on a transition, which never runs in a paused frame */
+.moth{transition:none}
+
+@media (prefers-reduced-motion:reduce){
+  .reflect-inner{transform:translateY(100%) scaleY(-1)}
+}
+
+/* the door and the shop window are further back than the sign — the board
+   hangs in front of both, so they must sit under it, not over it */
+.doorway,.shopwin{z-index:2}
+/* and the mirror has to actually read as the sign */
+.reflect-inner{opacity:.78;filter:blur(1.1px) saturate(1.25) brightness(calc(.82 * var(--burn)))}
+.raining .reflect-inner{
+  filter:blur(calc(1.1px + 2.4px * var(--damp))) saturate(1.4) brightness(calc(.68 * var(--burn)));
+}
+</style>
+</head>
+<body class="font-script">
+<div class="stage">
+
+  <header class="rail">
+    <p class="mark"><b>Vessel &amp; Filament</b> · neon works · est. 1961</p>
+    <h1>Bench 3 — <em>closing time</em></h1>
+    <p class="clock mono">shop clock <i id="clock">23:47:06</i> · last customer out</p>
+  </header>
+
+  <section class="front" aria-label="Storefront at closing time">
+
+    <div class="wall" id="wall">
+      <div class="wall-tint" aria-hidden="true"></div>
+      <div class="wall-tint deep" aria-hidden="true"></div>
+      <div class="grime" aria-hidden="true"></div>
+
+      <div class="conduit" aria-hidden="true"></div>
+
+      <button class="trafo" id="trafo" type="button" aria-pressed="false"
+              title="Transformer hum — click to audition the mains buzz">
+        <span class="plate mono">15 kV<br>TRANSFORMER<br>TYPE&nbsp;R-4</span>
+        <span class="coils" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+        <span class="led" aria-hidden="true"></span>
+        <svg class="spark" viewBox="0 0 26 16" aria-hidden="true">
+          <path d="M1 14 L7 8 L5 9 L12 2 L10 6 L16 3 L13 8 L20 5 L25 12"
+                fill="none" stroke="#cfe9ff" stroke-width="1.4" stroke-linecap="round"/>
+        </svg>
+        <span class="sr">Toggle transformer hum</span>
+      </button>
+
+      <!-- doorway + flip sign -->
+      <div class="doorway">
+        <div class="glass" aria-hidden="true"></div>
+        <div class="chains" aria-hidden="true"><i></i><i></i></div>
+        <button class="flip" id="flip" type="button" aria-pressed="true"
+                aria-label="Flip the door sign between SOLD OUT and OPEN">
+          <span class="leaf">
+            <span class="face sold mono">SOLD&nbsp;OUT</span>
+            <span class="face open mono">OPEN</span>
+          </span>
+        </button>
+      </div>
+
+      <!-- the sign -->
+      <div class="signbay">
+        <div class="yoke" aria-hidden="true"></div>
+        <div class="board" id="board">
+          <span class="bolts" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+          <span class="hanglines" aria-hidden="true"><i></i><i></i><i></i></span>
+          <span class="beads" aria-hidden="true"><i style="left:14%"></i><i style="left:33%"></i><i style="left:57%"></i><i style="left:71%"></i><i style="left:88%"></i></span>
+
+          <p class="tube tube-line" id="lineMain" contenteditable="true" spellcheck="false"
+             role="textbox" aria-label="Main neon line, editable"
+             title="Click and type — this tube is live">Neon Alley</p>
+
+          <p class="tube tube-sub" id="lineSub" contenteditable="true" spellcheck="false"
+             role="textbox" aria-label="Secondary neon line, editable"
+             title="Small tube — 12&nbsp;mm bore">bend &amp; fill · after midnight</p>
+
+          <svg class="tube-swash" viewBox="0 0 600 74" preserveAspectRatio="none" aria-hidden="true">
+            <path d="M8 54 C 84 8, 158 70, 232 42 S 348 2, 414 46 C 462 78, 542 46, 592 18"/>
+            <path class="fill" d="M8 54 C 84 8, 158 70, 232 42 S 348 2, 414 46 C 462 78, 542 46, 592 18"/>
+            <rect class="electrode" x="1" y="47" width="9" height="15" rx="2"/>
+            <rect class="electrode" x="590" y="11" width="9" height="15" rx="2"/>
+          </svg>
+
+          <span class="elec l" aria-hidden="true"></span>
+          <span class="elec r" aria-hidden="true"></span>
+        </div>
+      </div>
+
+      <!-- shop window: racks of unlit bent stock -->
+      <div class="shopwin" aria-hidden="true">
+        <svg class="rack" viewBox="0 0 300 170" preserveAspectRatio="xMidYMax meet">
+          <path d="M18 168 V96 q0-26 26-26 h44 q26 0 26-26 V20"/>
+          <path d="M96 168 V128 q0-22 22-22 h58"/>
+          <path d="M150 168 q0-52 52-52 h70 q28 0 28-28 V40"/>
+          <path d="M214 168 v-24 q0-18 18-18 h40"/>
+          <path d="M40 168 q0-40 40-40 h14"/>
+        </svg>
+        <div class="glass"></div>
+        <p class="hours">BENCH HOURS · TUE–SAT · 09:00–23:00 · FIRES AT DUSK</p>
+      </div>
+
+      <!-- moth -->
+      <svg class="moth" id="moth" viewBox="0 0 34 34" aria-hidden="true">
+        <g class="wing l"><path d="M17 17 C 9 6, 1 9, 3 16 C 5 23, 13 22, 17 17 Z"/></g>
+        <g class="wing r"><path d="M17 17 C 25 6, 33 9, 31 16 C 29 23, 21 22, 17 17 Z"/></g>
+        <ellipse class="body" cx="17" cy="17" rx="1.7" ry="5"/>
+        <path d="M16 12 L13 7 M18 12 L21 7" stroke="#3a332c" stroke-width="1" fill="none"/>
+      </svg>
+    </div>
+
+    <!-- the wet street -->
+    <div class="street" aria-hidden="true">
+      <span class="kerb"></span>
+      <span class="asphalt"></span>
+      <span class="puddlepool"></span>
+      <span class="spill"></span>
+      <div class="reflect">
+        <div class="reflect-inner" id="reflectInner">
+          <p class="tube tube-line" id="rLine"></p>
+          <p class="tube tube-sub" id="rSub"></p>
+          <svg class="tube-swash" viewBox="0 0 600 74" preserveAspectRatio="none">
+            <path d="M8 54 C 84 8, 158 70, 232 42 S 348 2, 414 46 C 462 78, 542 46, 592 18"/>
+            <path class="fill" d="M8 54 C 84 8, 158 70, 232 42 S 348 2, 414 46 C 462 78, 542 46, 592 18"/>
+          </svg>
+        </div>
+        <div class="ripples"></div>
+      </div>
+    </div>
+  </section>
+  <!-- ============================================================
+       THE BENCH — the control panel on the workbench
+       ============================================================ -->
+  <aside class="bench" aria-label="Sign bench controls">
+    <h2>Bench controls</h2>
+    <p class="sub mono">fill gas · burn rate · tube character · weather</p>
+
+    <div class="grp">
+      <p class="lab">Fill gas <span class="val mono" id="gasName">Argon</span></p>
+      <div class="gases" role="group" aria-label="Choose a fill gas">
+        <button class="gas" type="button" data-i="0" style="--c:#35c8ff" aria-pressed="true"
+                title="Argon — cold sky blue"><span class="bulb" aria-hidden="true"></span><span class="nm">Argon</span></button>
+        <button class="gas" type="button" data-i="1" style="--c:#ff4d6d" aria-pressed="false"
+                title="Neon — coral, the classic"><span class="bulb" aria-hidden="true"></span><span class="nm">Neon</span></button>
+        <button class="gas" type="button" data-i="2" style="--c:#b6ff3a" aria-pressed="false"
+                title="Krypton — acid green"><span class="bulb" aria-hidden="true"></span><span class="nm">Krypton</span></button>
+        <button class="gas" type="button" data-i="3" style="--c:#ffb42e" aria-pressed="false"
+                title="Xenon — amber"><span class="bulb" aria-hidden="true"></span><span class="nm">Xenon</span></button>
+        <button class="gas" type="button" data-i="4" style="--c:#a06bff" aria-pressed="false"
+                title="Mercury — violet, let it warm up"><span class="bulb" aria-hidden="true"></span><span class="nm">Mercury</span></button>
+      </div>
+    </div>
+
+    <div class="grp">
+      <p class="lab">Burn rate <span class="val mono" id="burnVal">100%</span></p>
+      <input id="burn" type="range" min="45" max="125" step="1" value="100"
+             aria-label="Burn rate — how hard the tubes are driven">
+      <div class="ticks mono"><span>idle</span><span>rated</span><span>overdriven</span></div>
+    </div>
+
+    <div class="grp">
+      <p class="lab">Tube character <span class="val mono" id="charVal">script</span></p>
+      <div class="seg" role="group" aria-label="Tube character">
+        <button type="button" data-font="script" aria-pressed="true">Script</button>
+        <button type="button" data-font="caps" aria-pressed="false">Caps</button>
+        <button type="button" data-font="mono" aria-pressed="false">Mono</button>
+      </div>
+    </div>
+
+    <div class="grp">
+      <p class="lab">Faults &amp; weather <span class="val mono" id="dampVal">dry</span></p>
+      <div class="row">
+        <button class="btn" id="flickerBtn" type="button" aria-pressed="false">Flicker<small>weak tube stutters</small></button>
+        <button class="btn" id="rainBtn" type="button" aria-pressed="false">Rain<small>dims + refracts</small></button>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button class="btn" id="humBtn" type="button" aria-pressed="false">Hum<small>15 kV transformer</small></button>
+        <button class="btn" id="strikeBtn" type="button">Strike<small>re-fire cold tubes</small></button>
+      </div>
+    </div>
+
+    <div class="grp">
+      <dl class="meter">
+        <div><dt>Fill</dt><dd class="hot" id="mGas">Ar</dd></div>
+        <div><dt>Draw</dt><dd id="mBurn">1.00&times;</dd></div>
+        <div><dt>Glass</dt><dd id="mTemp">188&deg;C</dd></div>
+        <div><dt>Strikes</dt><dd id="mStrikes">0</dd></div>
+      </dl>
+      <p class="note"><b>Do not touch the glass.</b> One tube is left deliberately weak — a sign that fires
+        every night since 1961 does not stutter on schedule, it stutters when it likes.</p>
+    </div>
+  </aside>
+  <footer class="foot">
+    <p>Vessel &amp; Filament · bench 3 · door <span id="doorState">open</span></p>
+    <p>Shortcuts <kbd>G</kbd> gas · <kbd>B</kbd> burn · <kbd>F</kbd> flicker · <kbd>R</kbd> rain · <kbd>S</kbd> strike</p>
+    <p id="footMsg">Sign lit, street wet. Click a tube and type — the gutter takes it too.</p>
+  </footer>
+</div>
+
+<canvas id="rain" aria-hidden="true"></canvas>
+
+<script>
+(function () {
+  "use strict";
+
+  var D = document, root = D.documentElement;
+  function $(id) { return D.getElementById(id); }
+
+  var mq = window.matchMedia ? window.matchMedia("(prefers-reduced-motion: reduce)") : { matches: false };
+  var reduce = !!mq.matches;
+
+  var els = {
+    wall: $("wall"), board: $("board"), trafo: $("trafo"), flip: $("flip"), moth: $("moth"),
+    lineMain: $("lineMain"), lineSub: $("lineSub"), rLine: $("rLine"), rSub: $("rSub"),
+    reflect: $("reflectInner"), rain: $("rain"), clock: $("clock"),
+    gasName: $("gasName"), burnVal: $("burnVal"), charVal: $("charVal"), dampVal: $("dampVal"),
+    burn: $("burn"), flickerBtn: $("flickerBtn"), rainBtn: $("rainBtn"), humBtn: $("humBtn"),
+    strikeBtn: $("strikeBtn"), mGas: $("mGas"), mBurn: $("mBurn"), mTemp: $("mTemp"),
+    mStrikes: $("mStrikes"), doorState: $("doorState"), footMsg: $("footMsg")
+  };
+  var gasBtns = D.querySelectorAll(".gas");
+  var segBtns = D.querySelectorAll(".seg button");
+
+  var GASES = [
+    { n: "Argon",   sym: "Ar", hex: "#35c8ff" },
+    { n: "Neon",    sym: "Ne", hex: "#ff4d6d" },
+    { n: "Krypton", sym: "Kr", hex: "#b6ff3a" },
+    { n: "Xenon",   sym: "Xe", hex: "#ffb42e" },
+    { n: "Mercury", sym: "Hg", hex: "#a06bff" }
+  ];
+  var DEFAULTS = { lineMain: "Neon Alley", lineSub: "bend & fill \u00b7 after midnight" };
+  var MAXLEN = { lineMain: 22, lineSub: 34 };
+
+  var S = {
+    gas: 0, burn: 1, damp: 0, dampTarget: 0, dip: 1,
+    flicker: false, raining: false, rainLock: false, hum: false,
+    open: true, strikes: 0, font: "script", weak: -1, weakHold: false
+  };
+
+  function rnd(a, b) { return a + Math.random() * (b - a); }
+  function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
+  function say(msg) { if (els.footMsg) els.footMsg.textContent = msg; }
+  function rgb(hex) {
+    var h = hex.replace("#", "");
+    if (h.length === 3) { h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2]; }
+    var v = parseInt(h, 16);
+    return [(v >> 16) & 255, (v >> 8) & 255, v & 255];
+  }
+
+  /* ---------- the two master vars every layer reads ---------- */
+  function burnOut() { return S.burn * (S.open ? 1 : 0.44) * S.dip; }
+  function applyVars() {
+    root.style.setProperty("--burn", burnOut().toFixed(3));
+    root.style.setProperty("--damp", S.damp.toFixed(3));
+  }
+  function meters() {
+    var g = GASES[S.gas];
+    els.mGas.textContent = g.sym;
+    els.mBurn.textContent = burnOut().toFixed(2) + "\u00d7";
+    els.mTemp.textContent = Math.round(122 + 92 * S.burn - 54 * S.damp) + "\u00b0C";
+    els.mStrikes.textContent = String(S.strikes);
+  }
+
+  /* ---------- fill gas: recolours the run instantly ---------- */
+  function setGas(i, quiet) {
+    S.gas = ((i % GASES.length) + GASES.length) % GASES.length;
+    var g = GASES[S.gas], c = rgb(g.hex);
+    root.style.setProperty("--gas", g.hex);
+    root.style.setProperty("--gas-soft", "rgba(" + c[0] + "," + c[1] + "," + c[2] + ",.55)");
+    root.style.setProperty("--gas-far", "rgba(" + c[0] + "," + c[1] + "," + c[2] + ",.22)");
+    for (var k = 0; k < gasBtns.length; k++) {
+      gasBtns[k].setAttribute("aria-pressed", String(Number(gasBtns[k].getAttribute("data-i")) === S.gas));
+    }
+    els.gasName.textContent = g.n;
+    meters();
+    if (!quiet) {
+      say(g.n + " — " + g.sym + " at " + g.hex + ". Give it a second to take.");
+      voice(g.n);
+    }
+  }
+
+  /* ---------- burn rate ---------- */
+  function setBurn(v, quiet) {
+    S.burn = clamp(v, 0.45, 1.25);
+    els.burn.value = String(Math.round(S.burn * 100));
+    els.burn.style.setProperty("--fill", Math.round(((S.burn - 0.45) / 0.8) * 100) + "%");
+    els.burnVal.textContent = Math.round(S.burn * 100) + "%";
+    applyVars();
+    meters();
+    if (!quiet && (S.burn > 1.18 || S.burn < 0.52)) {
+      say(S.burn > 1.18 ? "Overdriven. The glass will not thank you." : "Idling. Half the street cannot read it.");
+    }
+  }
+
+  /* ---------- tube character ---------- */
+  function setFont(name) {
+    S.font = name;
+    D.body.classList.remove("font-script", "font-caps", "font-mono");
+    D.body.classList.add("font-" + name);
+    for (var k = 0; k < segBtns.length; k++) {
+      segBtns[k].setAttribute("aria-pressed", String(segBtns[k].getAttribute("data-font") === name));
+    }
+    els.charVal.textContent = name;
+  }
+
+  /* ---------- typesetting a tube: one <span class="ch"> per glyph ---------- */
+  function typeset(el, txt) {
+    var f = D.createDocumentFragment();
+    for (var i = 0; i < txt.length; i++) {
+      var s = D.createElement("span");
+      s.className = "ch";
+      s.textContent = txt.charAt(i);
+      f.appendChild(s);
+    }
+    el.textContent = "";
+    el.appendChild(f);
+  }
+  function textOf(el) { return (el.textContent || "").replace(/\u00a0/g, " "); }
+
+  function caretIdx(el) {
+    var sel = window.getSelection();
+    if (!sel || !sel.rangeCount) { return null; }
+    var r = sel.getRangeAt(0);
+    if (!el.contains(r.startContainer)) { return null; }
+    var pre = r.cloneRange();
+    pre.selectNodeContents(el);
+    pre.setEnd(r.startContainer, r.startOffset);
+    return pre.toString().length;
+  }
+  function putCaret(el, idx) {
+    var sel = window.getSelection();
+    if (!sel) { return; }
+    var chs = el.querySelectorAll(".ch");
+    var r = D.createRange();
+    if (idx >= chs.length) { r.selectNodeContents(el); r.collapse(false); }
+    else if (chs[idx] && chs[idx].firstChild) { r.setStart(chs[idx].firstChild, 0); r.collapse(true); }
+    else { return; }
+    sel.removeAllRanges();
+    sel.addRange(r);
+  }
+
+  function syncMirror() {
+    typeset(els.rLine, textOf(els.lineMain));
+    typeset(els.rSub, textOf(els.lineSub));
+    markWeak();
+  }
+
+  /* ---------- the weak tube: an index that is never a space ---------- */
+  function pickWeak() {
+    var t = textOf(els.lineMain), cands = [], i;
+    for (i = 0; i < t.length; i++) { if (t.charAt(i) !== " ") { cands.push(i); } }
+    S.weak = cands.length ? cands[(Math.random() * cands.length) | 0] : -1;
+  }
+  function markWeak() {
+    var targets = [els.lineMain, els.rLine], p, i;
+    for (p = 0; p < targets.length; p++) {
+      var chs = targets[p].querySelectorAll(".ch");
+      for (i = 0; i < chs.length; i++) {
+        chs[i].classList.toggle("dead", S.weakHold && i === S.weak);
+      }
+    }
+  }
+
+  /* ---------- editable tubes ---------- */
+  function bindTube(el) {
+    var max = MAXLEN[el.id] || 24;
+    el.addEventListener("input", function () {
+      var idx = caretIdx(el);
+      var t = textOf(el).slice(0, max);
+      typeset(el, t);
+      putCaret(el, idx === null ? t.length : Math.min(idx, t.length));
+      if (!textOf(els.lineMain).replace(/\s/g, "")) { pickWeak(); }
+      else { markWeak(); }
+      syncMirror();
+    });
+    el.addEventListener("keydown", function (ev) {
+      if (ev.key === "Enter") { ev.preventDefault(); el.blur(); return; }
+      if (ev.key && ev.key.length === 1 && !ev.ctrlKey && !ev.metaKey && !ev.altKey &&
+          textOf(el).length >= max) { ev.preventDefault(); }
+    });
+    el.addEventListener("paste", function (ev) {
+      ev.preventDefault();
+      var clip = ev.clipboardData || window.clipboardData;
+      var add = clip ? String(clip.getData("text") || "") : "";
+      add = add.replace(/\s+/g, " ").slice(0, max);
+      var t = textOf(el), i = caretIdx(el);
+      if (i === null) { i = t.length; }
+      var next = (t.slice(0, i) + add + t.slice(i)).slice(0, max);
+      typeset(el, next);
+      putCaret(el, Math.min(i + add.length, next.length));
+      syncMirror();
+    });
+    el.addEventListener("blur", function () {
+      if (!textOf(el).replace(/\s/g, "")) {
+        typeset(el, DEFAULTS[el.id] || "");
+        syncMirror();
+        say("Empty tube struck out — back to the stock sign.");
+      }
+    });
+  }
+  /* ---------- timers we own ---------- */
+  var timers = [];
+  function later(fn, ms) {
+    var id = setTimeout(function () {
+      var k = timers.indexOf(id);
+      if (k >= 0) { timers.splice(k, 1); }
+      fn();
+    }, ms);
+    timers.push(id);
+    return id;
+  }
+
+  /* ---------- FLICKER: one tube, irregular by construction ---------- */
+  var flickTimer = 0;
+  function jitterPulse() {
+    var nodes = [els.lineMain.querySelectorAll(".ch")[S.weak], els.rLine.querySelectorAll(".ch")[S.weak]];
+    for (var i = 0; i < nodes.length; i++) {
+      var n = nodes[i];
+      if (!n) { continue; }
+      n.classList.remove("jitter");
+      void n.offsetWidth;
+      n.classList.add("jitter");
+    }
+  }
+  function calm() {
+    S.weakHold = false;
+    S.dip = 1;
+    markWeak();
+    applyVars();
+    meters();
+  }
+  function flickerStep() {
+    if (!S.flicker || reduce) { return; }
+    if (S.striking) { flickTimer = later(flickerStep, 400); return; }
+    var live = els.lineMain.querySelectorAll(".ch").length;
+    if (S.weak < 0 || S.weak >= live) { pickWeak(); }
+    if (S.weak < 0) { flickTimer = later(flickerStep, 1200); return; }
+
+    var roll = Math.random();
+
+    if (roll < 0.24) {
+      /* the tube gives up for a good while */
+      S.weakHold = true;
+      S.dip = rnd(0.86, 0.94);
+      markWeak(); applyVars(); meters();
+      flickTimer = later(flickerStep, rnd(900, 2800));
+      return;
+    }
+    if (roll < 0.58) {
+      /* a burst of half-ignitions, every gap a different length */
+      var bursts = 2 + ((Math.random() * 4) | 0), n = 0;
+      var burst = function () {
+        if (!S.flicker) { calm(); return; }
+        S.weakHold = (n % 2 === 0);
+        S.dip = S.weakHold ? rnd(0.7, 0.86) : rnd(0.94, 1.04);
+        markWeak(); applyVars(); meters();
+        jitterPulse();
+        n++;
+        if (n < bursts) { later(burst, rnd(38, 210)); }
+        else { calm(); flickTimer = later(flickerStep, rnd(260, 1900)); }
+      };
+      burst();
+      return;
+    }
+    /* a single miss, then a long unbothered calm */
+    S.dip = rnd(0.8, 0.96);
+    applyVars(); meters();
+    later(function () {
+      S.dip = 1; applyVars(); meters();
+      flickTimer = later(flickerStep, rnd(800, 4600));
+    }, rnd(50, 240));
+  }
+  function setFlicker(on) {
+    S.flicker = !!on;
+    els.flickerBtn.setAttribute("aria-pressed", String(S.flicker));
+    if (S.flicker) {
+      pickWeak();
+      if (reduce) {
+        S.weakHold = true;
+        markWeak();
+        say("Reduced motion — the weak tube is held dark instead of stuttering.");
+      } else {
+        say("Tube " + (S.weak + 1) + " is failing. It will not keep time.");
+        flickerStep();
+      }
+    } else {
+      clearTimeout(flickTimer);
+      calm();
+      say("New electrode crimped. It will start again in a week.");
+    }
+  }
+
+  /* ---------- STRIKE: cold tubes fighting the gas ---------- */
+  function strike() {
+    if (S.striking) { return; }
+    S.striking = true;
+    S.strikes++;
+    els.board.classList.add("striking");
+    els.trafo.classList.add("arcing");
+    later(function () { els.trafo.classList.remove("arcing"); }, 900);
+    S.dip = 0.05;
+    applyVars();
+    meters();
+    var plan = [110, 60, 170, 70, 240], step = 0;
+    var fire = function () {
+      if (step >= plan.length) {
+        S.dip = 1;
+        els.board.classList.remove("striking");
+        applyVars();
+        S.striking = false;
+        meters();
+        say("Strike " + S.strikes + " — the run is lit.");
+        return;
+      }
+      S.dip = (step % 2 === 0) ? rnd(0.5, 1.18) : rnd(0.05, 0.2);
+      applyVars();
+      meters();
+      step++;
+      later(fire, plan[step - 1]);
+    };
+    later(fire, 130);
+    say("Striking the tubes — watch the wall take the colour.");
+  }
+  /* ---------- RAIN: streaks on a canvas, damp in the vars ---------- */
+  var cv = els.rain, ctx = null, drops = [], CW = 0, CH = 0, dpr = 1;
+  function sizeCanvas() {
+    dpr = Math.min(2, window.devicePixelRatio || 1);
+    CW = Math.max(1, window.innerWidth);
+    CH = Math.max(1, window.innerHeight);
+    cv.width = Math.round(CW * dpr);
+    cv.height = Math.round(CH * dpr);
+    if (ctx) { ctx.setTransform(dpr, 0, 0, dpr, 0, 0); }
+  }
+  function newDrop(anywhere) {
+    return {
+      x: rnd(-CW * 0.12, CW * 1.1),
+      y: anywhere ? rnd(-CH, CH) : rnd(-CH * 0.4, -10),
+      len: rnd(9, 34),
+      v: rnd(480, 1150),
+      a: rnd(0.12, 0.5),
+      w: rnd(0.6, 1.6)
+    };
+  }
+  function seedDrops(n) {
+    drops.length = 0;
+    for (var i = 0; i < n; i++) { drops.push(newDrop(true)); }
+  }
+  function drawRain(dt) {
+    if (!ctx) { return; }
+    var want = Math.round(50 + 210 * S.damp);
+    while (drops.length < want) { drops.push(newDrop(false)); }
+    if (drops.length > want) { drops.length = want; }
+    var g = rgb(GASES[S.gas].hex);
+    var cr = Math.min(255, 196 + g[0] / 9), cg = Math.min(255, 210 + g[1] / 9), cb = Math.min(255, 226 + g[2] / 10);
+    ctx.clearRect(0, 0, CW, CH);
+    ctx.lineCap = "round";
+    for (var i = 0; i < drops.length; i++) {
+      var d = drops[i];
+      d.y += d.v * dt * (0.5 + 0.8 * S.damp);
+      d.x += d.v * dt * 0.12;
+      if (d.y > CH + 40) { drops[i] = newDrop(false); continue; }
+      ctx.strokeStyle = "rgba(" + Math.round(cr) + "," + Math.round(cg) + "," + Math.round(cb) + "," +
+        (d.a * (0.3 + 0.7 * S.damp)).toFixed(3) + ")";
+      ctx.lineWidth = d.w * 0.9;
+      ctx.beginPath();
+      ctx.moveTo(d.x, d.y);
+      ctx.lineTo(d.x - d.len * 0.12, d.y - d.len);
+      ctx.stroke();
+    }
+  }
+  function dampLabel() {
+    var s = S.damp < 0.06 ? "dry" : (S.damp < 0.26 ? "mist" : (S.damp < 0.58 ? "steady rain" : "downpour"));
+    if (els.dampVal.textContent !== s) { els.dampVal.textContent = s; }
+  }
+  function setRain(on, byUser) {
+    on = !!on;
+    if (byUser === true) { S.rainLock = on; }
+    else if (on === S.raining) { return; }
+    S.raining = on;
+    D.body.classList.toggle("raining", on);
+    els.rainBtn.setAttribute("aria-pressed", String(on));
+    if (reduce) {
+      S.damp = S.dampTarget = on ? 0.5 : 0;
+      els.rain.classList.remove("on");
+      applyVars(); dampLabel(); meters();
+      say(on ? "Reduced motion — the street is wet, nothing is falling." : "Weather off.");
+      return;
+    }
+    els.rain.classList.toggle("on", on);
+    S.dampTarget = on ? rnd(0.42, 0.82) : 0;
+    if (on && !ctx) { try { ctx = cv.getContext("2d"); sizeCanvas(); } catch (e) { ctx = null; } }
+    if (on) { seedDrops(70); }
+    meters();
+    say(on ? "Rain down the facade — the glow goes soft, the street takes it."
+            : "Rain off. The brick dries in patches it will not match.");
+  }
+  function scheduleShower(wait) {
+    later(function () {
+      if (!S.raining && !reduce) {
+        setRain(true);
+        later(function () { if (!S.rainLock) { setRain(false); } }, rnd(9000, 19000));
+      }
+      scheduleShower(rnd(28000, 64000));
+    }, wait);
+  }
+
+  /* ---------- the wet street mirrors the sign and will not hold still ---------- */
+  function wobble(t) {
+    var wet = 0.55 + S.damp * 1.9;
+    var a = Math.sin(t * 1.7) * 0.55 + Math.sin(t * 0.61 + 1.2) * 0.45;
+    var b = Math.sin(t * 2.9 + 0.7) * 0.5 + Math.sin(t * 0.93) * 0.5;
+    var sy = 1 + a * 0.014 * wet;
+    var sk = b * 0.85 * wet;
+    var ty = a * 2.4 * wet;
+    /* translateY(100%) first: fold the flipped copy down into the water — the
+       transform-origin is the top edge, so without it the mirror lands above
+       the street and gets clipped away. */
+    els.reflect.style.transform = "translateY(100%) scaleY(" + (-sy).toFixed(4) +
+      ") skewX(" + sk.toFixed(3) + "deg) translateY(" + ty.toFixed(2) + "px)";
+  }
+
+  /* ---------- moth: it wants the hottest part of the tube ---------- */
+  var box = null;
+  var moth = { x: 40, y: 40, th: 0.6, r: 120, spd: 0.7, dx: 0, o: 0, lit: false };
+  function measure() {
+    var wr = els.wall.getBoundingClientRect(), br = els.board.getBoundingClientRect();
+    box = {
+      cx: br.left - wr.left + br.width / 2,
+      cy: br.top - wr.top + br.height * 0.4,
+      w: br.width
+    };
+    if (!moth.x) { moth.x = box.cx; moth.y = box.cy; }
+  }
+  function mothStep(dt, t) {
+    if (!box || !els.moth) { return; }
+    moth.th += dt * moth.spd;
+    if (Math.random() < 0.005) { moth.spd = rnd(-1.7, 2.1); }
+    var want = box.w * 0.44 + 34 * Math.sin(t * 0.31);
+    moth.r += (want - moth.r) * Math.min(1, dt * 0.8);
+    var x = box.cx + Math.cos(moth.th) * moth.r;
+    var y = box.cy + Math.sin(moth.th * 1.6) * (moth.r * 0.36) + Math.sin(t * 3.3) * 7;
+    var k = Math.min(1, dt * 5);
+    moth.dx = (x - moth.x) * k;
+    moth.x += moth.dx;
+    moth.y += (y - moth.y) * k;
+    var s = 0.78 + 0.26 * Math.sin(t * 2.3);
+    els.moth.style.transform = "translate3d(" + moth.x.toFixed(1) + "px," + moth.y.toFixed(1) +
+      "px,0) rotate(" + clamp(moth.dx * 2.2, -26, 26).toFixed(1) + "deg) scale(" + s.toFixed(3) + ")";
+    /* driven fade, not a transition: a paused frame must still show the moth */
+    if (moth.lit && moth.o < 0.92) {
+      moth.o = Math.min(0.92, moth.o + dt * 1.5);
+      els.moth.style.opacity = moth.o.toFixed(3);
+    }
+  }
+
+  /* ---------- one loop for the lot ---------- */
+  var raf = 0, t0 = 0, last = 0;
+  function loop(ts) {
+    if (!t0) { t0 = ts; }
+    var t = (ts - t0) / 1000;
+    var dt = last ? Math.min(0.05, (ts - last) / 1000) : 0.016;
+    last = ts;
+    if (Math.abs(S.damp - S.dampTarget) > 0.002) {
+      S.damp += (S.dampTarget - S.damp) * Math.min(1, dt * 0.85);
+      applyVars();
+      dampLabel();
+    } else if (S.damp !== S.dampTarget) {
+      S.damp = S.dampTarget;
+      applyVars();
+      dampLabel();
+      meters();
+    }
+    wobble(t);
+    mothStep(dt, t);
+    if (S.damp > 0.02) { drawRain(dt); }
+    else if (ctx && drops.length) { ctx.clearRect(0, 0, CW, CH); drops.length = 0; }
+    raf = requestAnimationFrame(loop);
+  }
+  /* ---------- the transformer: 15 kV on mains, and it buzzes ---------- */
+  var AC = null, hum = null;
+  function audio() {
+    if (AC) { return AC; }
+    var Ctor = window.AudioContext || window.webkitAudioContext;
+    if (!Ctor) { return null; }
+    try { AC = new Ctor(); } catch (e) { AC = null; }
+    return AC;
+  }
+  function startHum() {
+    var ac = audio();
+    if (!ac) { return false; }
+    if (ac.state === "suspended" && ac.resume) { try { ac.resume(); } catch (e) { /* no gesture yet */ } }
+    killHum();
+    try {
+      var bus = ac.createGain();
+      bus.gain.value = 0.0001;
+      bus.connect(ac.destination);
+      var lp = ac.createBiquadFilter();
+      lp.type = "lowpass";
+      lp.frequency.value = 340;
+      lp.Q.value = 5;
+      lp.connect(bus);
+      var nodes = [], tones = [100, 150, 200.6, 300.4], gains = [0.5, 0.2, 0.12, 0.06];
+      for (var i = 0; i < tones.length; i++) {
+        var o = ac.createOscillator();
+        o.type = i ? "sawtooth" : "triangle";
+        o.frequency.value = tones[i];
+        var g = ac.createGain();
+        g.gain.value = gains[i];
+        o.connect(g);
+        g.connect(lp);
+        o.start();
+        nodes.push(o);
+      }
+      var lfo = ac.createOscillator();
+      lfo.type = "square";
+      lfo.frequency.value = 47;
+      var lg = ac.createGain();
+      lg.gain.value = 0.007;
+      lfo.connect(lg);
+      if (lg.connect) { lg.connect(bus.gain); }
+      lfo.start();
+      nodes.push(lfo);
+      bus.gain.setValueAtTime(0.0001, ac.currentTime);
+      bus.gain.linearRampToValueAtTime(0.026, ac.currentTime + 0.7);
+      hum = { bus: bus, nodes: nodes };
+      return true;
+    } catch (e) {
+      hum = null;
+      return false;
+    }
+  }
+  function killHum() {
+    if (!hum || !AC) { hum = null; return; }
+    var h = hum, t = AC.currentTime;
+    hum = null;
+    try {
+      h.bus.gain.cancelScheduledValues(t);
+      h.bus.gain.setValueAtTime(Math.max(0.0001, h.bus.gain.value), t);
+      h.bus.gain.linearRampToValueAtTime(0.0001, t + 0.22);
+      later(function () {
+        for (var i = 0; i < h.nodes.length; i++) { try { h.nodes[i].stop(); } catch (e) { /* already gone */ } }
+        try { h.bus.disconnect(); } catch (e) { /* already gone */ }
+      }, 420);
+    } catch (e) { /* nothing to stop */ }
+  }
+  function voice(name) {
+    if (!AC || !hum) { return; }
+    try {
+      var table = { Argon: 392, Neon: 330, Krypton: 494, Xenon: 440, Mercury: 262 };
+      var o = AC.createOscillator(), g = AC.createGain();
+      o.type = "sine";
+      o.frequency.value = table[name] || 392;
+      g.gain.value = 0.0001;
+      o.connect(g);
+      g.connect(AC.destination);
+      var now = AC.currentTime;
+      g.gain.linearRampToValueAtTime(0.03, now + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0002, now + 0.5);
+      o.start(now);
+      o.stop(now + 0.55);
+    } catch (e) { /* the bench stays quiet */ }
+  }
+  function setHum(on) {
+    if (on) {
+      var ok = startHum();
+      S.hum = ok;
+      els.humBtn.setAttribute("aria-pressed", String(ok));
+      els.trafo.setAttribute("aria-pressed", String(ok));
+      els.trafo.classList.add("arcing");
+      later(function () { els.trafo.classList.remove("arcing"); }, 760);
+      say(ok ? "Transformer on mains. 15 kV, and it knows it." : "No audio on this bench — imagine the buzz.");
+    } else {
+      S.hum = false;
+      killHum();
+      els.humBtn.setAttribute("aria-pressed", "false");
+      els.trafo.setAttribute("aria-pressed", "false");
+      say("Transformer off. The street is suddenly very quiet.");
+    }
+  }
+
+  /* ---------- ambient life: the mains sag, a tube clears its throat ---------- */
+  function sag() {
+    S.dip = rnd(0.7, 0.88);
+    applyVars();
+    later(function () {
+      S.dip = 1.07;
+      applyVars();
+      later(function () { S.dip = 1; applyVars(); meters(); }, 110);
+    }, rnd(60, 230));
+  }
+  function throatClear() {
+    var live = els.lineMain.querySelectorAll(".ch").length;
+    if (!live || S.striking) { return; }
+    var save = S.weak;
+    S.weak = (Math.random() * live) | 0;
+    var n = 2 + ((Math.random() * 3) | 0), k = 0;
+    var step = function () {
+      if (k >= n) { S.weakHold = false; S.weak = save; markWeak(); return; }
+      S.weakHold = (k % 2 === 0);
+      markWeak();
+      jitterPulse();
+      k++;
+      later(step, rnd(40, 180));
+    };
+    step();
+  }
+  function scheduleAmbient() {
+    later(function () {
+      if (!S.striking) {
+        var roll = Math.random();
+        if (roll < 0.5) { sag(); }
+        else { throatClear(); }
+      }
+      scheduleAmbient();
+    }, rnd(19000, 51000));
+  }
+
+  /* ---------- the door sign ---------- */
+  function setDoor(open) {
+    S.open = !!open;
+    els.flip.setAttribute("aria-pressed", String(S.open));
+    D.body.classList.toggle("sold-out", !S.open);
+    els.doorState.textContent = S.open ? "open" : "sold out";
+    applyVars();
+    meters();
+    if (S.open) {
+      say("Door flipped to OPEN — firing the run back up.");
+      strike();
+    } else {
+      say("SOLD OUT. The sign drops to a night burn and stays that way.");
+    }
+  }
+
+  /* ---------- the shop clock ---------- */
+  var secs = 23 * 3600 + 47 * 60 + 6;
+  function pad(n) { return (n < 10 ? "0" : "") + n; }
+  function tick() {
+    secs = (secs + 1) % 86400;
+    els.clock.textContent = pad((secs / 3600) | 0) + ":" + pad(((secs % 3600) / 60) | 0) + ":" + pad(secs % 60);
+  }
+
+  /* ---------- wiring ---------- */
+  var k;
+  for (k = 0; k < gasBtns.length; k++) {
+    (function (b) {
+      b.addEventListener("click", function () { setGas(Number(b.getAttribute("data-i"))); });
+    })(gasBtns[k]);
+  }
+  for (k = 0; k < segBtns.length; k++) {
+    segBtns[k].addEventListener("click", function () { setFont(this.getAttribute("data-font")); });
+  }
+  els.burn.addEventListener("input", function () { setBurn(Number(this.value) / 100, true); });
+  els.burn.addEventListener("change", function () { setBurn(Number(this.value) / 100); });
+  els.flickerBtn.addEventListener("click", function () { setFlicker(!S.flicker); });
+  els.rainBtn.addEventListener("click", function () { setRain(!S.raining, true); });
+  els.humBtn.addEventListener("click", function () { setHum(!S.hum); });
+  els.trafo.addEventListener("click", function () { setHum(!S.hum); });
+  els.strikeBtn.addEventListener("click", strike);
+  els.flip.addEventListener("click", function () { setDoor(!S.open); });
+
+  D.addEventListener("keydown", function (ev) {
+    if (ev.ctrlKey || ev.metaKey || ev.altKey) { return; }
+    var t = ev.target;
+    if (t && (t.isContentEditable || /^(input|textarea|select)$/i.test(t.tagName || ""))) {
+      if (ev.key === "Escape" && t.blur) { t.blur(); }
+      return;
+    }
+    var key = (ev.key || "").toLowerCase();
+    if (key === "g") { setGas(S.gas + 1); }
+    else if (key === "f") { setFlicker(!S.flicker); }
+    else if (key === "r") { setRain(!S.raining, true); }
+    else if (key === "s") { strike(); }
+    else if (key === "h") { setHum(!S.hum); }
+    else if (key === "o") { setDoor(!S.open); }
+    else if (key === "t") { els.lineMain.focus(); }
+    else if (key === "b") {
+      var presets = [0.55, 0.8, 1, 1.2], next = 0.55, p;
+      for (p = 0; p < presets.length; p++) { if (presets[p] > S.burn + 0.01) { next = presets[p]; break; } }
+      setBurn(next);
+      say("Burn set to " + Math.round(S.burn * 100) + "%.");
+    }
+  });
+
+  var rz = 0;
+  window.addEventListener("resize", function () {
+    clearTimeout(rz);
+    rz = setTimeout(function () { sizeCanvas(); measure(); }, 180);
+  });
+  D.addEventListener("visibilitychange", function () {
+    if (D.hidden) {
+      if (raf) { cancelAnimationFrame(raf); raf = 0; }
+    } else if (!raf && !reduce) {
+      last = 0;
+      raf = requestAnimationFrame(loop);
+    }
+  });
+
+  /* ---------- lit up ---------- */
+  setGas(0, true);
+  setBurn(1, true);
+  setFont("script");
+  typeset(els.lineMain, textOf(els.lineMain));
+  typeset(els.lineSub, textOf(els.lineSub));
+  bindTube(els.lineMain);
+  bindTube(els.lineSub);
+  syncMirror();
+  pickWeak();
+  els.doorState.textContent = S.open ? "open" : "sold out";
+  applyVars();
+  meters();
+  dampLabel();
+  tick();
+  setInterval(tick, 1000);
+
+  if (reduce) {
+    els.moth.classList.remove("on");
+  } else {
+    try { ctx = cv.getContext("2d"); } catch (e) { ctx = null; }
+    sizeCanvas();
+    measure();
+    later(measure, 700);
+    raf = requestAnimationFrame(loop);
+    later(function () { els.moth.classList.add("on"); moth.lit = true; }, 2400);
+    scheduleShower(rnd(22000, 46000));
+    scheduleAmbient();
+  }
+}());
+</script>
+</body>
+</html>

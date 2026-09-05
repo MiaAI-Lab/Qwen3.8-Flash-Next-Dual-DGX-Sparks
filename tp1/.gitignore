@@ -1,0 +1,9 @@
+.env
+logs/
+*.log
+.last_launch.sh
+__pycache__/
+files/ple_layer_patched.py
+files/modelopt_patched.py
+files/ple_offload/*.py
+!files/ple_offload/orig/

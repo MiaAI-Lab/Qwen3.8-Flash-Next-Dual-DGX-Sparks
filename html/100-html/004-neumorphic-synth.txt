@@ -1,0 +1,123 @@
+TITLE: PUTTY-8 — a modular synthesizer desk you can see but never hear (soft-UI visual instrument)
+
+PROMPT:
+Build a single, fully self-contained HTML page: one soft-UI ("neumorphic") modular synthesizer
+desk, 8 steps, 6 jacks, 13 controls, rendered entirely from CSS shadows and one canvas. One
+<style>, one <script>, zero external references (no CDN, no web fonts, no images, no libraries),
+system font stacks only, works offline, no audio — no AudioContext is ever created. It is an
+instrument for the eyes: every control must nevertheless drive one real signal model that the
+oscilloscope and the VU meter both consume.
+
+PALETTE: surface #e8e6e2, surface-lo #dcd8d2, surface-hi #f4f2ee, light #ffffff, shadow #bcb6ad,
+shadow-deep #a8a199, signal warm #ff6b35 (glow rgba(255,107,53,.4-.7)), signal cool #2ec4b6
+(glow rgba(46,196,182,.4-.7)), ink #5c5750, ink-2 #8b857c, ink-3 #b0aaa1; scope glass #4a4640 →
+#302d29 → #242220 with trace #8bf3e7/#cdf9f2 and a #ff8752 hot tip; cable plug heads reuse warm/cool
+with #ffb28c / #a9f0e8 highlights.
+
+SHADOW TOKENS (the whole visual language): --out 10px 10px 20px shadow, -10px -10px 20px light;
+--in inset 7px 7px 14px shadow, inset -7px -7px 14px light; --in-sm inset 4/4/9; --out-sm 5/5/11;
+--out-xs 3/3/7; easing cubic-bezier(.22,.68,.24,1). The one semantic rule: raised = idle, and every
+pressed or engaged state swaps the exact same pair to inset (knob body on drag, fader cap while
+held, toggle track, sequencer pad, plugged jack collar, transport buttons, tempo steppers).
+
+TYPE: --eng "Avenir Next",Futura,Optima,"Trebuchet MS","Helvetica Neue",system-ui,sans-serif for
+everything; --num ui-monospace,SFMono-Regular,Menlo,Consolas,"Courier New",monospace with
+font-variant-numeric:tabular-nums for every number. Labels are 10px/700/uppercase/.24em tracked with
+text-shadow 0 1px 0 rgba(255,255,255,.8) so they read as engraved; panel titles clamp(15px,1.5vw,20px)
+uppercase .2em with a double shadow (light below, faint dark above); the wordmark "Putty·8" is
+clamp(38px,7vw,86px) embossed 2px 2px 0 #bcb6ad, -2px -2px 0 #fff, 4px 4px 12px rgba(160,152,142,.5)
+with the interpunct in warm.
+
+AMBIENT: body::before three radial gradients (a broad white light from above, a cool wash bottom-left,
+a warm wash bottom-right); body::after three repeating-linear-gradients at 45°, -45° and 90° with 1-6px
+pitch at ~5% alpha to fake felt weave; corner screws are radial-gradient discs whose ::after slot is
+rotated differently per corner.
+
+LAYOUT: .desk max-width 1640px, padding 22px clamp(12px,3vw,40px) 72px, rows as CSS grid using
+minmax(0,Nfr) tracks — scope row 1.55fr/1fr, controls row 1.35fr/1fr, patch row 1fr/1.1fr, sequencer
+full width; all rows collapse to a single column at ≤1080px; panels are 26px radius with --out
+(22px at ≤640px), inset panels for the recessed wells.
+
+SECTIONS IN ORDER: (1) nameplate with three inset spec tiles (8 Steps / 6 Jacks / 13 Controls) and
+three status LEDs (power always cool, run, clip); (2) oscilloscope — inset CRT with four corner
+brackets, a diagonal glass sheen in mix-blend screen, a mode tag, and five readouts Fundamental /
+Cutoff / Harmonics / Patches / Gate; (3) Output Level — 12-segment strip (role=meter), dB scale
+−∞ −18 −6 0 +6, PEAK readout, five status chips; (4) Voice — 4 knobs (Frequency, Cutoff, Resonance,
+Drive) and Mixer — 3 faders (VCO, SUB, OUT); (5) Patch Bay — 6 jacks (VCO out, VCF in, VCF out, Env,
+LFO, Sum) under an SVG cable overlay plus a hint line — and Routing — 6 latched toggles (Sub octave,
+LFO to cutoff, Env to cutoff, Wavefold, Swing, Latch gate); (6) Sequencer — 8 pads with accents on
+1/4/7, a playhead bar, transport (big play, step, randomise, tempo −/112/+) and STEP / PATTERN /
+CLOCK chips.
+
+JS BEHAVIOUR (one IIFE, no framework): controls are generated into empty containers the markup
+provides, using only the class and data- hooks the stylesheet already defines. Knobs sweep 270°; the
+arc is one stroke-dasharray circle rotated rotate(135 58 58) at r=52 (circumference 326.7, so the
+track dasharray is 245.04 and the value arc is 0.75·C·value), the pointer rotates through a --a custom
+property, 13 scale ticks are placed with rotate(θ) translateY(-46px); drag distance is
+(dy + dx) × 0.0058 with Shift at 0.0012, wheel ±0.02 (±0.004 with Shift), arrows ±0.02 (±0.005),
+PageUp/PageDown ±0.1, Home/End, double-click restores the default; each dial is role=slider with
+aria-valuenow 0-100 and a human aria-valuetext ("1.38 kHz", "5.0 Q"). Faders position the cap with
+calc(17px + (1−v) * (100% − 34px)) and invert the cap shadow while held. Toggles and pads are real
+buttons using aria-pressed. The playhead's left is derived from the stylesheet's own width formula,
+so column i sits at calc((14 − 2.25i)px + 12.5i%) and always lands exactly on its pad. The clock is a
+requestAnimationFrame accumulator: 16ths at (60/bpm)/4 with 0.34 alternating swing, firing a gate
+event per active step. Signal model: harmonic stack (saw 1/k, odd-only square plus a sub-octave sine
+when Sub octave is on) filtered by a second-order lowpass magnitude 1/√((1−r²)² + (r/Q)²) with
+Q = 0.6 + 13·resonance and cutoff modulated by patch-applied LFO and envelope, then tanh saturation
+scaled by Drive, optional sine wavefolding, a VCA from the step envelope, and the master fader; the
+number of harmonics still above 0.02 after filtering is the HARMONICS readout. Patch bay: dragging
+from collar to collar draws a cubic bezier whose sag is max(30, dx·0.36 + dy·0.5 + 18) with three
+circles as the plug head at each end and a 20px-wide transparent duplicate path as the click target
+for pulling the cable; five cables maximum; each cable is an edge in a routing graph (VCO→VCF engages
+the filter, Env→VCF and LFO→VCF modulate cutoff, VCF→Sum and VCO→Sum set which paths reach the summing
+node, LFO→VCO is vibrato, Env→VCO is pitch envelope, VCF→VCF self-oscillates, anything else rings
+extra colour into the sum) so connecting or pulling a cable visibly changes the summed waveform.
+Scope: devicePixelRatio-aware (capped at 2), grid, envelope lane, gate tick marks, gradient stroke with
+shadowBlur 12 glow, and phosphor persistence by fading the previous frame with a destination-out fill;
+trace scrolls at 0.85 rad/s. prefers-reduced-motion: never start the loop — paint one still frame,
+park the clock a third of a window past the newest gate so the still still shows envelope and gate
+position, repaint on every input, leave the playhead stopped and the STEP button as the clock, and say
+so in the CLOCK chip. No horizontal overflow anywhere from 360px to 1640px.
+
+DESIGN: The desk is putty: one warm-grey sheet lit from above, on which meaning is carried entirely by
+whether a thing sticks out or sinks in. Nothing is decorative — raised means idle, inset means doing
+something, and because the same shadow pair is reused inverted, the panel reads as one machined object
+rather than a stack of widgets. Colour is rationed to two signal inks, warm for audio and hot states
+and cool for modulation and safe states, so the only saturated pixels on the page are ones that mean
+something; the CRT is the single dark object, which makes it the natural focus and lets a 2px stroke
+do the emotional work the rest of the page refuses to do with colour. Engraved tracked capitals and
+tabular mono numerals give it the vocabulary of real studio hardware, and the screws, felt weave and
+glass sheen are there to insist this is a physical thing you are allowed to touch — while the honest
+signal path underneath is the joke and the point: it is an instrument deliberately deprived of sound,
+so the waveform is the only feedback available, and it is genuinely yours.
+
+TECHNIQUES:
+- Paired light/dark box-shadow tokens (--out/--out-sm/--out-xs and --in/--in-sm) with pressed states that swap the same token to inset instead of inventing new shadows
+- Layered background: three radial gradients for ambient light plus three offset repeating-linear-gradients at 45/-45/90° for a felt weave, all on pseudo-elements with pointer-events:none
+- Engraved type via a single 1px white text-shadow; embossed wordmark via offset light-plus-dark text-shadows; tabular-nums mono for every readout
+- Rotary arc as one SVG circle with stroke-dasharray on a rotate(135 58 58) transform (270° = 0.75 of the circumference), pointer angle driven by a --a custom property, radial scale ticks via rotate(θ) translateY(-r)
+- One setPointerCapture drag helper (down/move/up/cancel) reused by knobs, faders and jacks, so touch and mouse share a path
+- Fader travel in pure calc() against the well height, with a fill bar, tick rail and a cap whose shadow inverts for the pressed state
+- Playhead position derived from the grid's own width formula so the cursor stays pixel-aligned with its pad at any container width
+- SVG cable overlay sized with width:100% plus a 1:1 viewBox and preserveAspectRatio=none, so a shrinking bay can never be poked through by a stale coordinate space
+- Wide transparent duplicate stroke (class cable-hit) as a fat click target for a thin curved line
+- Cubic bezier cable sag computed from the distance between jacks, plug heads built from three stacked circles (boot, body, specular dot)
+- Canvas oscilloscope with devicePixelRatio backing-store scaling, grid, gradient stroke and shadowBlur glow; phosphor afterimage via globalCompositeOperation 'destination-out' fade instead of clearing
+- Band-limited-ish harmonic summation with an analytic second-order lowpass magnitude per harmonic, tanh saturation, sine wavefolding, exponential-decay envelope from a list of gate events, and a small interpolated noise table for patched-in colour
+- Level metering taken from the peak of the same samples that drew the trace, with fast attack, slow release and a decaying peak-hold; 12 segments split into three colour bands by index
+- Clock and animation in one requestAnimationFrame loop with a dt accumulator, alternating swing, a guard on catch-up iterations, and visibilitychange suspend
+- prefers-reduced-motion via matchMedia plus a change listener: the loop is never started and a single one-shot requestAnimationFrame repaints on input, so the page stays fully usable and still
+- ResizeObserver on the bay and CRT, throttled text updates (control-driven readouts on input, clock-driven readouts from the loop), and a measured flex-wrap guard that only engages when a row genuinely does not fit
+- Accessibility as markup, not bolt-ons: role=slider with aria-valuenow/valuetext/orientation, role=meter with a dB valuetext, role=group pads, aria-pressed on every latched control, role=img plus aria-label on the canvas, :focus-visible ring reusing the shadow token
+
+INTERACTION:
+- Drag a knob vertically or sideways to change it (Shift for fine), wheel for clicks, arrows/PageUp-Down/Home/End for keyboard, double-click to restore its default; a bubble names the value while you are on it and the arc and pointer track it live
+- Drag a fader well (or arrow it) to set a channel; the cap sits in the groove with an inverted shadow while held, the fill and the dB label follow
+- Click or press Space/Enter on any routing toggle: the thumb slides, the track sinks, the state word flips and the sound model changes immediately
+- Click a pad to set or clear a step; the pad sinks with a cool LED dot, accent pads turn warm; PATTERN counts the active steps
+- Press play (or Space on empty ground) and the cursor walks the row on a 16th clock at the current BPM, flashing each running step, firing gates into the envelope, advancing STEP, and swapping its own icon and inset state; +/- change tempo, step advances by hand, randomise re-rolls 3-6 steps
+- Drag from one jack collar to another to solder a cable — the target collar sinks as you hover it, and releasing on empty ground cancels; keyboard users Enter on a source jack then Enter on a target to patch, Escape to disarm; click a cable to pull it, and the bay counter and PATCHED readout follow
+- Every patch is wired into the summing node, so the trace, HARMONICS, the voice-count tag, the level meter and the FILTER chip all move when you patch, not just the picture
+- The oscilloscope redraws continuously from knobs, faders, switches, the step pattern and the active patches, with persistence, an envelope lane and gate tick marks; the 12-segment meter and clip LED follow its peak
+- With reduced motion the cursor stops and the scope holds one frame that still repaints on every knob, fader, switch, pad, step and patch; the CLOCK chip explains itself and STEP becomes the clock
+- Everything reflows from 360px (single column, two-across knobs, three-across jacks, wrapped transport) to 1640px with no horizontal scrolling at any width

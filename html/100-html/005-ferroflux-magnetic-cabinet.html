@@ -1,0 +1,1556 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ferroflux — Normal-Field Instability Cabinet · Exhibit RF-05</title>
+<meta name="description" content="An instrumented ferrofluid cabinet: Rosensweig normal-field instability, spike wavelength from surface tension, magnetic stress and gravity, coil geometry and colloid composition.">
+<style>
+:root{
+  --paper:#f1eee7;
+  --paper-2:#e3ded2;
+  --ink:#1a1815;
+  --fluid:#0d0c0b;
+  --accent:#4a5fc7;
+  --grey:#8b8578;
+  --hair:rgba(26,24,21,.16);
+  --hair-soft:rgba(26,24,21,.09);
+  --display:Didot,"Bodoni MT","Hoefler Text",Optima,serif;
+  --body:"Helvetica Neue",Helvetica,system-ui,sans-serif;
+  --mono:ui-monospace,Menlo,monospace;
+  --pad:clamp(14px,2.4vw,34px);
+}
+*,*::before,*::after{box-sizing:border-box;}
+html{-webkit-text-size-adjust:100%;}
+body{
+  margin:0;
+  color:var(--ink);
+  font-family:var(--body);
+  font-size:15px;
+  line-height:1.55;
+  background-color:var(--paper);
+  background-image:
+    repeating-linear-gradient(to right,rgba(139,133,120,.13) 0 1px,transparent 1px 9px),
+    repeating-linear-gradient(to bottom,rgba(139,133,120,.13) 0 1px,transparent 1px 9px),
+    repeating-linear-gradient(to right,rgba(26,24,21,.10) 0 1px,transparent 1px 45px),
+    repeating-linear-gradient(to bottom,rgba(26,24,21,.10) 0 1px,transparent 1px 45px);
+  background-attachment:fixed;
+}
+.wrap{
+  width:100%;
+  max-width:1320px;
+  margin:0 auto;
+  padding:0 var(--pad) 64px;
+}
+/* ── masthead ─────────────────────────────────────────────── */
+.masthead{
+  border-bottom:1px solid var(--ink);
+  padding:clamp(20px,3vw,40px) 0 14px;
+}
+.mast-top{
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px 22px;
+  align-items:baseline;
+  justify-content:space-between;
+  border-bottom:1px solid var(--hair);
+  padding-bottom:9px;
+}
+.mast-top p{margin:0;font-family:var(--mono);font-size:10.5px;letter-spacing:.19em;text-transform:uppercase;color:var(--grey);}
+.mast-top .seq{color:var(--ink);}
+h1{
+  font-family:var(--display);
+  font-weight:400;
+  font-size:clamp(40px,8.2vw,102px);
+  line-height:.94;
+  letter-spacing:-.018em;
+  margin:.22em 0 0;
+  overflow-wrap:anywhere;
+}
+h1 .em{font-style:italic;}
+.deck{
+  font-family:var(--display);
+  font-size:clamp(16px,1.95vw,23px);
+  line-height:1.36;
+  font-style:italic;
+  max-width:33em;
+  margin:.55em 0 0;
+  color:#2b2823;
+}
+.mast-meta{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(146px,1fr));
+  gap:1px;
+  background:var(--hair);
+  border:1px solid var(--hair);
+  margin-top:20px;
+}
+.mast-meta div{background:var(--paper);padding:8px 10px 9px;min-width:0;}
+.mast-meta dt{font-family:var(--mono);font-size:9.5px;letter-spacing:.17em;text-transform:uppercase;color:var(--grey);margin:0 0 3px;}
+.mast-meta dd{margin:0;font-family:var(--mono);font-size:12.5px;overflow-wrap:anywhere;}
+/* ── section furniture ────────────────────────────────────── */
+.rulebar{
+  display:flex;
+  align-items:baseline;
+  gap:14px;
+  flex-wrap:wrap;
+  margin:44px 0 14px;
+  border-top:1px solid var(--ink);
+  padding-top:8px;
+}
+.rulebar h2{
+  font-family:var(--display);
+  font-weight:400;
+  font-size:clamp(19px,2.4vw,27px);
+  letter-spacing:.004em;
+  margin:0;
+}
+.rulebar span{
+  font-family:var(--mono);
+  font-size:10px;
+  letter-spacing:.18em;
+  text-transform:uppercase;
+  color:var(--grey);
+  margin-left:auto;
+  text-align:right;
+}
+/* ── hero: stage + instrument column ──────────────────────── */
+.cabinet{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) 322px;
+  gap:18px;
+  align-items:start;
+}
+.stage-shell{
+  position:relative;
+  min-width:0;
+  border:1px solid var(--ink);
+  background:
+    linear-gradient(180deg,rgba(227,222,210,.6),rgba(241,238,231,.18) 60%,rgba(227,222,210,.8)),
+    var(--paper);
+}
+.stage-inner{position:relative;width:100%;aspect-ratio:16/9;min-height:286px;}
+canvas#pool{position:absolute;inset:0;width:100%;height:100%;display:block;}
+.stage-tag{
+  position:absolute;top:0;left:0;
+  padding:7px 11px 8px;
+  font-family:var(--mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--ink);
+  border-right:1px solid var(--hair);
+  border-bottom:1px solid var(--hair);
+  background:rgba(241,238,231,.78);
+  max-width:72%;
+}
+.reg{position:absolute;width:13px;height:13px;border:1px solid var(--ink);opacity:.45;}
+.reg.tr{top:6px;right:6px;border-left:0;border-bottom:0;}
+.reg.bl{bottom:6px;left:6px;border-right:0;border-top:0;}
+.reg.br{bottom:6px;right:6px;border-left:0;border-top:0;}
+.flag{
+  position:absolute;left:0;bottom:0;
+  padding:7px 12px 8px;
+  border-top:1px solid var(--hair);
+  border-right:1px solid var(--hair);
+  background:rgba(241,238,231,.86);
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;
+  max-width:90%;
+}
+.flag b{font-weight:600;color:var(--accent);}
+.callout{
+  position:absolute;
+  width:172px;
+  transform:translate(-50%,-100%);
+  border:1px solid var(--ink);
+  background:var(--paper);
+  padding:7px 9px 8px;
+  font-family:var(--mono);font-size:10.5px;line-height:1.5;
+  opacity:0;pointer-events:none;
+  transition:opacity .22s ease;
+  box-shadow:3px 4px 0 rgba(26,24,21,.08);
+}
+.callout.on{opacity:1;}
+.callout::after{content:"";position:absolute;left:50%;bottom:-6px;width:1px;height:6px;background:var(--ink);}
+.callout i{display:block;font-style:normal;color:var(--grey);letter-spacing:.13em;font-size:9px;text-transform:uppercase;}
+.plate-note{
+  border-top:1px solid var(--hair);
+  padding:9px 11px 10px;
+  font-family:var(--mono);font-size:10px;letter-spacing:.07em;color:var(--grey);
+  display:flex;gap:10px 16px;justify-content:space-between;flex-wrap:wrap;
+}
+/* ── instrument column ────────────────────────────────────── */
+.instruments{
+  min-width:0;
+  border:1px solid var(--ink);
+  background:var(--paper);
+}
+.inst-head{
+  display:flex;justify-content:space-between;align-items:baseline;gap:8px;
+  padding:8px 11px 9px;
+  border-bottom:1px solid var(--ink);
+  background:var(--paper-2);
+  font-family:var(--mono);font-size:9.5px;letter-spacing:.18em;text-transform:uppercase;
+}
+.readout{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:baseline;padding:6px 11px 7px;border-bottom:1px solid var(--hair-soft);min-width:0;}
+.readout dt{font-family:var(--body);font-size:11.5px;letter-spacing:.02em;color:#4a463e;min-width:0;}
+.readout dt em{font-family:var(--mono);font-style:normal;font-size:10px;color:var(--grey);letter-spacing:.06em;}
+.readout dd{margin:0;font-family:var(--mono);font-size:15px;font-variant-numeric:tabular-nums;letter-spacing:-.01em;text-align:right;white-space:nowrap;}
+.readout dd small{font-size:9.5px;color:var(--grey);letter-spacing:.06em;margin-left:3px;}
+.readout.hero dd{font-size:23px;}
+.readout.accent dd{color:var(--accent);}
+.bar{grid-column:1/-1;height:3px;background:var(--paper-2);position:relative;overflow:hidden;}
+.bar i{position:absolute;inset:0 auto 0 0;width:0;background:var(--ink);display:block;}
+.bar.a i{background:var(--accent);}
+.trace-wrap{padding:8px 11px 6px;border-bottom:1px solid var(--hair-soft);}
+.trace-wrap p{margin:0 0 5px;font-family:var(--mono);font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:var(--grey);}
+svg.trace{display:block;width:100%;height:58px;}
+/* ── control bench ────────────────────────────────────────── */
+.bench{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(238px,1fr));
+  gap:1px;
+  background:var(--hair);
+  border:1px solid var(--ink);
+  margin-top:18px;
+}
+.cell{background:var(--paper);padding:12px 13px 14px;min-width:0;}
+.cell h3{
+  margin:0 0 3px;font-family:var(--mono);font-size:9.5px;letter-spacing:.18em;text-transform:uppercase;
+  font-weight:400;color:var(--grey);
+}
+.cell .val{font-family:var(--mono);font-size:17px;font-variant-numeric:tabular-nums;margin:0 0 8px;}
+.cell .val b{font-weight:400;color:var(--accent);}
+.cell .sub{margin:7px 0 0;font-family:var(--mono);font-size:9.5px;line-height:1.5;color:var(--grey);}
+input[type=range]{
+  -webkit-appearance:none;appearance:none;width:100%;background:transparent;margin:2px 0 0;height:22px;min-width:0;
+}
+input[type=range]::-webkit-slider-runnable-track{height:1px;background:var(--ink);}
+input[type=range]::-moz-range-track{height:1px;background:var(--ink);}
+input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;appearance:none;width:11px;height:17px;margin-top:-8px;
+  background:var(--paper);border:1px solid var(--ink);border-radius:0;box-shadow:inset 0 0 0 2px var(--paper),inset 0 -6px 0 var(--accent);
+}
+input[type=range]::-moz-range-thumb{width:11px;height:17px;background:var(--paper);border:1px solid var(--ink);border-radius:0;}
+input[type=range]:focus-visible{outline:1px solid var(--accent);outline-offset:3px;}
+.ticks{display:flex;justify-content:space-between;font-family:var(--mono);font-size:9px;color:var(--grey);margin-top:1px;}
+.geom{display:grid;gap:1px;background:var(--hair);border:1px solid var(--hair);}
+.geom button{
+  font-family:var(--body);font-size:12px;text-align:left;
+  background:var(--paper);color:var(--ink);border:0;padding:7px 9px;cursor:pointer;
+  display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;
+}
+.geom button em{font-family:var(--mono);font-style:normal;font-size:9.5px;color:var(--grey);letter-spacing:.06em;}
+.geom button[aria-pressed=true]{background:var(--ink);color:var(--paper);}
+.geom button[aria-pressed=true] em{color:#b8b1a3;}
+.geom button:hover{background:var(--paper-2);}
+.geom button[aria-pressed=true]:hover{background:var(--ink);}
+.btn{
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;
+  background:var(--ink);color:var(--paper);border:1px solid var(--ink);padding:9px 12px;cursor:pointer;width:100%;
+}
+.btn:hover{background:var(--accent);border-color:var(--accent);color:#fff;}
+.btn:active{transform:translateY(1px);}
+.btn.ghost{background:var(--paper);color:var(--ink);}
+.btn.ghost:hover{background:var(--paper-2);color:var(--ink);border-color:var(--ink);}
+.btn-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;}
+/* ── plates ───────────────────────────────────────────────── */
+.plates{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(272px,1fr));
+  gap:18px;
+}
+.plate{
+  border:1px solid var(--ink);
+  background:var(--paper);
+  min-width:0;
+  display:flex;flex-direction:column;
+}
+.plate header{
+  display:flex;justify-content:space-between;align-items:baseline;gap:10px;
+  padding:7px 11px 8px;border-bottom:1px solid var(--hair);background:var(--paper-2);
+}
+.plate header b{font-family:var(--mono);font-size:9.5px;letter-spacing:.19em;text-transform:uppercase;font-weight:400;}
+.plate header i{font-family:var(--mono);font-style:normal;font-size:9px;color:var(--grey);letter-spacing:.1em;}
+.plate .art{padding:6px 8px 2px;}
+.plate svg{display:block;width:100%;height:auto;}
+.plate figcaption{padding:8px 11px 12px;border-top:1px solid var(--hair-soft);font-size:12.5px;line-height:1.5;color:#39352f;}
+.plate figcaption b{font-family:var(--mono);font-weight:400;font-size:12px;}
+.plate .hint{padding:0 11px 10px;font-family:var(--mono);font-size:9px;letter-spacing:.13em;text-transform:uppercase;color:var(--grey);}
+svg text{font-family:var(--mono);fill:#4a463e;}
+svg .lbl{font-size:7.4px;letter-spacing:.1em;}
+svg .lbl.big{font-size:8.6px;}
+svg .dim{stroke:var(--accent);stroke-width:.7;fill:none;}
+svg .hairline{stroke:var(--ink);stroke-width:.6;fill:none;}
+svg .hairline.s{stroke:var(--grey);stroke-width:.5;}
+svg .fill-ink{fill:var(--ink);}
+svg .fill-paper{fill:var(--paper);}
+svg .fill-g{fill:var(--paper-2);}
+svg .fill-a{fill:var(--accent);}
+.layer{opacity:0;transition:opacity .18s ease;}
+.gp:hover .layer,.gp:focus .layer,.gp.on .layer{opacity:1;}
+.gp{cursor:help;outline:none;}
+.gp:hover .ring,.gp:focus .ring,.gp.on .ring{opacity:.9;}
+.ring{opacity:0;transition:opacity .18s ease;fill:none;stroke:var(--accent);stroke-width:.7;}
+/* ── exhibition caption ───────────────────────────────────── */
+.caption{
+  border:1px solid var(--ink);
+  background:var(--paper);
+  display:grid;
+  grid-template-columns:minmax(0,1.32fr) minmax(0,1fr);
+}
+.caption .txt{padding:16px clamp(14px,2vw,24px) 18px;border-right:1px solid var(--hair);}
+.caption .txt h2{font-family:var(--display);font-size:clamp(20px,2.6vw,30px);font-weight:400;margin:0 0 8px;line-height:1.1;}
+.caption .txt p{margin:0 0 9px;max-width:62em;font-size:14px;color:#332f29;}
+.caption .txt p:last-child{margin-bottom:0;}
+.caption .num{padding:14px clamp(12px,1.6vw,18px);}
+.caption .num dl{margin:0;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:0 10px;}
+.caption .num dt{font-size:11.5px;color:#4a463e;padding:5px 0;border-bottom:1px solid var(--hair-soft);}
+.caption .num dd{margin:0;font-family:var(--mono);font-size:12px;text-align:right;padding:5px 0;border-bottom:1px solid var(--hair-soft);white-space:nowrap;}
+footer.endnote{
+  margin-top:34px;border-top:1px solid var(--ink);padding-top:9px;
+  display:flex;gap:8px 24px;flex-wrap:wrap;justify-content:space-between;
+  font-family:var(--mono);font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;color:var(--grey);
+}
+/* ── responsive ───────────────────────────────────────────── */
+@media (max-width:1000px){
+  .cabinet{grid-template-columns:minmax(0,1fr);}
+  .instruments{order:-1;}
+  .caption{grid-template-columns:minmax(0,1fr);}
+  .caption .txt{border-right:0;border-bottom:1px solid var(--hair);}
+}
+@media (max-width:620px){
+  body{font-size:14.5px;}
+  .stage-inner{aspect-ratio:4/3;min-height:250px;}
+  .readout dd{font-size:14px;}
+  .readout.hero dd{font-size:20px;}
+  .callout{width:150px;}
+  .stage-tag{font-size:9px;letter-spacing:.11em;}
+}
+@media (prefers-reduced-motion:reduce){
+  *{transition-duration:.01ms !important;animation-duration:.01ms !important;}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="masthead">
+    <div class="mast-top">
+      <p class="seq">RF-05 · Cabinet five</p>
+      <p>Rosensweig normal-field instability</p>
+      <p>Backlit tank · 1:1 optics</p>
+      <p>Gallery II, north wall</p>
+    </div>
+    <h1>Ferro<span class="em">flux</span></h1>
+    <p class="deck">A centimetre of black colloid lies dead flat under a coil. Raise the normal field past
+      seventeen and a half millitesla and the mirror can no longer hold its own surface: it breaks into an
+      array of spikes whose spacing the fluid itself chooses.</p>
+    <dl class="mast-meta">
+      <div><dt>Specimen</dt><dd>Fe<sub>3</sub>O<sub>4</sub> / oleate / kerosene</dd></div>
+      <div><dt>Particle Ø (core)</dt><dd>9.4 &plusmn; 2.1 nm</dd></div>
+      <div><dt>Saturation M<sub>s</sub></dt><dd>62 kA&middot;m<sup>-1</sup></dd></div>
+      <div><dt>Surface tension &sigma;</dt><dd>24.1 mN&middot;m<sup>-1</sup></dd></div>
+      <div><dt>Density &rho;</dt><dd>1 310 kg&middot;m<sup>-3</sup></dd></div>
+      <div><dt>Bath</dt><dd>21.4 &deg;C, 44 %RH</dd></div>
+    </dl>
+  </header>
+
+  <div class="rulebar">
+    <h2>The cabinet, live</h2>
+    <span id="state-tag">state &mdash;</span>
+  </div>
+
+  <section class="cabinet">
+    <div class="stage-shell">
+      <div class="stage-inner">
+        <canvas id="pool" aria-label="Ferrofluid pool under a normal magnetic field, showing the flat mirror state, the ridge state and the spike state."></canvas>
+        <div class="stage-tag">Specimen RF-05 &middot; free surface, section view &middot; field normal to pool</div>
+        <span class="reg tr"></span><span class="reg bl"></span><span class="reg br"></span>
+        <div class="flag" id="flag">state &mdash;</div>
+        <div class="callout" id="callout" aria-live="polite"></div>
+      </div>
+      <div class="plate-note">
+        <span>Section &middot; gap drawn &times;1.35 &middot; field lines computed, not decoration</span>
+        <span id="note-right">click a spike to probe it</span>
+      </div>
+    </div>
+
+    <aside class="instruments">
+      <div class="inst-head"><span>Instrument column</span><span id="clock">21.4 &deg;C</span></div>
+      <dl>
+        <div class="readout hero accent"><dt>Flux density in gap <em>B</em></dt><dd id="r-b">&mdash;<small>mT</small></dd><div class="bar a"><i id="bar-b"></i></div></div>
+        <div class="readout"><dt>Field strength <em>H</em></dt><dd id="r-h">&mdash;<small>A/m</small></dd></div>
+        <div class="readout"><dt>Coil current <em>I</em></dt><dd id="r-i">&mdash;<small>A</small></dd></div>
+        <div class="readout"><dt>Air gap <em>g</em></dt><dd id="r-g">&mdash;<small>mm</small></dd></div>
+        <div class="readout accent"><dt>Spike wavelength &lambda;</dt><dd id="r-lam">&mdash;</dd><div class="bar"><i id="bar-lam"></i></div></div>
+        <div class="readout"><dt>Spike height <em>h</em></dt><dd id="r-hgt">&mdash;<small>mm</small></dd></div>
+        <div class="readout"><dt>Peak local field at tip</dt><dd id="r-tip">&mdash;<small>mT</small></dd></div>
+        <div class="readout"><dt>Onset flux density <em>B</em><sub>c</sub></dt><dd id="r-on">&mdash;<small>mT</small></dd></div>
+        <div class="readout"><dt>Magnetic Bond number <em>Bo<sub>m</sub></em></dt><dd id="r-bo">&mdash;</dd></div>
+        <div class="readout"><dt>Spikes in frame</dt><dd id="r-n">&mdash;</dd></div>
+        <div class="readout"><dt>Particle volume fraction &phi;</dt><dd id="r-phi">6.8<small>%</small></dd></div>
+        <div class="readout"><dt>Surfactant shell</dt><dd id="r-shell">2.2<small>nm</small></dd></div>
+      </dl>
+      <div class="trace-wrap">
+        <p>B(t) &middot; last 12 s &middot; tick = onset</p>
+        <svg class="trace" viewBox="0 0 280 58" role="img" aria-label="Field trace over the last twelve seconds with the onset threshold marked.">
+          <rect x="0" y="0" width="280" height="58" fill="none"></rect>
+          <g id="trace-grid"></g>
+          <line id="trace-onset" x1="0" x2="280" y1="40" y2="40" stroke="#8b8578" stroke-width=".7" stroke-dasharray="2 2"></line>
+          <polyline id="trace-line" fill="none" stroke="#1a1815" stroke-width="1.1" points=""></polyline>
+          <circle id="trace-dot" cx="280" cy="58" r="1.9" fill="#4a5fc7"></circle>
+        </svg>
+      </div>
+      <dl>
+        <div class="readout"><dt>Marginal wavenumber <em>k</em><sub>c</sub></dt><dd id="r-k">&mdash;<small>rad/mm</small></dd></div>
+        <div class="readout"><dt>Driving stress <em>S</em>(B)</dt><dd id="r-c">&mdash;<small>Pa</small></dd></div>
+        <div class="readout"><dt>Threshold <em>S</em><sub>c</sub> = 2&radic;(&rho;g&sigma;)</dt><dd id="r-sk">&mdash;<small>Pa</small></dd></div>
+      </dl>
+    </aside>
+  </section>
+
+  <div class="rulebar">
+    <h2>Bench controls</h2>
+    <span>closed-form model &middot; no lookup table</span>
+  </div>
+
+  <section class="bench">
+    <div class="cell">
+      <h3>Field ramp &mdash; 0 to 400 mT</h3>
+      <p class="val"><b id="v-field">180</b> mT</p>
+      <input id="s-field" type="range" min="0" max="400" step="1" value="180" aria-label="Flux density in the air gap, millitesla">
+      <div class="ticks"><span>0</span><span id="tick-on">onset</span><span>400</span></div>
+      <p class="sub" id="sub-field">&mdash;</p>
+    </div>
+    <div class="cell">
+      <h3>Air gap</h3>
+      <p class="val"><span id="v-gap">11.0</span> mm</p>
+      <input id="s-gap" type="range" min="3" max="24" step="0.5" value="11" aria-label="Air gap between pole pieces, millimetres">
+      <div class="ticks"><span>3</span><span>13</span><span>24</span></div>
+      <p class="sub" id="sub-gap">&mdash;</p>
+    </div>
+    <div class="cell">
+      <h3>Coil geometry</h3>
+      <div class="geom" id="geom" role="group" aria-label="Coil geometry">
+        <button type="button" data-geo="helmholtz" aria-pressed="true">Helmholtz pair<em>k=1.00</em></button>
+        <button type="button" data-geo="solenoid" aria-pressed="false">Bore solenoid<em>k=0.86</em></button>
+        <button type="button" data-geo="cone" aria-pressed="false">Conical pole pieces<em>k=1.35</em></button>
+      </div>
+      <p class="sub" id="sub-geo">&mdash;</p>
+    </div>
+    <div class="cell">
+      <h3>Sequence</h3>
+      <div class="btn-row">
+        <button type="button" class="btn" id="b-pulse">Field pulse</button>
+        <button type="button" class="btn ghost" id="b-quiet">Return to mirror</button>
+      </div>
+      <div class="btn-row" style="margin-top:8px">
+        <button type="button" class="btn ghost" id="b-onset">Step to onset</button>
+        <button type="button" class="btn ghost" id="b-clear">Clear probe</button>
+      </div>
+      <p class="sub" id="sub-seq">Pulse: 0&rarr;400&rarr;180 mT over 2.6 s, raised-cosine.</p>
+    </div>
+  </section>
+
+  <div class="rulebar">
+    <h2>Plates</h2>
+    <span>I colloid &middot; II force balance &middot; III coil section</span>
+  </div>
+
+  <section class="plates">
+    <figure class="plate">
+      <header><b>Plate I &mdash; colloid</b><i>1:1.2&times;10<sup>6</sup></i></header>
+      <div class="art">
+        <svg id="svg-colloid" viewBox="0 0 320 208" role="img" aria-label="Cross-section of a surfactant-coated magnetite nanoparticle suspended in carrier fluid.">
+          <title>Surfactant-coated nanoparticle in kerosene</title>
+        </svg>
+      </div>
+      <p class="hint">Hover a particle for layer labels</p>
+      <figcaption><b>Single-domain core.</b> A <b>9.4 nm</b> magnetite crystallite is below the
+        ~14 nm single-domain limit, so each particle is one permanent moment rather than a wall-moving
+        bulk. Without the <b>2.2 nm</b> oleic-acid bilayer the van der Waals pull at contact
+        (<b>~14 kT</b>) beats thermal energy and the sample cakes. The shell keeps the centres
+        <b>2.1 core radii</b> apart and the colloid has now sat <b>41 months</b> without settling.</figcaption>
+    </figure>
+
+    <figure class="plate">
+      <header><b>Plate II &mdash; force balance</b><i>after Rosensweig 1985</i></header>
+      <div class="art">
+        <svg id="svg-force" viewBox="0 0 320 208" role="img" aria-label="Force balance on one spike of the surface array, with the dispersion relation and its unstable lobe.">
+          <title>What sets the spike spacing</title>
+        </svg>
+      </div>
+      <p class="hint" id="force-hint">Curve redrawn from the current field</p>
+      <figcaption><b>Three terms, one wavelength.</b> Normal-field magnetic stress
+        <b>S(B)</b> lifts the surface; gravity <b>&rho;g</b> and curvature pressure
+        <b>&sigma;k&sup3;</b> push it back. Between the two roots of
+        <b>&sigma;k&sup2; &minus; Sk + &rho;g = 0</b> every mode grows &mdash; the shaded lobe at
+        right &mdash; and the selected spacing tightens from the capillary&ndash;gravity length
+        &lambda;<sub>c</sub> = 2&pi;&radic;(&sigma;/&rho;g) as
+        &lambda; = &lambda;<sub>c</sub>e<sup>&minus;0.155&radic;(Bo<sub>m</sub>&minus;1)</sup>.
+        The curve, the lobe and the marker are redrawn from the live field.</figcaption>
+    </figure>
+
+    <figure class="plate">
+      <header><b>Plate III &mdash; coil section</b><i id="coil-tag">Helmholtz pair</i></header>
+      <div class="art">
+        <svg id="svg-coil" viewBox="0 0 320 208" role="img" aria-label="Cross-section of the selected coil geometry with pole pieces, air gap and computed field lines.">
+          <title>Coil cross-section and gap field</title>
+        </svg>
+      </div>
+      <p class="hint" id="coil-hint">Rebuilt when the geometry changes</p>
+      <figcaption id="coil-cap"><b>&mdash;</b></figcaption>
+    </figure>
+  </section>
+
+  <div class="rulebar">
+    <h2>Exhibition caption</h2>
+    <span>wall label, printed 1:1</span>
+  </div>
+
+  <section class="caption">
+    <div class="txt">
+      <h2>Seventeen and a half millitesla, and the mirror gives up</h2>
+      <p id="cap-a">&mdash;</p>
+      <p id="cap-b">&mdash;</p>
+      <p id="cap-c">&mdash;</p>
+    </div>
+    <div class="num">
+      <dl>
+        <dt>Flux density in gap</dt><dd id="c-b">&mdash;</dd>
+        <dt>Onset (this colloid)</dt><dd id="c-on">&mdash;</dd>
+        <dt>Overdrive B/B<sub>c</sub></dt><dd id="c-ov">&mdash;</dd>
+        <dt>Selected wavelength</dt><dd id="c-lam">&mdash;</dd>
+        <dt>Crest height</dt><dd id="c-h">&mdash;</dd>
+        <dt>Crests across the tank</dt><dd id="c-n">&mdash;</dd>
+        <dt>Gap as % of wavelength</dt><dd id="c-gp">&mdash;</dd>
+        <dt>Coil current</dt><dd id="c-i">&mdash;</dd>
+        <dt>Inviscid growth rate &gamma;/2&pi; at &lambda;</dt><dd id="c-w2">&mdash;</dd>
+        <dt>Colloid</dt><dd id="c-col">&mdash;</dd>
+      </dl>
+    </div>
+  </section>
+
+  <footer class="endnote">
+    <span>Ferroflux &middot; cabinet RF-05</span>
+    <span>Model: &omega;&sup2; = (&sigma;k&sup3; + &rho;gk &minus; Sk&sup2;)/&rho;</span>
+    <span>Magnetite, oleate, kerosene &middot; 21.4 &deg;C</span>
+    <span>One file, no network</span>
+  </footer>
+
+</div>
+<script>
+"use strict";
+/* ── physical constants of the specimen (SI unless suffixed) ───────────── */
+const MU0 = 1.2566370614e-6;      // H/m
+const G   = 9.80665;              // m/s^2
+const SIGMA = 24.1e-3;            // N/m  oleate/kerosene interface, 21.4 C
+const RHO   = 1310;               // kg/m^3 bulk colloid
+const MS    = 62e3;               // A/m saturation magnetisation
+const TANK_MM = 96;               // width of pool shown in the stage, mm
+const TURNS = 420;                // ampere-turns per coil arm
+const COIL_R = 0.062;             // m, coil radius
+
+const GEO = {
+  helmholtz:{k:1.00, grad:0.0, label:"Helmholtz pair",
+    note:"Two square arms separated by one radius. Gap field flat to ±1.4 % over 34 mm, so the array keeps one λ across the tank.",
+    cap:"Helmholtz pair. Arm spacing equals the 62 mm radius, which cancels the second derivative of the axis field: the gap is flat to ±1.4 % over the central 34 mm. The array therefore picks a single wavelength and the crest rows run straight across the tank — the geometry used for the wall label."},
+  solenoid:{k:0.86, grad:0.16, label:"Bore solenoid",
+    note:"Long bore, 9.7 turns/mm. Axis field 0.86 of the pole field and radially falling, so λ widens toward the tank wall.",
+    cap:"Bore solenoid, 9.7 turns per millimetre on a 44 mm former. Only 0.86 of the pole field reaches the pool and the radial fall-off is 16 % over the tank half-width, so the spikes near the glass are measurably taller-spaced than those on the axis — a good plate for showing λ(H) as an actual measurement."},
+  cone:{k:1.35, grad:-0.11, label:"Conical pole pieces",
+    note:"Cones concentrate flux: 1.35× on axis, rising outward. λ shrinks toward the wall and onset arrives ~6 mT early.",
+    cap:"Conical pole pieces, 38° half-angle, tips 14 mm from the pool. The cones concentrate flux to 1.35× on axis and the field keeps rising toward the wall, so λ shrinks outward, onset arrives roughly 6 mT early at the glass, and the array is a fan rather than a grid."}
+};
+
+/* ── the model ───────────────────────────────────────────────────────────
+   Magnetisation from the Langevin function of the real particle moment; the
+   driving stress comes from the magnetic free energy density at the interface,
+       S(H) = COUPLE * mu0 * INT_0^H M dH'                            [Pa]
+   resisting it, curvature and weight,
+       rho * omega^2(k) = sigma*k^3 + rho*g*k - S*k^2                 [s^-2]
+   Marginal when S*k = sigma*k^2 + rho*g, whose minimum over k sits at
+       k_c = sqrt(rho*g/sigma),   S_c = 2*sqrt(rho*g*sigma).
+   Onset is therefore S = S_c; above it an unstable band opens about k_c. */
+const KB = 1.380649e-23;
+const TEMP = 294.5;                                     // 21.4 C
+const D_PART = 9.4e-9;                                  // m, core diameter
+const MS_PART = 912e3;                                  // A/m, magnetite
+const PHI = 0.068;                                      // particle volume fraction
+const V_PART = Math.PI / 6 * D_PART ** 3;
+const MOMENT = MS_PART * V_PART;                        // A m^2
+const B_ONSET_MEAS = 17.5e-3;                           // T, measured onset of this specimen
+const S_C = 2 * Math.sqrt(RHO * G * SIGMA);             // Pa, threshold stress
+const KC = Math.sqrt(RHO * G / SIGMA);                  // rad/m, marginal wavenumber
+const LAMBDA_C = 2 * Math.PI / KC;                      // m, onset spacing
+const BETA = 0.155;                                     // spacing-narrowing coefficient
+
+function langevin(x){ return x < 1e-6 ? x / 3 : 1 / Math.tanh(x) - 1 / x; }
+function magH(H){ return PHI * MS_PART * langevin(MU0 * MOMENT * H / (KB * TEMP)); }
+
+/* W(H) = mu0 * INT_0^H M dH', cumulative Simpson on a uniform field grid */
+const WGRID = (() => {
+  const n = 260, Hmax = 400e-3 / MU0, pts = [], W = [0];
+  for (let i = 0; i <= n; i++) pts.push(Hmax * i / n);
+  const Mv = pts.map(magH);
+  for (let i = 1; i <= n; i++){
+    const h = pts[i] - pts[i - 1], m0 = Mv[i - 1], m1 = Mv[i], mm = (m0 + m1) / 2;
+    W.push(W[i - 1] + h / 6 * (m0 + 4 * mm + m1));
+  }
+  return {pts, W};
+})();
+function energyDensity(H){                                              // J/m^3 = Pa
+  const {pts, W} = WGRID;
+  if (!(H > 0)) return 0;
+  if (H >= pts[pts.length - 1]) return MU0 * W[W.length - 1];
+  let lo = 0, hi = pts.length - 1;
+  while (hi - lo > 1){ const mid = (lo + hi) >> 1; if (pts[mid] <= H) lo = mid; else hi = mid; }
+  const t = (H - pts[lo]) / (pts[hi] - pts[lo]);
+  return MU0 * (W[lo] + (W[hi] - W[lo]) * t);
+}
+/* one fitted constant: how much of the bulk free energy couples into the
+   interface mode, scaled so the computed onset equals the measured 17.5 mT */
+const COUPLE = S_C / energyDensity(B_ONSET_MEAS / MU0);
+function stress(B){ return COUPLE * energyDensity(Math.max(B, 0) / MU0); }
+function bond(B){ return stress(B) / S_C; }                             // Bo_m, unity at onset
+function wavelength(B){                                                 // m; NaN below onset
+  const bo = bond(B) - 1;
+  if (!(bo > 0)) return NaN;
+  return LAMBDA_C * Math.exp(-BETA * Math.sqrt(bo));
+}
+function bandEdges(B){                                                  // [k_lo, k_hi] rad/m
+  const e = BETA * 2.6 * Math.sqrt(Math.max(bond(B) - 1, 0));
+  return [KC * Math.exp(-e), KC * Math.exp(e * 0.62)];
+}
+function omega2(k, B){ return (SIGMA * k ** 3 + RHO * G * k - stress(B) * k * k) / RHO; }
+function onsetField(){                                                  // T, by bisection
+  let a = 1e-6, b = 0.2;
+  for (let i = 0; i < 60; i++){ const m = (a + b) / 2; if (bond(m) < 1) a = m; else b = m; }
+  return (a + b) / 2;
+}
+const B_ONSET = onsetField();
+const H_ONSET = B_ONSET / MU0;
+
+function currentFor(B, geo, gapM){                                      // A
+  const g = GEO[geo];
+  const flat = 1 - 0.34 * (gapM / COIL_R) ** 2;   // Helmholtz cancels d2B/dz2
+  return B / (MU0 * 0.7155 * TURNS * g.k * flat / COIL_R) + 0.35;
+}
+/* crest height: rises with overdrive, saturates against the pole face and
+   against half a capillary length, independent of the shrinking wavelength */
+function crestHeight(B, lam, gapM, geo){
+  const ov = B / B_ONSET - 1;
+  if (!(ov > 0) || !isFinite(lam)) return 0;
+  const room = Math.min(0.42 * gapM * (geo === "cone" ? 1.06 : 1), 0.55 * LAMBDA_C);
+  return room * Math.tanh(0.22 * ov + 0.05);
+}
+function tipField(B, h, lam, geo){
+  const sharp = 1 + 1.05 * (h / Math.max(lam * 0.5, 1e-9));
+  return B * (1 + (GEO[geo].k - 1) * 0.55) * Math.min(sharp, 3.4);
+}
+const fmt = (v, d) => (isFinite(v) ? v.toFixed(d) : "—");
+
+/* ── stage plumbing ─────────────────────────────────────────────────────── */
+const cv = document.getElementById('pool');
+const ctx = cv.getContext('2d');
+const stage = cv.parentElement;
+const reduce = matchMedia('(prefers-reduced-motion: reduce)');
+const state = {B: 0.18, target: 0.18, gap: 0.011, gapT: 0.011, geo: 'helmholtz', t: 0, pulse: null, probe: null};
+let W = 900, H = 500, dpr = 1, PXM = 9;      // css px, device ratio, px per mm
+
+function resize(){
+  const r = stage.getBoundingClientRect();
+  W = Math.max(260, Math.round(r.width)); H = Math.max(200, Math.round(r.height));
+  dpr = Math.min(window.devicePixelRatio || 1, 2);
+  cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  PXM = (W * 0.94) / TANK_MM;
+}
+
+/* value noise: hashed lattice with cosine interpolation, three octaves */
+const SEED = (() => { const p = []; let s = 20260902;
+  for (let i = 0; i < 256; i++){ s = (s * 1103515245 + 12345) & 0x7fffffff; p.push(s / 0x7fffffff); }
+  return p; })();
+function hash1(i){ return SEED[((i % 256) + 256) % 256]; }
+function noise1(x){
+  const i = Math.floor(x), f = x - i, u = (1 - Math.cos(f * Math.PI)) / 2;
+  return hash1(i) * (1 - u) + hash1(i + 1) * u;
+}
+function fbm1(x){ return 0.55 * noise1(x) + 0.32 * noise1(x * 2.13 + 11.7) + 0.13 * noise1(x * 4.7 + 31.3); }
+function hash2(i, j){ return SEED[(((i * 73 + j * 151) % 256) + 256) % 256]; }
+function noise2(x, y){
+  const i = Math.floor(x), j = Math.floor(y), fx = x - i, fy = y - j;
+  const ux = (1 - Math.cos(fx * Math.PI)) / 2, uy = (1 - Math.cos(fy * Math.PI)) / 2;
+  const a = hash2(i, j), b = hash2(i + 1, j), c = hash2(i, j + 1), d = hash2(i + 1, j + 1);
+  return (a * (1 - ux) + b * ux) * (1 - uy) + (c * (1 - ux) + d * ux) * uy;
+}
+
+/* ── free-surface profile, in css px, as a function of stage x ───────────── */
+const EDGE = 0.03;                                   // tank wall inset, fraction of W
+const x0 = () => W * EDGE, x1 = () => W * (1 - EDGE);
+const VSCALE = 1.35;                                 // gap is drawn slightly exaggerated
+const restY = () => H * 0.615;                       // undisturbed free surface
+const poleY = () => Math.max(H * 0.19, restY() - state.gap * 1000 * PXM * VSCALE);
+
+let tips = [];                                       // spike tips in css px, rebuilt each frame
+let prof = new Float32Array(0);                      // surface y per css column
+
+function localB(x){                                  // radial field fall-off of the coil
+  const u = (x - W / 2) / Math.max(W / 2, 1);
+  return state.B * (1 + GEO[state.geo].grad * u * u);
+}
+function buildProfile(){
+  const n = Math.ceil(W) + 1;
+  if (prof.length !== n) prof = new Float32Array(n);
+  tips = [];
+  const bo = bond(state.B), lamM = wavelength(state.B) * 1000;   // mm
+  /* below onset: only capillary dimpling, growing as B^2, and no periodicity */
+  if (!(lamM > 0)){
+    const soft = Math.pow(Math.max(bo, 0), 1.35) * PXM * 0.18;
+    for (let x = 0; x < n; x++){
+      const wob = (fbm1(x * 0.021 + state.t * 0.25) - 0.5) * 2;
+      prof[x] = restY() - soft * 0.5 * wob - soft * 0.10 * Math.sin(x * 0.11 + state.t * 1.1);
+    }
+    return;
+  }
+  const lamPxBase = lamM * PXM;
+  const ampBase = crestHeight(state.B, lamM / 1000, state.gap, state.geo) * 1000 * PXM;
+  /* peakiness: ridges just above onset, sharp crests once the band is wide */
+  const sharp = Math.min(1, Math.pow(Math.max(bo - 1, 0) / 0.55, 0.85));
+  /* phase accumulator so a radially varying field bends the array */
+  let phase = 0, lastLam = lamPxBase;
+  const grow = 0.10 * PXM;                            // tip rounding, mm->px
+  const seq = [];
+  for (let x = 0; x < n; x++){
+    const bl = localB(x);
+    const lamL = ((wavelength(bl) * 1000) || lamM) * PXM;      // px, not metres
+    lastLam = lastLam * 0.9 + lamL * 0.1;
+    phase += 1 / Math.max(lastLam, 3);
+    seq.push(phase);
+  }
+  for (let x = 0; x < n; x++){
+    const inWall = Math.min(1, Math.min(x - x0(), x1() - x) / (2.1 * lamPxBase));
+    const bl = localB(x);
+    const lamL = Math.max(((wavelength(bl) * 1000) || lamM) * PXM, 6);
+    const amp = crestHeight(bl, lamM / 1000, state.gap, state.geo) * 1000 * PXM
+              * (0.55 + 0.45 * Math.max(inWall, 0)) * (0.86 + 0.28 * fbm1(x * 0.017 + 7.3));
+    const u = seq[x] - Math.round(seq[x]);            // -0.5..0.5 about the crest
+    const s = u * 2;                                   // -1..1 across one half-wave
+    const ridge = 0.5 + 0.5 * Math.cos(s * Math.PI);
+    const cone = Math.sqrt(Math.pow(Math.max(1 - Math.abs(s), 0), 2) + grow * grow / (lamL * lamL))
+               - grow / lamL;
+    const shape = ridge * (1 - sharp) + Math.pow(Math.max(cone, 0), 1.18) * sharp;
+    const jitter = (fbm1(x * 0.09 + state.t * 0.6) - 0.5) * 0.06 * amp;
+    prof[x] = restY() - (amp * shape + jitter) * (inWall > 0 ? 1 : 0.18)
+              - softDimple(x, bo) + 0.35 * Math.sin(x * 0.13 + state.t * 1.4) * grow;
+  }
+  /* record tips at local maxima that clear a threshold */
+  for (let x = Math.ceil(x0()) + 2; x < x1() - 2; x++){
+    if (prof[x] < prof[x - 1] && prof[x] <= prof[x + 1] && restY() - prof[x] > Math.max(2.5, ampBase * 0.30)){
+      const last = tips[tips.length - 1];
+      if (last && x - last.x < lastLam * 0.45){ if (prof[x] < last.y) { last.x = x; last.y = prof[x]; } continue; }
+      tips.push({x, y: prof[x], b: localB(x)});
+    }
+  }
+}
+function softDimple(x, bo){                            // meniscus climb up the glass
+  const u = Math.min(1, Math.min(x - x0(), x1() - x) / (W * 0.055));
+  return (1 - u) * PXM * 0.26 * Math.min(Math.max(bo, 0), 2.4);
+}
+
+/* ── metaball field + marching squares ─────────────────────────────────────
+   phi >= 0 inside the colloid. The flat part is the profile; each tip is a
+   compact metaball, so the isocline necks and rounds itself instead of being
+   traced by hand. */
+const CELL = 6;
+let gw = 0, gh = 0, field = new Float32Array(0), blobs = [], iso = [];
+function buildField(){
+  const ngw = Math.ceil(W / CELL) + 2, ngh = Math.ceil(H / CELL) + 2;
+  if (gw !== ngw || gh !== ngh || field.length !== ngw * ngh){
+    gw = ngw; gh = ngh; field = new Float32Array(gw * gh);
+  }
+  const lamPx = Math.max(isFinite(wavelength(state.B)) ? wavelength(state.B) * 1000 * PXM : 30, 8);
+  const R = Math.max(lamPx * 0.34, 5), m = Math.min(R * 0.42, lamPx * 0.2);
+  blobs = tips.map(t => ({x: t.x, y: t.y, R, R2: R * R, m}));
+  for (let j = 0; j < gh; j++){
+    const y = j * CELL;
+    for (let i = 0; i < gw; i++){
+      const x = i * CELL;
+      const col = Math.min(W - 1, Math.max(0, Math.round(x)));
+      field[j * gw + i] = (x < x0() || x > x1()) ? y - (restY() + 4) : y - prof[col];
+    }
+  }
+  /* splat each crest ball only over its own bounding box */
+  for (let k = 0; k < blobs.length; k++){
+    const b = blobs[k];
+    const i0 = Math.max(0, Math.floor((b.x - b.R) / CELL)), i1 = Math.min(gw - 1, Math.ceil((b.x + b.R) / CELL));
+    const j0 = Math.max(0, Math.floor((b.y - b.R) / CELL)), j1 = Math.min(gh - 1, Math.ceil((b.y + b.R) / CELL));
+    for (let j = j0; j <= j1; j++){
+      const dy = j * CELL - b.y;
+      for (let i = i0; i <= i1; i++){
+        const dx = i * CELL - b.x, d2 = dx * dx + dy * dy;
+        if (d2 >= b.R2) continue;
+        const w = 1 - d2 / b.R2;
+        field[j * gw + i] += b.m * w * w * 3;
+      }
+    }
+  }
+  marchingSquares(iso);
+}
+function marchingSquares(out){
+  out.length = 0;
+  const lerp = (p, q) => p / (p - q);
+  for (let j = 0; j < gh - 1; j++){
+    for (let i = 0; i < gw - 1; i++){
+      const a = field[j * gw + i], b = field[j * gw + i + 1];
+      const c = field[(j + 1) * gw + i + 1], d = field[(j + 1) * gw + i];
+      const k = (a > 0 ? 1 : 0) | (b > 0 ? 2 : 0) | (c > 0 ? 4 : 0) | (d > 0 ? 8 : 0);
+      if (k === 0 || k === 15) continue;
+      const X = i * CELL, Y = j * CELL, E = X + CELL, S = Y + CELL;
+      /* edge crossings: T/B are x-coordinates, L/R are y-coordinates */
+      const T = X + CELL * lerp(a, b), Bx = X + CELL * lerp(d, c);
+      const R = Y + CELL * lerp(b, c), L = Y + CELL * lerp(a, d);
+      const seg = (px, py, qx, qy) => out.push(px, py, qx, qy);
+      const cutTL = () => seg(X, L, T, Y);
+      const cutTR = () => seg(T, Y, E, R);
+      const cutRB = () => seg(E, R, Bx, S);
+      const cutBL = () => seg(Bx, S, X, L);
+      switch (k){
+        case 1: case 14: cutTL(); break;
+        case 2: case 13: cutTR(); break;
+        case 3: case 12: seg(X, L, E, R); break;
+        case 4: case 11: cutRB(); break;
+        case 6: case 9: seg(T, Y, Bx, S); break;
+        case 7: case 8: seg(X, L, Bx, S); break;
+        case 5: case 10: {
+          if ((a + b + c + d) / 4 > 0){ cutTR(); cutBL(); }
+          else { cutTL(); cutRB(); }
+          break;
+        }
+      }
+    }
+  }
+}
+/* silhouette for the fill: topmost phi = 0 crossing of every css column */
+const sil = new Float32Array(4096);
+function silhouette(){
+  const n = Math.min(prof.length, sil.length);
+  for (let x = 0; x < n; x++){
+    const i = Math.min(gw - 2, Math.max(0, Math.floor(x / CELL)));
+    let hit = prof[x];
+    for (let j = 0; j < gh - 1; j++){
+      const p = field[j * gw + i], q = field[(j + 1) * gw + i];
+      if (p <= 0 && q > 0){ hit = j * CELL + CELL * (-p / (q - p)); break; }
+    }
+    sil[x] = Math.min(hit, prof[x] + 1.5);
+  }
+  for (let pass = 0; pass < 2; pass++){
+    for (let x = 1; x < n - 1; x++) sil[x] = sil[x] * 0.6 + (sil[x - 1] + sil[x + 1]) * 0.2;
+  }
+  return n;
+}
+
+/* ── computed field lines: uniform normal field + flux drawn into each tip ── */
+function fieldDir(x, y){
+  let bx = 0, by = -1;
+  for (let k = 0; k < tips.length; k++){
+    const t = tips[k], dx = t.x - x, dy = t.y - y;
+    if (dx > 220 || dx < -220) continue;
+    const d2 = dx * dx + dy * dy + 900, d = Math.sqrt(d2);
+    const q = (restY() - t.y) * 34 / d2;              /* flux drawn into the crest */
+    bx += q * dx / d; by += q * dy / d;
+  }
+  const m = Math.hypot(bx, by) || 1;
+  return [bx / m, by / m];
+}
+function drawFieldLines(){
+  const top = poleY() + 5, seeds = W < 520 ? 15 : 25;
+  const reach = Math.max(90, (restY() - poleY()) / 2.4) + 60;
+  ctx.save();
+  ctx.strokeStyle = 'rgba(74,95,199,.30)';
+  ctx.lineWidth = 0.7;
+  for (let s = 0; s < seeds; s++){
+    const sx = x0() + (x1() - x0()) * (s + 0.5) / seeds;
+    let x = sx, y = top;
+    ctx.beginPath(); ctx.moveTo(x, y);
+    for (let step = 0; step < reach; step++){
+      const [dx, dy] = fieldDir(x, y);
+      x += dx * 2.4; y += dy * 2.4;
+      const col = Math.min(prof.length - 1, Math.max(0, Math.round(x)));
+      if (y >= prof[col] - 0.6 || y > H || x < 2 || x > W - 2) break;
+      ctx.lineTo(x, y);
+    }
+    ctx.globalAlpha = 0.55 + 0.45 * Math.abs((sx / W) - 0.5) * 1.4;
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/* ── cabinet furniture drawn on the stage ─────────────────────────────────── */
+function drawYoke(){
+  const py = poleY(), th = 13, ya = 6;
+  ctx.save();
+  ctx.fillStyle = 'rgba(227,222,210,.72)';
+  ctx.fillRect(x0() - 10, ya, (x1() - x0()) + 20, th);
+  ctx.fillRect(x0() - 10, ya + th, 13, Math.max(0, py - ya - th));
+  ctx.fillRect(x1() - 3, ya + th, 13, Math.max(0, py - ya - th));
+  ctx.strokeStyle = 'rgba(26,24,21,.5)'; ctx.lineWidth = .6;
+  ctx.strokeRect(x0() - 10, ya, (x1() - x0()) + 20, th);
+  ctx.strokeRect(x0() - 10, ya + th, 13, Math.max(0, py - ya - th));
+  ctx.strokeRect(x1() - 3, ya + th, 13, Math.max(0, py - ya - th));
+  ctx.beginPath();
+  for (let x = x0() - 10; x < x1() + 10; x += 7){ ctx.moveTo(x, ya + th); ctx.lineTo(x + th, ya); }
+  ctx.strokeStyle = 'rgba(139,133,120,.7)'; ctx.stroke();
+  const run = Math.max(0, py - ya - th);
+  ctx.strokeStyle = 'rgba(26,24,21,.45)';
+  for (let i = 1; i < 5; i++){
+    const cy = ya + th + run * i / 5;
+    [x0() - 3.5, x1() + 3.5].forEach(cx => {
+      ctx.beginPath(); ctx.arc(cx, cy, 2.6, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.fillStyle = 'rgba(74,95,199,.75)';
+      ctx.arc(cx, cy, 0.9, 0, Math.PI * 2); ctx.fill();
+    });
+  }
+  ctx.fillStyle = '#8b8578'; ctx.font = '9px ui-monospace, Menlo, monospace';
+  ctx.textAlign = 'right'; ctx.textBaseline = 'alphabetic';
+  ctx.fillText('soft-iron yoke · ' + TURNS + ' turns per arm', x1() - 8, ya + th + 12);
+  ctx.restore();
+}
+function drawPole(){
+  const py = poleY(), th = 13;
+  ctx.save();
+  ctx.fillStyle = 'rgba(227,222,210,.85)';
+  ctx.fillRect(x0() - 10, py - th, (x1() - x0()) + 20, th);
+  ctx.strokeStyle = 'rgba(26,24,21,.55)'; ctx.lineWidth = 0.6;
+  ctx.strokeRect(x0() - 10, py - th, (x1() - x0()) + 20, th);
+  ctx.beginPath();                                     /* section hatching */
+  for (let x = x0() - 10; x < x1() + 10; x += 7){
+    ctx.moveTo(x, py); ctx.lineTo(x + th, py - th);
+  }
+  ctx.strokeStyle = 'rgba(139,133,120,.75)'; ctx.stroke();
+  ctx.strokeStyle = 'rgba(26,24,21,.9)'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(x0() - 10, py + .5); ctx.lineTo(x1() + 10, py + .5); ctx.stroke();
+  /* gap dimension */
+  const gx = Math.min(x1() + 20, W - 18);
+  ctx.strokeStyle = 'rgba(74,95,199,.8)'; ctx.lineWidth = .7;
+  ctx.beginPath();
+  ctx.moveTo(gx, py + 2); ctx.lineTo(gx, restY() - 2);
+  ctx.moveTo(gx - 3, py + 2); ctx.lineTo(gx + 3, py + 2);
+  ctx.moveTo(gx - 3, restY() - 2); ctx.lineTo(gx + 3, restY() - 2);
+  ctx.stroke();
+  ctx.fillStyle = '#4a5fc7'; ctx.font = '9px ui-monospace, Menlo, monospace';
+  ctx.save();
+  ctx.translate(gx - 7, (py + restY()) / 2);
+  ctx.rotate(-Math.PI / 2); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText('gap ' + (state.gap * 1000).toFixed(1) + ' mm', 0, 0);
+  ctx.restore();
+  ctx.restore();
+}
+function drawTank(){
+  ctx.save();
+  ctx.strokeStyle = 'rgba(26,24,21,.4)'; ctx.lineWidth = .7;
+  ctx.beginPath();
+  ctx.moveTo(x0(), poleY() + 3); ctx.lineTo(x0(), H - 4);
+  ctx.moveTo(x1(), poleY() + 3); ctx.lineTo(x1(), H - 4);
+  ctx.stroke();
+  ctx.setLineDash([2, 3]); ctx.strokeStyle = 'rgba(139,133,120,.85)';
+  ctx.beginPath(); ctx.moveTo(x0(), restY() + .5); ctx.lineTo(x1(), restY() + .5); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = '#8b8578'; ctx.font = '9px ui-monospace, Menlo, monospace'; ctx.textAlign = 'left';
+  ctx.fillText('rest surface', x0() + 4, restY() - 5);
+  /* 10 mm scale bar */
+  const bx = x0() + 6, by = restY() - H * .115, len = 10 * PXM;
+  ctx.strokeStyle = 'rgba(26,24,21,.75)'; ctx.beginPath();
+  ctx.moveTo(bx, by); ctx.lineTo(bx + len, by);
+  ctx.moveTo(bx, by - 3); ctx.lineTo(bx, by + 3);
+  ctx.moveTo(bx + len, by - 3); ctx.lineTo(bx + len, by + 3);
+  ctx.moveTo(bx + len / 2, by - 2); ctx.lineTo(bx + len / 2, by + 2);
+  ctx.stroke();
+  ctx.fillStyle = '#4a463e'; ctx.fillText('10 mm', bx, by - 6);
+  ctx.restore();
+}
+/* ── the colloid: fill, isocline, travelling specular ─────────────────────── */
+function drawFluid(n){
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(x0(), H);
+  ctx.lineTo(x0(), sil[Math.round(x0())]);
+  for (let x = Math.round(x0()); x <= x1() && x < n; x++) ctx.lineTo(x, sil[x]);
+  ctx.lineTo(x1(), sil[Math.min(n - 1, Math.round(x1()))]);
+  ctx.lineTo(x1(), H);
+  ctx.closePath();
+  const g = ctx.createLinearGradient(0, restY() - 70, 0, H);
+  g.addColorStop(0, '#26231f'); g.addColorStop(.11, '#0d0c0b');
+  g.addColorStop(.74, '#121110'); g.addColorStop(1, '#1a1815');
+  ctx.fillStyle = g; ctx.fill();
+  ctx.clip();
+  /* marching-squares isocline, rim-lit so it reads on black */
+  ctx.strokeStyle = 'rgba(227,222,210,.20)'; ctx.lineWidth = .8;
+  ctx.beginPath();
+  for (let i = 0; i < iso.length; i += 4){
+    ctx.moveTo(iso[i], iso[i + 1]); ctx.lineTo(iso[i + 2], iso[i + 3]);
+  }
+  ctx.stroke();
+  /* travelling specular band: the lamp bank reflected along the surface */
+  const trav = x0() + (x1() - x0()) * (0.5 + 0.62 * Math.sin(state.t * 0.30));
+  for (let x = Math.max(1, Math.round(x0())); x < Math.min(n - 1, x1()); x += 1){
+    const dx = sil[x + 1] - sil[x - 1];
+    const nlen = Math.hypot(2, dx) || 1;
+    const nx = -dx / nlen, ny = -2 / nlen;                 /* outward normal */
+    const la = 0.62 + 0.30 * Math.sin(state.t * 0.30);
+    const lx = Math.cos(la), ly = -Math.sin(la);
+    let s = Math.max(0, nx * lx + ny * ly);
+    s = Math.pow(s, 26) * 0.95;
+    const band = Math.exp(-Math.pow((x - trav) / (26 + 30 * Math.abs(nx)), 2)) * 0.30;
+    const a = Math.min(1, s + band * (0.35 + 0.65 * Math.abs(ny)));
+    if (a < 0.012) continue;
+    ctx.strokeStyle = 'rgba(241,238,231,' + a.toFixed(3) + ')';
+    ctx.lineWidth = 1 + a * 1.5;
+    ctx.beginPath(); ctx.moveTo(x - .6, sil[x]); ctx.lineTo(x + 1.4, sil[x + 1]); ctx.stroke();
+  }
+  /* tip glints: a bright point where the crest faces the lamp */
+  for (let k = 0; k < tips.length; k++){
+    const t = tips[k], r = 3.2 + (restY() - t.y) * 0.05;
+    const gg = ctx.createRadialGradient(t.x - r * .3, t.y + r * .5, 0, t.x, t.y + r * .4, r * 2.4);
+    gg.addColorStop(0, 'rgba(241,238,231,.55)'); gg.addColorStop(1, 'rgba(241,238,231,0)');
+    ctx.fillStyle = gg;
+    ctx.beginPath(); ctx.arc(t.x, t.y + r * .4, r * 2.4, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
+}
+function drawLambda(){
+  if (tips.length < 2) return;
+  let mx = Infinity;
+  for (let k = 0; k < tips.length; k++) mx = Math.min(mx, tips[k].y);
+  const mid = (x0() + x1()) / 2;
+  let best = -1, bd = Infinity;
+  for (let k = 0; k < tips.length; k++){
+    if (tips[k].y > mx + (restY() - mx) * 0.2) continue;        /* near-tallest only */
+    const d = Math.abs(tips[k].x - mid);
+    if (d < bd){ bd = d; best = k; }
+  }
+  if (best < 0 || best === tips.length - 1) best = Math.max(0, Math.min(tips.length - 2, Math.floor(tips.length / 2)));
+  const a = tips[best], b = tips[best + 1];
+  if (b === a) return;
+  const y = Math.min(a.y, b.y) - 13;
+  ctx.save();
+  ctx.strokeStyle = 'rgba(74,95,199,.85)'; ctx.lineWidth = .7;
+  ctx.beginPath();
+  ctx.moveTo(a.x, y); ctx.lineTo(b.x, y);
+  ctx.moveTo(a.x, y - 3); ctx.lineTo(a.x, y + 3);
+  ctx.moveTo(b.x, y - 3); ctx.lineTo(b.x, y + 3);
+  ctx.moveTo(a.x, a.y); ctx.lineTo(a.x, y);
+  ctx.moveTo(b.x, b.y); ctx.lineTo(b.x, y);
+  ctx.stroke();
+  const lamM = wavelength(localB((a.x + b.x) / 2)) * 1000;
+  ctx.fillStyle = '#4a5fc7'; ctx.font = '9.5px ui-monospace, Menlo, monospace'; ctx.textAlign = 'center';
+  ctx.fillText('λ ' + fmt(lamM, 2) + ' mm', (a.x + b.x) / 2, y - 4);
+  ctx.restore();
+}
+
+/* ── instrument column, flag, caption ─────────────────────────────────────── */
+const el = id => document.getElementById(id);
+const R = {b: el('r-b'), h: el('r-h'), i: el('r-i'), g: el('r-g'), lam: el('r-lam'), hgt: el('r-hgt'),
+  tip: el('r-tip'), on: el('r-on'), bo: el('r-bo'), n: el('r-n'), k: el('r-k'), c: el('r-c'), sk: el('r-sk')};
+const flag = el('flag'), stateTag = el('state-tag'), callout = el('callout');
+const trace = {vals: [], line: el('trace-line'), dot: el('trace-dot'), onset: el('trace-onset'), grid: el('trace-grid')};
+function initTraceGrid(){
+  for (let i = 1; i < 5; i++){
+    S2('line', {x1: 0, x2: 280, y1: i * 11.6, y2: i * 11.6, stroke: 'rgba(26,24,21,.10)', 'stroke-width': .5}, trace.grid);
+  }
+  for (let i = 1; i < 7; i++){
+    S2('line', {x1: i * 40, x2: i * 40, y1: 0, y2: 58, stroke: 'rgba(26,24,21,.07)', 'stroke-width': .5}, trace.grid);
+  }
+}
+const yOf = B => 56 - 52 * Math.min(B / 0.4, 1);
+function pushTrace(){
+  trace.vals.push(state.B);
+  if (trace.vals.length > 120) trace.vals.shift();
+  const n = trace.vals.length;
+  let pts = '';
+  for (let i = 0; i < n; i++) pts += (280 * i / 119).toFixed(1) + ',' + yOf(trace.vals[i]).toFixed(1) + ' ';
+  trace.line.setAttribute('points', pts.trim());
+  trace.dot.setAttribute('cx', (280 * (n - 1) / 119).toFixed(1));
+  trace.dot.setAttribute('cy', yOf(state.B).toFixed(1));
+  trace.onset.setAttribute('y1', yOf(B_ONSET).toFixed(1));
+  trace.onset.setAttribute('y2', yOf(B_ONSET).toFixed(1));
+}
+function readout(){
+  const B = state.B, bo = bond(B), lam = wavelength(B), lamM = lam * 1000;
+  const hgt = crestHeight(B, lam, state.gap, state.geo) * 1000;
+  const ceil = 0.42 * state.gap * 1000 * (state.geo === 'cone' ? 1.06 : 1);
+  const tipB = hgt > 0 ? tipField(B, hgt / 1000, lam, state.geo) : 0;
+  R.b.innerHTML = fmt(B * 1000, 1) + '<small>mT</small>';
+  R.h.innerHTML = fmt(B / MU0, 0) + '<small>A/m</small>';
+  R.i.innerHTML = fmt(currentFor(B, state.geo, state.gap), 1) + '<small>A</small>';
+  R.g.innerHTML = fmt(state.gap * 1000, 1) + '<small>mm</small>';
+  R.lam.innerHTML = isFinite(lamM) ? fmt(lamM, 2) + '<small>mm</small>' : '—<small>no band</small>';
+  R.hgt.innerHTML = hgt > 0 ? fmt(hgt, 2) + '<small>mm</small>' : '0.00<small>flat</small>';
+  R.tip.innerHTML = hgt > 0 ? fmt(tipB * 1000, 0) + '<small>mT</small>' : '—';
+  R.on.innerHTML = fmt(B_ONSET * 1000, 2) + '<small>mT</small>';
+  R.bo.innerHTML = fmt(bo, 3);
+  R.n.textContent = tips.length;
+  R.k.innerHTML = fmt(KC / 1000, 3) + '<small>rad/mm</small>';
+  R.c.innerHTML = fmt(stress(B), 1) + '<small>Pa</small>';
+  R.sk.innerHTML = fmt(S_C, 1) + '<small>Pa</small>';
+  el('bar-b').style.width = Math.min(100, B / 0.4 * 100).toFixed(1) + '%';
+  el('bar-lam').style.width = (isFinite(lamM) ? Math.min(100, lamM / (LAMBDA_C * 1000) * 100) : 0).toFixed(1) + '%';
+  let st;
+  if (bo <= 1) st = 'flat mirror';
+  else if (bo < 1.30) st = 'ridges';
+  else st = 'spike array';
+  stateTag.textContent = 'state ' + st + ' · ' + tips.length + ' crests';
+  if (bo <= 1){
+    flag.innerHTML = 'B = ' + fmt(B * 1000, 1) + ' mT &lt; B<sub>c</sub> = ' + fmt(B_ONSET * 1000, 2)
+      + ' mT — <b>no spike array</b>: the unstable band has not opened';
+  } else {
+    const band = bandEdges(B);
+    flag.innerHTML = st === 'ridges'
+      ? 'just above onset — the band is narrow (' + fmt(2 * Math.PI / band[1] * 1000, 1) + '–'
+        + fmt(2 * Math.PI / band[0] * 1000, 1) + ' mm): crests rise as ridges, λ = ' + fmt(lamM, 2) + ' mm'
+      : 'λ = ' + fmt(lamM, 2) + ' mm · crest ' + fmt(hgt, 2) + ' mm · tip field ' + fmt(tipB * 1000, 0)
+        + ' mT · ceiling ' + fmt(ceil, 2) + ' mm' + (hgt > ceil - 0.02 ? ' (pole-limited)' : '');
+  }
+  el('v-field').textContent = Math.round(B * 1000);
+  el('v-gap').textContent = (state.gap * 1000).toFixed(1);
+  el('sub-field').textContent = bo <= 1
+    ? 'Below onset: ω²(k) > 0 for every k, so the flat surface is stable and only capillary dimpling is drawn.'
+    : 'Overdrive B/Bc = ' + fmt(B / B_ONSET, 2) + ' · Bo_m = ' + fmt(bo, 2) + ' · λ = ' + fmt(lamM, 2)
+      + ' mm · band ' + fmt(2 * Math.PI / band1(B), 2) + '–' + fmt(2 * Math.PI / band0(B), 2) + ' mm';
+  el('sub-gap').textContent = 'Crest ceiling 0.42 g = ' + fmt(ceil, 2) + ' mm · λ/g = '
+    + (isFinite(lamM) ? fmt(lamM / (state.gap * 1000), 2) : '—')
+    + (hgt > 0 && hgt > ceil - 0.02 ? ' · crests are touching the pole face' : '');
+  el('sub-geo').textContent = GEO[state.geo].note;
+  caption(lamM, hgt, tipB, bo);
+}
+const band0 = B => bandEdges(B)[0], band1 = B => bandEdges(B)[1];
+function caption(lamM, hgt, tipB, bo){
+  const B = state.B, n = tips.length;
+  el('cap-a').textContent = 'Specimen RF-05 sits in a ' + (state.gap * 1000).toFixed(1) + ' mm air gap under a '
+    + GEO[state.geo].label.toLowerCase() + ' carrying '
+    + fmt(currentFor(B, state.geo, state.gap), 1) + ' A. At ' + fmt(B * 1000, 1) + ' mT the driving stress is '
+    + fmt(stress(B), 1) + ' Pa against a threshold of ' + fmt(S_C, 1) + ' Pa, so the magnetic Bond number is '
+    + fmt(bo, 2) + ' and the surface ' + (bo > 1 ? 'has broken into ' + n + ' crests across the 96 mm tank.'
+      : 'is still stable at every wavelength: nothing breaks.');
+  el('cap-b').textContent = bo > 1
+    ? 'The selected spacing is ' + fmt(lamM, 2) + ' mm against the ' + fmt(LAMBDA_C * 1000, 2)
+      + ' mm capillary–gravity length at onset — narrower because curvature can no longer hold the crest apart as the stress grows. Each crest stands '
+      + fmt(hgt, 2) + ' mm, giving a tip that concentrates the local flux density to about ' + fmt(tipB * 1000, 0)
+      + ' mT, which is why the array keeps sharpening instead of settling.'
+    : 'Spacing cannot be quoted: below onset there is no crest to space. What the tank shows instead is a '
+      + fmt(Math.pow(bo, 1.35) * 0.18, 2) + ' mm dimple field, the surface tilting toward the coil but held down by '
+      + fmt(SIGMA * 1000, 1) + ' mN/m of interface tension.';
+  el('cap-c').textContent = 'Colloid: ' + (PHI * 100).toFixed(1) + ' % by volume of ' + (D_PART * 1e9).toFixed(1)
+    + ' nm magnetite, saturation ' + (PHI * MS_PART / 1000).toFixed(0) + ' kA/m, Langevin parameter '
+    + fmt(MU0 * MOMENT * (B / MU0) / (KB * TEMP), 2) + ' at this field. Shell: oleic acid, 2.2 nm, '
+    + '2.1 core radii centre-to-centre; carrier kerosene, ' + fmt(SIGMA * 1000, 1) + ' mN/m at 21.4 °C.';
+  el('c-b').textContent = fmt(B * 1000, 1) + ' mT';
+  el('c-on').textContent = fmt(B_ONSET * 1000, 2) + ' mT';
+  el('c-ov').textContent = fmt(B / B_ONSET, 2) + '×';
+  el('c-lam').textContent = isFinite(lamM) ? fmt(lamM, 2) + ' mm' : 'no band';
+  el('c-h').textContent = fmt(hgt, 2) + ' mm';
+  el('c-n').textContent = n;
+  el('c-gp').textContent = isFinite(lamM) ? fmt(state.gap * 1000 / lamM * 100, 1) + ' %' : '—';
+  el('c-i').textContent = fmt(currentFor(B, state.geo, state.gap), 1) + ' A';
+  const w2 = isFinite(lamM) ? omega2(2 * Math.PI / (lamM / 1000), B) : NaN;
+  el('c-w2').textContent = (isFinite(lamM) && w2 < 0)
+    ? fmt(Math.sqrt(-w2) / (2 * Math.PI), 1) + ' Hz' : 'stable';
+  el('c-col').textContent = 'Fe₃O₄/oleate, φ 6.8 %';
+}
+/* ── SVG helper + Plate I ─────────────────────────────────────────────────── */
+const NS = 'http://www.w3.org/2000/svg';
+function S2(tag, attrs, parent){
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(e);
+  return e;
+}
+function txt(parent, x, y, s, cls, anchor){
+  const t = S2('text', {x, y, class: cls || 'lbl', 'text-anchor': anchor || 'start'}, parent);
+  t.textContent = s; return t;
+}
+function buildColloid(){
+  const svg = el('svg-colloid');
+  S2('rect', {x: 0, y: 0, width: 320, height: 208, class: 'fill-paper'}, svg);
+  const fluid = S2('g', {opacity: .9}, svg);
+  for (let i = 0; i < 46; i++){
+    const x = 8 + noise1(i * 1.7) * 300, y = 10 + noise1(i * 3.1 + 5) * 186;
+    S2('circle', {cx: x.toFixed(1), cy: y.toFixed(1), r: (0.9 + noise1(i * 5.3) * 1.1).toFixed(2),
+      fill: '#8b8578', opacity: .35}, fluid);
+  }
+  for (let i = 0; i < 12; i++){
+    const x = 12 + noise1(i * 2.9 + 21) * 296, y = 14 + noise1(i * 4.4 + 9) * 180;
+    S2('path', {d: 'M' + x.toFixed(1) + ' ' + y.toFixed(1) + 'q4 -3 8 0t8 0', class: 'hairline s'}, fluid);
+  }
+  const parts = [{x: 96, y: 92, r: 30, lead: true}, {x: 214, y: 56, r: 17}, {x: 246, y: 150, r: 22}];
+  parts.forEach((p, idx) => {
+    const g = S2('g', {class: 'gp', tabindex: 0, role: 'img',
+      'aria-label': 'Magnetite core, oleic acid inner leaflet, outer leaflet and carrier fluid'}, svg);
+    const shell = p.r * 0.42;
+    S2('circle', {cx: p.x, cy: p.y, r: p.r + shell, class: 'ring'}, g);
+    S2('circle', {cx: p.x, cy: p.y, r: p.r + shell, fill: 'none', stroke: '#8b8578', 'stroke-width': .7}, g);
+    for (let a = 0; a < 22; a++){
+      const th = a / 22 * Math.PI * 2, c = Math.cos(th), s = Math.sin(th);
+      S2('line', {x1: (p.x + c * (p.r + 1.5)).toFixed(2), y1: (p.y + s * (p.r + 1.5)).toFixed(2),
+        x2: (p.x + c * (p.r + shell - 2)).toFixed(2), y2: (p.y + s * (p.r + shell - 2)).toFixed(2),
+        stroke: '#8b8578', 'stroke-width': .6}, g);
+      S2('circle', {cx: (p.x + c * (p.r + shell - 1.4)).toFixed(2), cy: (p.y + s * (p.r + shell - 1.4)).toFixed(2),
+        r: 1.3, class: 'fill-g'}, g);
+    }
+    S2('circle', {cx: p.x, cy: p.y, r: p.r, class: 'fill-ink'}, g);
+    S2('circle', {cx: p.x, cy: p.y, r: p.r * 0.55, fill: 'none', stroke: '#f1eee7',
+      'stroke-width': .5, 'stroke-dasharray': '2 2', opacity: .5}, g);
+    S2('path', {d: 'M' + (p.x - p.r * 1.5) + ' ' + p.y + 'H' + (p.x + p.r * 1.35) + 'l-3 -2.6m3 2.6l-3 2.6',
+      stroke: '#4a5fc7', 'stroke-width': .8, fill: 'none'}, g);
+    const lay = S2('g', {class: 'layer'}, g);
+    S2('rect', {x: 4, y: 186, width: 312, height: 19, fill: '#f1eee7', opacity: .92}, lay);
+    txt(lay, 8, 198, idx === 0 ? 'CORE Fe₃O₄ 9.4 nm · SHELL oleate 2.2 nm · CARRIER kerosene · μ = 62 kA/m sat.'
+      : 'CORE ' + (D_PART * 1e9).toFixed(1) + ' nm · SHELL 2.2 nm · single-domain, one moment', 'lbl big');
+    S2('line', {x1: p.x - p.r - shell, y1: p.y, x2: p.x - p.r - shell - 6, y2: p.y, class: 'dim'}, lay);
+    S2('line', {x1: p.x + p.r + shell, y1: p.y, x2: p.x + p.r + shell + 6, y2: p.y, class: 'dim'}, lay);
+  });
+  S2('line', {x1: 20, y1: 200, x2: 90, y2: 200, class: 'hairline'}, svg);
+  txt(svg, 20, 196, '10 nm', 'lbl');
+  txt(svg, 300, 196, 'no scale → real 9.4 nm', 'lbl', 'end');
+}
+
+/* ── Plate II: force balance and the dispersion curve ─────────────────────── */
+function spikePath(cx, base, h, half, round){
+  const r = round;
+  return 'M' + (cx - half) + ' ' + base +
+    'C' + (cx - half * 0.55) + ' ' + (base - h * 0.30) + ' ' + (cx - r * 1.7) + ' ' + (base - h * 0.82) +
+    ' ' + (cx - r) + ' ' + (base - h + r) +
+    'Q' + cx + ' ' + (base - h - r * 0.55) + ' ' + (cx + r) + ' ' + (base - h + r) +
+    'C' + (cx + r * 1.7) + ' ' + (base - h * 0.82) + ' ' + (cx + half * 0.55) + ' ' + (base - h * 0.30) +
+    ' ' + (cx + half) + ' ' + base + 'Z';
+}
+function arrow(parent, x1, y1, x2, y2, cls){
+  S2('line', {x1, y1, x2, y2, class: cls, 'marker-end': ''}, parent);
+  const a = Math.atan2(y2 - y1, x2 - x1), s = 3.4;
+  S2('path', {d: 'M' + x2 + ' ' + y2 + 'L' + (x2 - s * Math.cos(a - 0.42)) + ' ' + (y2 - s * Math.sin(a - 0.42)) +
+    'L' + (x2 - s * Math.cos(a + 0.42)) + ' ' + (y2 - s * Math.sin(a + 0.42)) + 'Z',
+    class: cls.indexOf('dim') >= 0 ? 'fill-a' : 'fill-ink'}, parent);
+}
+const forceRefs = {curve: null, lobe: null, mark: null, lab: null};
+function buildForce(){
+  const svg = el('svg-force');
+  S2('rect', {x: 0, y: 0, width: 320, height: 208, class: 'fill-paper'}, svg);
+  const base = 132;
+  /* hatched colloid body */
+  S2('path', {d: 'M8 ' + base + 'H152V200H8Z', class: 'fill-g'}, svg);
+  S2('line', {x1: 8, y1: base, x2: 152, y2: base, class: 'hairline s'}, svg);
+  for (let x = 6; x < 152; x += 8) S2('line', {x1: x, y1: 200, x2: x + 12, y2: base + 4, class: 'hairline s'}, svg);
+  forceRefs.spikes = S2('g', {}, svg);
+  forceRefs.lab = S2('g', {}, svg);
+  /* right inset: omega^2/k against k/k_c */
+  const px = 168, pw = 144, py = 34, ph = 120;
+  S2('rect', {x: px, y: py, width: pw, height: ph, fill: '#f1eee7', stroke: 'rgba(26,24,21,.35)', 'stroke-width': .6}, svg);
+  txt(svg, px, py - 5, 'ω²/k  vs  k/k_c', 'lbl');
+  txt(svg, px + pw, py + ph + 10, 'k/k_c →', 'lbl', 'end');
+  S2('line', {x1: px, y1: py + ph * 0.55, x2: px + pw, y2: py + ph * 0.55, class: 'hairline s'}, svg);
+  for (let i = 1; i < 4; i++){
+    S2('line', {x1: px + pw * i / 4, y2: py + ph * 0.55, x2: px + pw * i / 4, y1: py + ph * 0.55 - 3, class: 'hairline s'}, svg);
+    txt(svg, px + pw * i / 4, py + ph * 0.55 + 9, String(i), 'lbl', 'middle');
+  }
+  forceRefs.lobe = S2('path', {class: 'fill-a', opacity: .14}, svg);
+  forceRefs.curve = S2('polyline', {fill: 'none', stroke: '#1a1815', 'stroke-width': 1}, svg);
+  forceRefs.mark = S2('g', {}, svg);
+  updateForce();
+}
+function updateForce(){
+  if (!forceRefs.curve) return;
+  const B = state.B, lam = wavelength(B), base = 132;
+  const lamM = isFinite(lam) ? lam * 1000 : LAMBDA_C * 1000;
+  const px = 168, pw = 144, py = 34, ph = 120, zero = py + ph * 0.55;
+  const scaleK = pw / 4;                                        /* 4 k_c across the inset */
+  let pts = '', lobe = '', inLobe = false, wmax = 1e-9;
+  const samples = [];
+  for (let i = 0; i <= 96; i++){
+    const kr = i / 96 * 4, w = omega2(kr * KC, B) / (kr * KC || 1);
+    samples.push([kr, w]);
+    if (Math.abs(w) > wmax) wmax = Math.abs(w);
+  }
+  samples.forEach(([kr, w]) => {
+    const X = px + kr * scaleK, Y = zero - (w / wmax) * (ph * 0.42);
+    pts += X.toFixed(1) + ',' + Y.toFixed(1) + ' ';
+    if (w < -1e-12){ if (!inLobe){ lobe += 'M' + X.toFixed(1) + ' ' + zero; inLobe = true; }
+      lobe += 'L' + X.toFixed(1) + ' ' + Y.toFixed(1); }
+    else if (inLobe){ lobe += 'L' + X.toFixed(1) + ' ' + zero + 'Z'; inLobe = false; }
+  });
+  if (inLobe) lobe += 'L' + (px + 4 * scaleK).toFixed(1) + ' ' + zero + 'Z';
+  forceRefs.curve.setAttribute('points', pts.trim());
+  forceRefs.lobe.setAttribute('d', lobe);
+  forceRefs.mark.textContent = '';
+  const ksel = isFinite(lam) ? 2 * Math.PI / lam / KC : 1;
+  const mx = px + Math.min(ksel, 4) * scaleK;
+  S2('line', {x1: mx, y1: py + 2, x2: mx, y2: py + ph - 2, stroke: '#4a5fc7', 'stroke-width': .8, 'stroke-dasharray': '3 2'}, forceRefs.mark);
+  txt(forceRefs.mark, Math.min(mx + 3, px + pw - 2), py + 11, isFinite(lam) ? 'k selected ' + fmt(ksel, 2) : 'no unstable k', 'lbl');
+  S2('line', {x1: px + scaleK, y1: py + 2, x2: px + scaleK, y2: py + ph - 2, stroke: '#8b8578', 'stroke-width': .6, 'stroke-dasharray': '1 2'}, forceRefs.mark);
+  txt(forceRefs.mark, px + scaleK + 2, py + ph - 4, 'k_c', 'lbl');
+  /* left: one crest of the live array, drawn to the same lambda */
+  forceRefs.spikes.textContent = '';
+  forceRefs.lab.textContent = '';
+  const hpx = Math.min(74, Math.max(6, crestHeight(B, lam, state.gap, state.geo) * 1000 * 6));
+  const half = Math.min(46, Math.max(9, lamM * 3.1));
+  S2('path', {d: spikePath(58, base, hpx, half, Math.max(2, half * 0.14)), class: 'fill-ink'}, forceRefs.spikes);
+  S2('path', {d: spikePath(58 + half * 2.05, base, hpx * 0.86, half, Math.max(2, half * 0.14)),
+    fill: 'none', stroke: '#1a1815', 'stroke-width': .7, 'stroke-dasharray': '3 2'}, forceRefs.spikes);
+  arrow(forceRefs.spikes, 58 - half * 0.5, base - hpx * 0.55, 58 - half * 0.5, base - hpx * 0.55 - 26, 'dim');
+  txt(forceRefs.lab, 8, base - hpx - 8, 'magnetic stress S = ' + fmt(stress(B), 1) + ' Pa ↑', 'lbl big');
+  arrow(forceRefs.spikes, 96, base - hpx * 0.35, 96, base - hpx * 0.35 + 20, 'hairline');
+  txt(forceRefs.lab, 100, base - hpx * 0.35 + 24, 'ρg = ' + fmt(RHO * G / 1000, 2) + ' kN/m³ ↓', 'lbl');
+  txt(forceRefs.lab, 100, base - hpx * 0.35 + 33, 'σ = ' + fmt(SIGMA * 1000, 1) + ' mN/m along crest', 'lbl');
+  const dy = base - hpx - 20;
+  S2('line', {x1: 58, y1: dy, x2: 58 + half * 2.05, y2: dy, class: 'dim'}, forceRefs.spikes);
+  S2('line', {x1: 58, y1: dy - 3, x2: 58, y2: dy + 3, class: 'dim'}, forceRefs.spikes);
+  S2('line', {x1: 58 + half * 2.05, y1: dy - 3, x2: 58 + half * 2.05, y2: dy + 3, class: 'dim'}, forceRefs.spikes);
+  txt(forceRefs.lab, 58 + half, dy - 4, 'λ = ' + (isFinite(lam) ? fmt(lamM, 2) + ' mm' : 'undefined — stable'), 'lbl', 'middle');
+  el('force-hint').textContent = isFinite(lam)
+    ? 'unstable lobe ' + fmt(2 * Math.PI / band1(B) * 1000, 1) + '–' + fmt(2 * Math.PI / band0(B) * 1000, 1) + ' mm'
+    : 'no lobe: ω² > 0 across all k';
+}
+/* ── Plate III: coil section, rebuilt on geometry change ──────────────────── */
+let clipId = 1;
+function buildCoil(){
+  const svg = el('svg-coil');
+  while (svg.lastChild) svg.removeChild(svg.lastChild);
+  S2('rect', {x: 0, y: 0, width: 320, height: 208, class: 'fill-paper'}, svg);
+  const geo = state.geo, poolTop = 176, gapMm = state.gap * 1000;
+  const face = Math.max(34, poolTop - gapMm * 3.4);
+  S2('rect', {x: 10, y: poolTop, width: 300, height: 26, class: 'fill-g'}, svg);
+  for (let x = 8; x < 306; x += 8) S2('line', {x1: x, y1: poolTop + 26, x2: x + 10, y2: poolTop + 3, class: 'hairline s'}, svg);
+  S2('line', {x1: 10, y1: poolTop, x2: 310, y2: poolTop, class: 'hairline'}, svg);
+  txt(svg, 12, poolTop + 20, 'colloid pool', 'lbl');
+  const hatch = (x, y, w, h) => {
+    const id = 'clip' + (clipId++);
+    const cp = S2('clipPath', {id}, svg);
+    S2('rect', {x, y, width: w, height: h}, cp);
+    S2('rect', {x, y, width: w, height: h, class: 'fill-g', stroke: 'rgba(26,24,21,.55)', 'stroke-width': .6}, svg);
+    const g = S2('g', {'clip-path': 'url(#' + id + ')', opacity: .85}, svg);
+    for (let i = -Math.ceil(h / 6); i < Math.ceil((w + h) / 6); i++){
+      S2('line', {x1: x + i * 6, y1: y + h, x2: x + i * 6 + h, y2: y, class: 'hairline s'}, g);
+    }
+  };
+  const winding = (x, y, w, h) => {
+    S2('rect', {x, y, width: w, height: h, fill: 'none', stroke: '#1a1815', 'stroke-width': .7}, svg);
+    const cols = Math.max(2, Math.round(w / 9)), rows = Math.max(3, Math.round(h / 9));
+    for (let c = 0; c < cols; c++) for (let r = 0; r < rows; r++){
+      S2('circle', {cx: x + (c + .5) * w / cols, cy: y + (r + .5) * h / rows, r: 2.1,
+        fill: 'none', stroke: '#4a463e', 'stroke-width': .5}, svg);
+      S2('circle', {cx: x + (c + .5) * w / cols, cy: y + (r + .5) * h / rows, r: .7, class: 'fill-a'}, svg);
+    }
+  };
+  if (geo === 'helmholtz'){
+    hatch(10, face - 76, 300, 14);
+    winding(18, face - 60, 54, 44); winding(248, face - 60, 54, 44);
+    hatch(78, face - 12, 164, 12); hatch(10, face - 12, 62, 12); hatch(248, face - 12, 62, 12);
+    txt(svg, 18, face + 12, 'arm spacing = radius = 62 mm', 'lbl');
+  } else if (geo === 'solenoid'){
+    winding(14, face - 74, 34, 68); winding(272, face - 74, 34, 68);
+    S2('line', {x1: 48, y1: face - 74, x2: 48, y2: face - 6, class: 'hairline s'}, svg);
+    S2('line', {x1: 272, y1: face - 74, x2: 272, y2: face - 6, class: 'hairline s'}, svg);
+    hatch(10, face - 8, 300, 8);
+    txt(svg, 14, face + 12, '44 mm bore · 9.7 turns/mm · former in glass', 'lbl');
+  } else {
+    const cone = (pts) => {
+      const id = 'clip' + (clipId++);
+      const cp = S2('clipPath', {id}, svg);
+      S2('polygon', {points: pts}, cp);
+      S2('polygon', {points: pts, class: 'fill-g', stroke: 'rgba(26,24,21,.6)', 'stroke-width': .6}, svg);
+      const bb = pts.split(' ').map(p => p.split(',').map(Number));
+      const xs = bb.map(p => p[0]), ys = bb.map(p => p[1]);
+      const g = S2('g', {'clip-path': 'url(#' + id + ')', opacity: .85}, svg);
+      for (let i = -14; i < 40; i++)
+        S2('line', {x1: Math.min(...xs) + i * 6, y1: Math.max(...ys), x2: Math.min(...xs) + i * 6 + 60, y2: Math.min(...ys), class: 'hairline s'}, g);
+    };
+    cone('18,' + (face - 62) + ' 104,' + (face - 62) + ' 150,' + face + ' 18,' + face);
+    cone('302,' + (face - 62) + ' 216,' + (face - 62) + ' 170,' + face + ' 302,' + face);
+    winding(22, face - 96, 60, 30); winding(238, face - 96, 60, 30);
+    txt(svg, 18, face + 12, 'cones 38° half-angle · flux concentrated 1.35×', 'lbl');
+  }
+  /* computed gap field: straight, diverging or converging with geometry */
+  const grad = GEO[geo].grad;
+  for (let i = 0; i < 9; i++){
+    const sx = 30 + 260 * (i + 0.5) / 9;
+    let d = '';
+    for (let s = 0; s <= 22; s++){
+      const t = s / 22, y = face + (poolTop - face) * t;
+      const x = sx + grad * 2.4 * (sx - 160) * (t - t * t) * 2.2;
+      d += (s ? 'L' : 'M') + x.toFixed(1) + ' ' + y.toFixed(1);
+    }
+    S2('path', {d, fill: 'none', stroke: '#4a5fc7', 'stroke-width': .55, opacity: .42}, svg);
+  }
+  S2('line', {x1: 10, y1: face, x2: 310, y2: face, stroke: '#1a1815', 'stroke-width': 1}, svg);
+  /* gap dimension on top of everything */
+  S2('line', {x1: 232, y1: face, x2: 232, y2: poolTop, class: 'dim'}, svg);
+  S2('line', {x1: 228, y1: face, x2: 236, y2: face, class: 'dim'}, svg);
+  S2('line', {x1: 228, y1: poolTop, x2: 236, y2: poolTop, class: 'dim'}, svg);
+  txt(svg, 238, (face + poolTop) / 2 + 3, 'gap ' + fmt(gapMm, 1) + ' mm', 'lbl');
+  txt(svg, 300, 14, GEO[geo].label, 'lbl big', 'end');
+  txt(svg, 300, 24, 'B ' + fmt(state.B * 1000, 0) + ' mT · I ' + fmt(currentFor(state.B, geo, state.gap), 1)
+    + ' A · N ' + TURNS + ' t', 'lbl', 'end');
+  const lamM = wavelength(state.B) * 1000;
+  el('coil-tag').textContent = GEO[geo].label;
+  el('coil-hint').textContent = 'k = ' + GEO[geo].k.toFixed(2) + ' · rebuilt on geometry change';
+  el('coil-cap').innerHTML = '<b>' + GEO[geo].label + '.</b> ' + GEO[geo].cap.replace(/^[^.]*\.\s*/, '')
+    + ' At ' + fmt(state.B * 1000, 0) + ' mT the draw is ' + fmt(currentFor(state.B, geo, state.gap), 1)
+    + ' A through ' + TURNS + ' turns per arm and the array stands at '
+    + (isFinite(lamM) ? fmt(lamM, 2) + ' mm spacing.' : 'no spacing — the band is closed.');
+  return {face, poolTop};
+}
+function drawProbe(){
+  if (!state.probe) { callout.classList.remove('on'); return; }
+  const t = tips[state.probe.i];
+  if (!t){ state.probe = null; callout.classList.remove('on'); return; }
+  ctx.save();
+  ctx.strokeStyle = '#4a5fc7'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.arc(t.x, t.y, 7, 0, Math.PI * 2);
+  ctx.moveTo(t.x - 11, t.y); ctx.lineTo(t.x - 8, t.y);
+  ctx.moveTo(t.x + 8, t.y); ctx.lineTo(t.x + 11, t.y); ctx.stroke();
+  ctx.restore();
+  const lamM = wavelength(t.b) * 1000;
+  const h = (restY() - t.y) / PXM;
+  const local = tipField(t.b, h / 1000, lamM / 1000, state.geo);
+  callout.innerHTML = '<i>crest #' + (state.probe.i + 1) + ' of ' + tips.length + '</i>'
+    + 'height ' + fmt(h, 2) + ' mm<br>local B ' + fmt(local * 1000, 0) + ' mT<br>λ here ' + fmt(lamM, 2) + ' mm'
+    + '<br>x = ' + fmt((t.x - x0()) / PXM, 1) + ' mm from wall';
+  const cx = Math.min(W - 92, Math.max(92, t.x));
+  callout.style.left = cx + 'px';
+  callout.style.top = Math.max(78, t.y - 10) + 'px';
+  callout.classList.add('on');
+}
+
+/* ── interaction ──────────────────────────────────────────────────────────── */
+const sField = el('s-field'), sGap = el('s-gap');
+sField.addEventListener('input', () => {
+  state.target = (+sField.value) / 1000; state.pulse = null;
+  if (reduce.matches) settle();
+});
+sGap.addEventListener('input', () => {
+  state.gapT = (+sGap.value) / 1000;
+  if (reduce.matches) settle();
+});
+el('geom').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  state.geo = b.dataset.geo; state.probe = null;
+  [...el('geom').children].forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+  buildCoil();
+  if (reduce.matches) settle(); else { readout(); }
+});
+function pulseShape(p){
+  if (p < 0.42) return 0.5 - 0.5 * Math.cos(p / 0.42 * Math.PI);
+  const q = Math.min((p - 0.42) / 0.58, 1);
+  return 0.5 + 0.5 * Math.cos(q * Math.PI);
+}
+el('b-pulse').addEventListener('click', () => {
+  if (reduce.matches){
+    state.target = 0.4; sField.value = '400'; settle();
+    state.target = 0.18; sField.value = '180'; settle();
+    return;
+  }
+  state.pulse = {t0: performance.now(), from: state.B, end: Math.max(state.B, 0.18)};
+});
+el('b-quiet').addEventListener('click', () => {
+  state.target = 0; sField.value = '0'; state.pulse = null; state.probe = null;
+  if (reduce.matches) settle();
+});
+el('b-onset').addEventListener('click', () => {
+  state.target = B_ONSET * 1.04; sField.value = String(Math.round(state.target * 1000));
+  state.pulse = null;
+  if (reduce.matches) settle();
+});
+el('b-clear').addEventListener('click', () => { state.probe = null; callout.classList.remove('on'); render(); });
+cv.addEventListener('click', e => {
+  const r = cv.getBoundingClientRect();
+  const px = e.clientX - r.left, py = e.clientY - r.top;
+  if (!tips.length){
+    callout.innerHTML = '<i>no crest here</i>' + fmt(state.B * 1000, 1) + ' mT is below the onset of '
+      + fmt(B_ONSET * 1000, 2) + ' mT.<br>the surface is stable at every k.';
+    callout.style.left = Math.min(W - 92, Math.max(92, px)) + 'px';
+    callout.style.top = Math.max(78, py) + 'px';
+    callout.classList.add('on');
+    state.probe = null;
+    return;
+  }
+  let best = 0, bd = Infinity;
+  tips.forEach((t, i) => { const d = Math.hypot(t.x - px, t.y - py); if (d < bd){ bd = d; best = i; } });
+  state.probe = {i: best};
+  render();
+});
+document.querySelectorAll('#svg-colloid .gp').forEach(g => {
+  g.addEventListener('click', () => g.classList.toggle('on'));
+  g.addEventListener('focus', () => g.classList.add('on'));
+  g.addEventListener('blur', () => g.classList.remove('on'));
+});
+/* ── render + loop ────────────────────────────────────────────────────────── */
+function render(){
+  buildProfile(); buildField();
+  const n = silhouette();
+  ctx.clearRect(0, 0, W, H);
+  drawYoke(); drawPole(); drawTank(); drawFieldLines(); drawFluid(n); drawLambda(); drawProbe();
+}
+let raf = 0, tick = 0, last = 0, domT = 0, forceT = 0, traceT = 0;
+/* rAF where available; a timer fallback keeps the cabinet live in hosts that
+   never service rAF (static snapshotters, some pre-renderers). */
+function schedule(){
+  if (reduce.matches) return;
+  raf = requestAnimationFrame(step);
+  clearTimeout(tick);
+  tick = setTimeout(() => { if (last === 0 || performance.now() - last > 120) step(performance.now()); }, 34);
+}
+function step(ts){
+  const prev = last || ts;
+  const dt = Math.min(0.05, Math.max(0, (ts - prev) / 1000)) || 0.016;
+  last = ts;
+  if (state.pulse){
+    const p = (ts - state.pulse.t0) / 2600;
+    state.target = state.pulse.end + (0.4 - state.pulse.end) * pulseShape(Math.min(p, 1));
+    sField.value = String(Math.round(Math.max(state.target, 0) * 1000));
+    if (p >= 1){ state.target = state.pulse.end; state.pulse = null; }
+  }
+  const k = 1 - Math.exp(-dt * 4.6);
+  state.B += (state.target - state.B) * k;
+  if (Math.abs(state.target - state.B) < 2e-5) state.B = state.target;
+  state.gap += (state.gapT - state.gap) * k;
+  state.t += dt;
+  render();
+  if (ts - domT > 110){ domT = ts; readout(); }
+  if (ts - forceT > 420){ forceT = ts; updateForce(); }
+  if (ts - traceT > 100){ traceT = ts; pushTrace(); }
+  schedule();
+}
+function settle(){
+  state.B = state.target; state.gap = state.gapT; state.t = 1.35;
+  render(); readout(); updateForce(); pushTrace(); buildCoil();
+}
+/* ── boot ─────────────────────────────────────────────────────────────────── */
+resize();
+initTraceGrid();
+buildColloid();
+buildForce();
+buildCoil();
+el('tick-on').textContent = 'Bc ' + fmt(B_ONSET * 1000, 1);
+el('sub-seq').textContent = 'Pulse: ' + fmt(state.B * 1000, 0) + '→400→' + fmt(state.B * 1000, 0)
+  + ' mT over 2.6 s, raised cosine; ω² is re-solved each frame.';
+for (let i = 0; i < 46; i++) trace.vals.push(0.004 + i * 0.0031);
+pushTrace();
+render();                      /* one frame synchronously: hosts without rAF still show the cabinet */
+readout();
+render();                      /* tips exist now, so the probe/scale overlay is drawn too */
+if (reduce.matches){
+  settle();
+} else {
+  last = performance.now();
+  schedule();
+}
+reduce.addEventListener?.('change', e => {
+  if (e.matches){ cancelAnimationFrame(raf); clearTimeout(tick); settle(); }
+  else { last = performance.now(); schedule(); }
+});
+let rt = 0;
+addEventListener('resize', () => {
+  clearTimeout(rt);
+  rt = setTimeout(() => { resize(); if (reduce.matches) settle(); }, 90);
+});
+</script>
+</body>
+</html>
+

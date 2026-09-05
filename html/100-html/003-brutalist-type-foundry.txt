@@ -1,0 +1,80 @@
+TITLE: STRIKE — Independent Type Foundry (Specimen No. 003)
+
+PROMPT:
+Build a single, fully self-contained HTML page: the specimen site for a fictional neo-brutalist
+type foundry called STRIKE (Rotterdam, six cuts, 712 glyphs). One <style>, one <script>, zero
+external references, system/generic font stacks only (Impact, "Arial Black", Helvetica Neue,
+Arial Narrow, ui-monospace/Menlo/Consolas/Courier). No rounded corners anywhere, no gradients, no
+blur, no filters, no shadows with spread — every shadow is a flat solid offset.
+
+PALETTE: paper #f2efe6, secondary paper #e7e3d5, ink #0d0d0d, acid #d8ff00 (decision points only),
+alarm #ff3b1f (errors/warning only). Every rule on the page is exactly 4px solid ink; interior
+dividers in tables are 2px. Shadow tokens: 5px 5px 0, 8px 8px 0, 14px 14px 0, all in ink.
+
+LAYOUT: a fixed SVG overlay (two <pattern> fills — an 80px column grid plus a dashed 28px baseline
+grid at 5–13% ink opacity) sits above the paper so the grid is literally visible; a 4px ink frame
+runs down both viewport edges. Below it, a 64px sticky left rail holds a vertical foundry mark, a
+numbered index 01–06 with scrollspy (active cell painted acid, hover inverts to ink/paper) and a
+live pointer-coordinate readout printed in points at the bottom. Right of the rail: an infinite CSS
+marquee ticker of glyph names on an ink bar with acid text (pauses on hover, track duplicated 2x
+and translated -50%). Then a masthead strip, the hero, and six bordered sections.
+
+HERO: a three-line giant headline using clamp() and mixed families/weights — "STRIKE" in Impact at
+clamp(76px,20.5vw,330px); "FOUNDA" in Arial Black 900; "NDRY" continuing the same split word on the
+next line rendered outline-only with color:transparent + -webkit-text-stroke:3px ink and a small
+alarm-red superscript "03". Rotated stickers (transform:rotate(-6deg), 4px border, hard shadow)
+float beside an uppercase bold blurb with an acid highlighter <em>, and a bordered 2x2 metadata dl.
+
+SECTIONS: (01) manifesto — 12-column split with a 104px outlined drop cap and four hard-shadowed
+"law" cards that translate 4px toward their shadow on hover; (02) a cuts table of six rows, each
+grid columns = index/name/specimen word/meta/price, hover inverts the whole row to ink with acid
+word; clicking a row loads that cut's size/tracking/weight into the tester; (03) TYPE TESTER — a
+contenteditable specimen word (14 char cap, plain-text paste, double-click resets) driven live by
+three fully custom-drawn sliders (40–280px size, −0.12 to +0.30em tracking, 100–900 weight) built
+from divs: 4px border, acid fill, 25 tick marks, square knob with hard shadow, pointer-capture
+drag, Shift for fine mode, arrow/Page/Home/End keys, role="slider" aria values kept in sync; a
+mono readout on ink prints SIZE/TRACK/WEIGHT/CHARS/RUN/AVG plus a status verdict; Poster/Ledger/
+Wire/Reset preset buttons snap all three at once. Because only system families are available, the
+top of the weight axis is faked with a proportional -webkit-text-stroke. (04) a 6x8 = 48-cell glyph
+grid; clicking (or Enter, or arrow-key roaming) PROMOTES a glyph to the giant stage beside it with a
+hard-cut animation — a steps() keyframe that jumps translate offsets and clip-path insets rather
+than fading — while the header bar updates slot/decimal/advance and the corner plate updates the
+glyph name and hex; (05) KERN LAB — two giant letters, the second offset by a --k custom property,
+tighten/open/zero buttons, eight selectable pairs, scroll-wheel nudge, and a mono ledger line that
+grades the value COLLISION / TIGHT / NEGGED / ZERO / AIRY; (06) footer: three licence blocks
+(Desk / Screen / Whole Foundry) on ink with one alarm-red block, then a mono colophon strip.
+
+MOTION: IntersectionObserver reveals with a 340ms cubic-bezier(.2,0,0,1) transform and no easing
+theatrics; hover feedback is instant colour inversion plus shadow collapse; all animation, the
+marquee and smooth scrolling are disabled under prefers-reduced-motion.
+
+DESIGN:
+The page is meant to read as a physical specimen sheet that somebody bolted to a wall: paper stock,
+visible printing grid, everything measured and labelled, nothing smoothed. Contrast carries the
+hierarchy — weight before colour, colour only as a signal — and interaction is deliberately
+mechanical: switches snap, rows invert, glyphs cut rather than dissolve. The one piece of theatre is
+scale: a single word big enough that the sheet feels like it is containing it by force.
+
+TECHNIQUES:
+- Fixed inline-SVG <pattern> overlay for a genuinely visible column + baseline grid (no gradients).
+- Global border-radius:0 override and a flat-offset box-shadow token system (5/8/14px, zero blur).
+- clamp() display type with mixed weights across a split word; outline text via -webkit-text-stroke.
+- Infinite marquee built from a duplicated flex track translated -50% for a seamless loop.
+- Custom div sliders with pointer capture, tick generation, snapping, fine-drag modifier, and full
+  ARIA slider semantics — no native <input range> styling anywhere.
+- steps() keyframe "hard cut" promotion using clip-path + translate jumps, restarted via reflow.
+- IntersectionObserver scroll reveals and scrollspy, both rAF-throttled.
+- CSS custom properties (--k, data-* driven states) for kerning offsets and live control states.
+- Grid arrow-key navigation, contenteditable input capping via beforeinput, plain-text paste.
+- Fluid 6->1 column collapse at 900/980/1080px, 2560px max-width container, prefers-reduced-motion.
+
+INTERACTION:
+- Sticky rail tracks the current section; clicking an index number smooth-scrolls to it.
+- Marquee pauses on pointer hover so glyph names can actually be read.
+- Cut rows are anchors: they apply their metrics to the tester AND jump to it in one gesture.
+- Tester word is directly editable; every slider drag/keypress restyles it and reprints the mono
+  readout, including measured run width and a status verdict derived from the values.
+- Glyph cells respond to click, Enter/Space and arrow keys; promotion repaints the stage metadata.
+- Kern lab accepts buttons, pair selection or wheel scrolling and grades each value as you go.
+- Every control has a distinct pressed state (shadow collapse + 5px translate) so the page feels
+  like hardware, not a document.

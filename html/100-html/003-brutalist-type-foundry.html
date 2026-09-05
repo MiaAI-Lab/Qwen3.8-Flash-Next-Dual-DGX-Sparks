@@ -1,0 +1,1177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>STRIKE — Independent Type Foundry / Specimen No. 003</title>
+<style>
+/* ============================================================
+   STRIKE TYPE FOUNDRY — SPECIMEN No. 003
+   Neo-brutalism. No gradients. No blur. No radius. Rules only.
+   paper #f2efe6 / ink #0d0d0d / acid #d8ff00 / alarm #ff3b1f
+   ============================================================ */
+
+:root{
+  --paper:#f2efe6;
+  --paper-2:#e7e3d5;
+  --ink:#0d0d0d;
+  --acid:#d8ff00;
+  --alarm:#ff3b1f;
+  --rule:4px;
+  --hard:8px 8px 0 var(--ink);
+  --hard-sm:5px 5px 0 var(--ink);
+  --hard-lg:14px 14px 0 var(--ink);
+  --ease-cut:cubic-bezier(.2,0,0,1);
+  --col:64px;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Courier New",monospace;
+  --grotesk:"Helvetica Neue",Helvetica,Arial,"Arial Narrow",system-ui,sans-serif;
+  --black:"Arial Black","Helvetica Neue",Helvetica,Arial,sans-serif;
+  --impact:Impact,"Haettenschweiler","Arial Narrow Bold","Arial Black",sans-serif;
+}
+
+*,*::before,*::after{box-sizing:border-box;border-radius:0!important}
+
+html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}
+
+body{
+  margin:0;
+  background:var(--paper);
+  color:var(--ink);
+  font-family:var(--grotesk);
+  font-size:16px;
+  line-height:1.45;
+  overflow-x:hidden;
+}
+
+::selection{background:var(--acid);color:var(--ink);text-shadow:none}
+
+/* ---------- fixed grid overlay : the visible column + baseline grid ---------- */
+.grid-overlay{
+  position:fixed;inset:0;width:100%;height:100%;
+  pointer-events:none;z-index:9000;opacity:.62;
+}
+.edge-frame{
+  position:fixed;inset:0;pointer-events:none;z-index:9001;
+  border-left:var(--rule) solid var(--ink);
+  border-right:var(--rule) solid var(--ink);
+}
+@media (max-width:720px){.edge-frame{display:none}}
+
+/* ---------- utility ---------- */
+.wrap{width:min(1560px,100% - 32px);margin-inline:auto}
+.mono{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase}
+.upper{text-transform:uppercase}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+.bar{height:var(--rule);background:var(--ink)}
+.bar--acid{background:var(--acid)}
+.bar--alarm{background:var(--alarm)}
+
+/* ---------- index rail ---------- */
+.shell{display:grid;grid-template-columns:var(--col) minmax(0,1fr)}
+@media (max-width:900px){.shell{grid-template-columns:minmax(0,1fr)}}
+
+.rail{
+  position:sticky;top:0;height:100vh;
+  border-right:var(--rule) solid var(--ink);
+  background:var(--paper);
+  display:flex;flex-direction:column;justify-content:space-between;
+  z-index:40;
+}
+.rail__mark{
+  writing-mode:vertical-rl;text-orientation:mixed;
+  font-family:var(--mono);font-size:10px;letter-spacing:.4em;text-transform:uppercase;
+  padding:14px 0;
+}
+.rail__list{list-style:none;margin:0;padding:0;border-block:var(--rule) solid var(--ink)}
+.rail__list li{border-bottom:2px solid var(--ink)}
+.rail__list li:last-child{border-bottom:0}
+.rail__list a{
+  display:block;text-align:center;padding:13px 0;text-decoration:none;color:var(--ink);
+  font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.06em;
+  transition:background .001s linear,color .001s linear;
+}
+.rail__list a:hover{background:var(--ink);color:var(--paper)}
+.rail__list a[aria-current="true"]{background:var(--acid);color:var(--ink)}
+.rail__foot{
+  padding:10px 0;font-family:var(--mono);font-size:9px;letter-spacing:.12em;
+  text-align:center;
+}
+.rail__coord{
+  border-top:var(--rule) solid var(--ink);padding:9px 0;font-family:var(--mono);
+  font-size:9px;letter-spacing:.06em;text-align:center;background:var(--ink);color:var(--acid);
+}
+@media (max-width:900px){
+  .rail{position:static;height:auto;flex-direction:row;align-items:stretch;border-right:0;border-bottom:var(--rule) solid var(--ink)}
+  .rail__mark{padding:12px 10px}
+  .rail__list{display:flex;flex:1;border-block:0;border-inline:var(--rule) solid var(--ink)}
+  .rail__list li{border-bottom:0;border-right:2px solid var(--ink);flex:1}
+  .rail__list a{padding:12px 2px}
+  .rail__foot{display:none}
+}
+
+/* ---------- top ticker ---------- */
+.ticker{
+  background:var(--ink);color:var(--acid);
+  border-bottom:var(--rule) solid var(--ink);
+  overflow:hidden;position:relative;
+}
+.ticker__track{display:flex;width:max-content;animation:slide 34s linear infinite}
+.ticker:hover .ticker__track{animation-play-state:paused}
+.ticker__seq{
+  display:flex;align-items:center;
+  padding:9px 0;white-space:nowrap;
+  font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.28em;text-transform:uppercase;
+}
+.ticker__seq span{padding-inline:22px}
+.ticker__seq b{color:var(--paper);font-weight:400}
+.ticker__seq i{color:var(--alarm);font-style:normal;padding:0}
+@keyframes slide{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+
+/* ---------- masthead ---------- */
+.masthead{
+  display:flex;flex-wrap:wrap;gap:10px 26px;align-items:baseline;justify-content:space-between;
+  padding:14px 0;border-bottom:var(--rule) solid var(--ink);
+}
+.masthead__id{font-family:var(--mono);font-size:11px;letter-spacing:.3em;font-weight:700}
+.masthead__nav{display:flex;gap:0;flex-wrap:wrap}
+.masthead__nav a{
+  color:var(--ink);text-decoration:none;font-family:var(--mono);font-size:10px;
+  letter-spacing:.2em;text-transform:uppercase;padding:7px 13px;border:var(--rule) solid var(--ink);
+  margin-left:-4px;background:var(--paper);
+}
+.masthead__nav a:hover{background:var(--acid)}
+.masthead__nav a:first-child{margin-left:0}
+
+/* ---------- hero ---------- */
+.hero{position:relative;padding:38px 0 0}
+.mega{margin:0;font-family:var(--impact);text-transform:uppercase;line-height:.79;
+  letter-spacing:-.015em;font-weight:400}
+.mega__row{display:block;position:relative}
+.mega__row--1{
+  font-size:clamp(76px,20.5vw,330px);
+  -webkit-text-stroke:0;
+}
+.mega__row--2{
+  font-size:clamp(60px,15.6vw,252px);
+  font-family:var(--black);font-weight:900;
+  letter-spacing:-.045em;
+}
+.mega__row--3{
+  font-size:clamp(60px,15.6vw,252px);
+  font-family:var(--black);font-weight:400;
+  color:transparent;
+  -webkit-text-stroke:3px var(--ink);
+  letter-spacing:-.02em;
+}
+@media (max-width:600px){.mega__row--3{-webkit-text-stroke:2px var(--ink)}}
+.mega__row--3 .glyphTail{
+  -webkit-text-stroke:0;color:var(--alarm);font-family:var(--impact);
+  font-size:.34em;vertical-align:super;letter-spacing:0;
+}
+.hero__flagrow{
+  display:flex;flex-wrap:wrap;align-items:flex-end;gap:14px 22px;
+  margin-top:26px;padding-bottom:26px;border-bottom:var(--rule) solid var(--ink);
+}
+.hero__blurb{max-width:46ch;font-size:17px;line-height:1.4;font-weight:700;text-transform:uppercase;letter-spacing:.01em}
+.hero__blurb em{font-style:normal;background:var(--acid);padding:0 5px;box-decoration-break:clone;-webkit-box-decoration-break:clone}
+.hero__meta{margin-left:auto;display:grid;grid-template-columns:repeat(2,minmax(120px,1fr));gap:1px;background:var(--ink);border:var(--rule) solid var(--ink)}
+.hero__meta div{background:var(--paper);padding:9px 11px}
+.hero__meta dt{font-family:var(--mono);font-size:9px;letter-spacing:.2em}
+.hero__meta dd{margin:2px 0 0;font-family:var(--black);font-size:22px;text-transform:uppercase}
+
+/* stickers */
+.sticker{
+  display:inline-block;background:var(--alarm);color:var(--paper);
+  border:var(--rule) solid var(--ink);box-shadow:var(--hard-sm);
+  font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.18em;
+  padding:7px 11px;transform:rotate(-6deg);text-transform:uppercase;
+}
+.sticker--acid{background:var(--acid);color:var(--ink)}
+.sticker--big{font-size:13px;padding:10px 14px;box-shadow:var(--hard);transform:rotate(4deg)}
+
+/* ---------- section chrome ---------- */
+.sec{border-bottom:var(--rule) solid var(--ink);padding:0 0 0}
+.sec__head{
+  display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:end;gap:12px;
+  padding:30px 0 14px;
+}
+.sec__num{
+  font-family:var(--mono);font-size:11px;letter-spacing:.3em;font-weight:700;
+  background:var(--ink);color:var(--acid);padding:5px 9px;display:inline-block;
+}
+.sec__title{
+  margin:8px 0 0;font-family:var(--impact);text-transform:uppercase;font-weight:400;
+  font-size:clamp(34px,6.4vw,86px);line-height:.9;letter-spacing:-.01em;
+}
+.sec__note{font-family:var(--mono);font-size:10px;letter-spacing:.16em;text-align:right;max-width:34ch}
+.reveal{opacity:0;transform:translate(0,22px)}
+.reveal.in{opacity:1;transform:none;transition:opacity .001s,transform .34s var(--ease-cut)}
+
+/* ---------- manifesto ---------- */
+.manifesto{display:grid;grid-template-columns:repeat(12,1fr);gap:0;border-top:var(--rule) solid var(--ink)}
+.manifesto__lead{
+  grid-column:1 / span 7;padding:26px 30px 26px 0;border-right:var(--rule) solid var(--ink);
+}
+.manifesto__lead p{margin:0 0 18px;font-size:clamp(19px,2.1vw,27px);line-height:1.28;font-weight:700;text-transform:uppercase}
+.manifesto__lead p:last-child{margin-bottom:0}
+.manifesto__lead .drop{
+  float:left;font-family:var(--impact);font-size:104px;line-height:.74;
+  margin:6px 14px 0 0;color:var(--paper);
+  -webkit-text-stroke:3px var(--ink);
+}
+.manifesto__side{grid-column:8 / span 5;padding:26px 0 26px 30px;display:flex;flex-direction:column;gap:20px}
+.law{border:var(--rule) solid var(--ink);padding:14px 16px;background:var(--paper);box-shadow:var(--hard-sm);transition:box-shadow .12s var(--ease-cut),transform .12s var(--ease-cut)}
+.law:hover{transform:translate(4px,4px);box-shadow:2px 2px 0 var(--ink)}
+.law h3{margin:0 0 6px;font-family:var(--black);font-size:15px;letter-spacing:-.01em;text-transform:uppercase}
+.law p{margin:0;font-family:var(--mono);font-size:11px;line-height:1.6;letter-spacing:.04em}
+.law b{background:var(--alarm);padding:0 4px}
+@media (max-width:900px){
+  .manifesto{grid-template-columns:1fr}
+  .manifesto__lead{grid-column:1;border-right:0;border-bottom:var(--rule) solid var(--ink);padding-right:0}
+  .manifesto__side{grid-column:1;padding-left:0}
+}
+
+/* ---------- cuts table ---------- */
+.cuts{border-top:var(--rule) solid var(--ink)}
+.cut{
+  display:grid;grid-template-columns:58px minmax(0,1.15fr) minmax(0,1fr) 132px 96px;
+  align-items:center;gap:14px;
+  border-bottom:2px solid var(--ink);padding:14px 6px;text-decoration:none;color:var(--ink);
+  transition:background .001s linear,color .001s linear;
+}
+.cut:hover{background:var(--ink);color:var(--paper)}
+.cut:hover .cut__idx{background:var(--acid);color:var(--ink)}
+.cut:hover .cut__word{color:var(--acid)}
+.cut__idx{font-family:var(--mono);font-size:11px;font-weight:700;background:var(--paper-2);border:2px solid var(--ink);text-align:center;padding:5px 0}
+.cut__name{font-family:var(--black);font-size:clamp(17px,2vw,26px);text-transform:uppercase;letter-spacing:-.02em}
+.cut__word{font-family:var(--impact);font-size:clamp(22px,3.4vw,44px);text-transform:uppercase;line-height:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cut__meta{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-align:right}
+.cut__stat{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-align:right;border:2px solid currentColor;padding:4px 6px}
+.cut[data-hot="1"] .cut__stat{background:var(--alarm);color:var(--paper);border-color:var(--alarm)}
+@media (max-width:900px){
+  .cut{grid-template-columns:44px minmax(0,1fr) 86px}
+  .cut__word,.cut__meta{display:none}
+}
+
+/* ---------- tester ---------- */
+.tester{border-top:var(--rule) solid var(--ink);display:grid;grid-template-columns:minmax(0,1fr) 340px}
+.tester__stage{
+  border-right:var(--rule) solid var(--ink);padding:22px 24px 30px;
+  min-height:340px;display:flex;flex-direction:column;justify-content:center;overflow:hidden;
+}
+.tester__label{font-family:var(--mono);font-size:10px;letter-spacing:.26em;margin-bottom:12px}
+#word{
+  font-family:"Helvetica Neue",Helvetica,Arial,system-ui,sans-serif;
+  font-size:184px;line-height:.9;letter-spacing:-.02em;font-weight:900;
+  text-transform:uppercase;outline:0;caret-color:var(--alarm);
+  max-width:100%;word-break:break-word;
+  text-rendering:optimizeLegibility;
+}
+#word:focus{box-shadow:inset 0 -8px 0 var(--acid)}
+.tester__hint{margin-top:16px;font-family:var(--mono);font-size:10px;letter-spacing:.14em}
+.tester__hint kbd{border:2px solid var(--ink);padding:1px 5px;font-family:var(--mono);background:var(--paper-2)}
+.tester__panel{padding:18px 20px 26px;display:flex;flex-direction:column;gap:22px;background:var(--paper-2)}
+.ctrl__head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px}
+.ctrl__name{font-family:var(--black);font-size:13px;letter-spacing:.06em;text-transform:uppercase}
+.ctrl__val{font-family:var(--mono);font-size:12px;font-weight:700;background:var(--ink);color:var(--acid);padding:2px 7px}
+.slider{
+  position:relative;height:40px;background:var(--paper);
+  border:var(--rule) solid var(--ink);cursor:ew-resize;touch-action:none;
+}
+.slider__ticks{position:absolute;inset:6px 13px;display:flex;justify-content:space-between;align-items:flex-end;pointer-events:none}
+.slider__ticks i{width:2px;height:8px;background:var(--ink);opacity:.45}
+.slider__ticks i:nth-child(5n+1){height:16px;opacity:1}
+.slider__fill{position:absolute;top:0;bottom:0;left:0;background:var(--acid);pointer-events:none}
+.slider__knob{
+  position:absolute;top:-6px;bottom:-6px;width:24px;margin-left:-12px;
+  background:var(--paper);border:var(--rule) solid var(--ink);box-shadow:var(--hard-sm);
+  pointer-events:none;
+}
+.slider__knob::after{content:"";position:absolute;inset:5px 9px;background:var(--ink)}
+.slider:focus-visible{outline:0;box-shadow:0 0 0 4px var(--alarm)}
+.slider[data-live="1"] .slider__knob{background:var(--alarm)}
+.slider__scale{display:flex;justify-content:space-between;margin-top:5px;font-family:var(--mono);font-size:9px;letter-spacing:.1em}
+.readout{
+  border:var(--rule) solid var(--ink);background:var(--ink);color:var(--acid);
+  padding:11px 12px;font-family:var(--mono);font-size:11px;line-height:1.85;letter-spacing:.05em;
+  word-break:break-word;
+}
+.readout b{color:var(--paper);font-weight:400}
+.presets{display:flex;flex-wrap:wrap;gap:8px}
+.btn{
+  font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;
+  background:var(--paper);border:var(--rule) solid var(--ink);padding:8px 11px;cursor:pointer;color:var(--ink);
+  box-shadow:var(--hard-sm);transition:transform .09s var(--ease-cut),box-shadow .09s var(--ease-cut),background .001s linear;
+}
+.btn:hover{background:var(--acid)}
+.btn:active{transform:translate(5px,5px);box-shadow:0 0 0 var(--ink)}
+.btn--alarm{background:var(--alarm)}
+@media (max-width:980px){
+  .tester{grid-template-columns:1fr}
+  .tester__stage{border-right:0;border-bottom:var(--rule) solid var(--ink)}
+  #word{font-size:clamp(54px,17vw,120px)}
+}
+
+/* ---------- glyph stage + grid ---------- */
+.glyphs{border-top:var(--rule) solid var(--ink);display:grid;grid-template-columns:minmax(0,440px) minmax(0,1fr)}
+.stage{
+  border-right:var(--rule) solid var(--ink);position:relative;overflow:hidden;
+  display:flex;flex-direction:column;
+}
+.stage__frame{
+  flex:1;min-height:300px;display:grid;place-items:center;position:relative;
+  background:var(--paper);
+}
+#bigGlyph{
+  font-family:var(--impact);font-size:clamp(150px,26vw,300px);line-height:.86;
+  text-transform:uppercase;
+}
+#bigGlyph.cut-in{animation:hardcut .34s steps(4,end) 1}
+@keyframes hardcut{
+  0%{transform:translate(-18px,14px);clip-path:inset(0 0 62% 0)}
+  25%{transform:translate(12px,-10px);clip-path:inset(48% 0 0 0)}
+  50%{transform:translate(-7px,5px);clip-path:inset(0 0 0 0)}
+  75%{transform:translate(5px,0)}
+  100%{transform:none;clip-path:inset(0 0 0 0)}
+}
+.stage__cross{position:absolute;inset:0;pointer-events:none}
+.stage__bar{
+  display:flex;justify-content:space-between;gap:10px;align-items:center;
+  border-top:var(--rule) solid var(--ink);background:var(--ink);color:var(--paper);padding:9px 12px;
+  font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;
+}
+.stage__bar b{color:var(--acid)}
+.stage__corner{
+  position:absolute;top:0;left:0;background:var(--alarm);color:var(--paper);
+  font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.14em;padding:6px 9px;
+  border-right:var(--rule) solid var(--ink);border-bottom:var(--rule) solid var(--ink);z-index:2;
+}
+.gtable{display:grid;grid-template-columns:repeat(6,minmax(0,1fr))}
+.gcell{
+  aspect-ratio:1/1;border:0;border-right:2px solid var(--ink);border-bottom:2px solid var(--ink);
+  background:var(--paper);color:var(--ink);cursor:pointer;position:relative;
+  font-family:var(--impact);font-size:clamp(24px,4.4vw,46px);text-transform:uppercase;
+  display:grid;place-items:center;padding:0 0 .06em;
+  transition:background .001s linear,color .001s linear,transform .1s var(--ease-cut);
+}
+.gcell:nth-child(6n){border-right:0}
+.gcell:hover{background:var(--ink);color:var(--acid)}
+.gcell:focus-visible{outline:0;box-shadow:inset 0 0 0 4px var(--alarm)}
+.gcell[aria-pressed="true"]{background:var(--acid);color:var(--ink)}
+.gcell[aria-pressed="true"]::after{
+  content:"";position:absolute;right:0;bottom:0;width:0;height:0;
+  border-left:16px solid transparent;border-bottom:16px solid var(--ink);
+}
+.gcell small{
+  position:absolute;left:5px;top:4px;font-family:var(--mono);font-size:8px;letter-spacing:.08em;
+  font-weight:700;opacity:.55;
+}
+@media (max-width:1080px){
+  .glyphs{grid-template-columns:1fr}
+  .stage{border-right:0;border-bottom:var(--rule) solid var(--ink)}
+}
+
+/* ---------- kern lab ---------- */
+.kern{border-top:var(--rule) solid var(--ink);display:grid;grid-template-columns:minmax(0,1fr) minmax(0,320px)}
+.kern__stage{border-right:var(--rule) solid var(--ink);padding:24px;display:flex;flex-direction:column;gap:14px}
+.kern__pair{display:flex;align-items:flex-end;justify-content:center;min-height:200px;font-family:var(--impact);
+  font-size:clamp(90px,17vw,190px);line-height:.86;text-transform:uppercase;background:
+  none;}
+.kern__pair .base{position:relative}
+.kern__pair .adj{margin-left:var(--k,0px);position:relative}
+.kern__pair .adj[data-warn="1"]{color:var(--alarm)}
+.kern__pair .hit{position:absolute;top:0;bottom:0;width:2px;background:var(--alarm);opacity:.5}
+.kern__rows{display:flex;flex-wrap:wrap;gap:8px}
+.kern__side{padding:20px;display:flex;flex-direction:column;gap:16px}
+.kern__side h3{margin:0;font-family:var(--black);font-size:14px;text-transform:uppercase;letter-spacing:.05em}
+.kern__side p{margin:0;font-family:var(--mono);font-size:11px;line-height:1.7}
+.pairs{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.pairs button{
+  border:2px solid var(--ink);background:var(--paper);font-family:var(--impact);font-size:20px;
+  padding:6px 0;cursor:pointer;text-transform:uppercase;
+}
+.pairs button:hover{background:var(--ink);color:var(--acid)}
+.pairs button[aria-pressed="true"]{background:var(--acid)}
+@media (max-width:980px){
+  .kern{grid-template-columns:1fr}
+  .kern__stage{border-right:0;border-bottom:var(--rule) solid var(--ink)}
+}
+
+/* ---------- footer ---------- */
+.foot{background:var(--ink);color:var(--paper)}
+.foot__top{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border-bottom:var(--rule) solid var(--paper)}
+.lic{padding:22px 22px 26px;border-right:var(--rule) solid var(--paper);min-height:230px;display:flex;flex-direction:column;gap:10px}
+.lic:last-child{border-right:0}
+.lic__tag{font-family:var(--mono);font-size:9px;letter-spacing:.26em;color:var(--acid)}
+.lic__name{font-family:var(--impact);font-size:clamp(26px,3.4vw,44px);text-transform:uppercase;line-height:.92;margin:0}
+.lic__body{font-family:var(--mono);font-size:10.5px;line-height:1.75;opacity:.86;margin:0}
+.lic__price{margin-top:auto;font-family:var(--black);font-size:22px}
+.lic__price s{opacity:.45;font-size:13px;font-family:var(--mono)}
+.lic--hot{background:var(--alarm);color:var(--paper)}
+.lic--hot .lic__tag{color:var(--ink)}
+.foot__strip{display:flex;flex-wrap:wrap;gap:8px 24px;justify-content:space-between;padding:14px 0;
+  font-family:var(--mono);font-size:9.5px;letter-spacing:.2em;text-transform:uppercase}
+@media (max-width:900px){
+  .foot__top{grid-template-columns:1fr}
+  .lic{border-right:0;border-bottom:var(--rule) solid var(--paper);min-height:0}
+  .lic:last-child{border-bottom:0}
+}
+
+/* ---------- misc motion ---------- */
+.snap{position:relative}
+.snap::after{
+  content:"";position:absolute;right:-1px;top:-1px;width:14px;height:14px;background:var(--alarm);
+  opacity:0;transition:opacity .1s linear;
+}
+.snap:hover::after{opacity:1}
+
+@media (prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  .ticker__track{animation:none}
+  #bigGlyph.cut-in{animation:none}
+  .reveal{opacity:1;transform:none}
+  .reveal.in{transition:none}
+  .law,.btn{transition:none}
+}
+</style>
+</head>
+<body>
+<!-- visible column + baseline grid, drawn as SVG so nothing is a gradient -->
+<svg class="grid-overlay" aria-hidden="true" focusable="false" preserveAspectRatio="none">
+  <defs>
+    <pattern id="colgrid" x="0" y="0" width="80" height="80" patternUnits="userSpaceOnUse">
+      <path d="M0 0V80" stroke="#0d0d0d" stroke-opacity=".10" stroke-width="1"></path>
+      <path d="M0 0H80" stroke="#0d0d0d" stroke-opacity=".055" stroke-width="1"></path>
+    </pattern>
+    <pattern id="basegrid" x="0" y="0" width="80" height="28" patternUnits="userSpaceOnUse">
+      <path d="M0 0H80" stroke="#0d0d0d" stroke-opacity=".13" stroke-width="1" stroke-dasharray="4 6"></path>
+    </pattern>
+  </defs>
+  <rect width="100%" height="100%" fill="url(#colgrid)"></rect>
+  <rect width="100%" height="100%" fill="url(#basegrid)"></rect>
+</svg>
+<div class="edge-frame" aria-hidden="true"></div>
+
+<div class="shell">
+  <!-- ================= INDEX RAIL ================= -->
+  <aside class="rail">
+    <div class="rail__mark">Strike Foundry — Specimen 003 · MMXIX</div>
+    <ul class="rail__list" id="railList">
+      <li><a href="#manifesto">01</a></li>
+      <li><a href="#cuts">02</a></li>
+      <li><a href="#tester">03</a></li>
+      <li><a href="#glyphs">04</a></li>
+      <li><a href="#kern">05</a></li>
+      <li><a href="#licence">06</a></li>
+    </ul>
+    <div class="rail__foot">RT<br>24</div>
+    <div class="rail__coord" id="coord">X — · Y —</div>
+  </aside>
+
+  <main id="main">
+    <!-- ================= TICKER ================= -->
+    <div class="ticker" aria-hidden="true">
+      <div class="ticker__track" id="tickerTrack">
+        <div class="ticker__seq">
+          <span>GROTESK NO.1</span><i>◆</i><span>STRIKE DISPLAY</span><i>◆</i><span>HEAVY 900</span><i>◆</i>
+          <span>CONDENSED 7</span><i>◆</i><span>MONO 05</span><i>◆</i><span>KERN PAIR AV</span><i>◆</i>
+          <span>WIDE 8</span><i>◆</i><span>OUTLINE CUT</span><i>◆</i><span>STENCIL 3</span><i>◆</i>
+          <span>&amp; = AMPERSAND</span><i>◆</i><span>SS02 FLAT G</span><i>◆</i><span>TABULAR FIGURES</span><i>◆</i>
+        </div>
+        <div class="ticker__seq">
+          <span>GROTESK NO.1</span><i>◆</i><span>STRIKE DISPLAY</span><i>◆</i><span>HEAVY 900</span><i>◆</i>
+          <span>CONDENSED 7</span><i>◆</i><span>MONO 05</span><i>◆</i><span>KERN PAIR AV</span><i>◆</i>
+          <span>WIDE 8</span><i>◆</i><span>OUTLINE CUT</span><i>◆</i><span>STENCIL 3</span><i>◆</i>
+          <span>&amp; = AMPERSAND</span><i>◆</i><span>SS02 FLAT G</span><i>◆</i><span>TABULAR FIGURES</span><i>◆</i>
+        </div>
+      </div>
+    </div>
+
+    <div class="wrap">
+      <!-- ================= MASTHEAD ================= -->
+      <div class="masthead">
+        <div class="masthead__id">STRIKE ⁄ INDEPENDENT TYPE ⁄ ROTTERDAM&nbsp;51.92°N</div>
+        <nav class="masthead__nav" aria-label="Specimen sections">
+          <a href="#manifesto">Manifesto</a>
+          <a href="#cuts">Cuts</a>
+          <a href="#tester">Type&nbsp;Tester</a>
+          <a href="#glyphs">Charset</a>
+          <a href="#kern">Kern&nbsp;Lab</a>
+          <a href="#licence">Licence</a>
+        </nav>
+      </div>
+
+      <!-- ================= HERO ================= -->
+      <header class="hero">
+        <h1 class="mega" aria-label="STRIKE Type Foundry">
+          <span class="mega__row mega__row--1">Strike</span>
+          <span class="mega__row mega__row--2">Founda</span>
+          <span class="mega__row mega__row--3">ndry<span class="glyphTail">03</span></span>
+        </h1>
+        <div class="hero__flagrow">
+          <span class="sticker">Sample — do not distribute</span>
+          <p class="hero__blurb">
+            Six cuts drawn for <em>posters that have to survive rain</em>.
+            Ink traps cut deep. Sidebearings negative. Nothing here is polite.
+          </p>
+          <dl class="hero__meta">
+            <div><dt>Cuts</dt><dd>Six</dd></div>
+            <div><dt>Glyphs</dt><dd>712</dd></div>
+            <div><dt>Styles</dt><dd>18</dd></div>
+            <div><dt>Released</dt><dd>2019—26</dd></div>
+          </dl>
+        </div>
+      </header>
+
+      <!-- ================= 01 MANIFESTO ================= -->
+      <section class="sec" id="manifesto" tabindex="-1">
+        <div class="sec__head reveal">
+          <div>
+            <span class="sec__num">01 / Manifesto</span>
+            <h2 class="sec__title">Rules,<br>not ornaments</h2>
+          </div>
+          <p class="sec__note">Four laws. They are printed on the wall of the studio and nobody has ever taken them down.</p>
+        </div>
+        <div class="manifesto reveal">
+          <div class="manifesto__lead">
+            <p><span class="drop">W</span>e started STRIKE in a print basement with a guillotine that jammed and a scanner held together with tape. Everything we draw since has to pass one test: does it still read from thirty metres, on wet card, at night?</p>
+            <p>A typeface is not a mood board. It is a machine for making a sentence unavoidable. So we remove the parts you were going to admire and keep the parts that do the shouting.</p>
+            <p>The grid is visible because the grid is honest. Cover it up and you are just decorating an argument.</p>
+          </div>
+          <div class="manifesto__side">
+            <div class="law">
+              <h3>Law I — The rule is the decoration</h3>
+              <p>Every border on this page is <b>4px</b>. Every shadow is a flat offset. Zero blur, zero radius, zero gradient. If it can be drawn with a straight edge, draw it with a straight edge.</p>
+            </div>
+            <div class="law">
+              <h3>Law II — Contrast is a volume knob</h3>
+              <p>Paper <b>#F2EFE6</b> against ink <b>#0D0D0D</b>. Acid <b>#D8FF00</b> only where a decision is required. Alarm <b>#FF3B1F</b> only where a decision was wrong.</p>
+            </div>
+            <div class="law">
+              <h3>Law III — Weight before colour</h3>
+              <p>If a headline fails at 900 it will not be saved by a hue. Set it heavier, tighter, closer to the edge of the sheet — then stop.</p>
+            </div>
+            <div class="law">
+              <h3>Law IV — Ship the ugly draft</h3>
+              <p>STRIKE GROTESK NO.1 shipped with <b>three</b> kerning pairs. It has been downloaded <b>41 908</b> times. Polish later. Speak now.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= 02 CUTS ================= -->
+      <section class="sec" id="cuts" tabindex="-1">
+        <div class="sec__head reveal">
+          <div>
+            <span class="sec__num">02 / The Cuts</span>
+            <h2 class="sec__title">Six cuts,<br>one argument</h2>
+          </div>
+          <p class="sec__note">Click any cut to load it into the tester on the next screen. Hover to invert the row.</p>
+        </div>
+        <div class="cuts reveal" id="cutList">
+          <a class="cut" href="#tester" data-weight="900" data-track="-0.035" data-size="184">
+            <span class="cut__idx">01</span>
+            <span class="cut__name">Strike Grotesk No.1 Heavy</span>
+            <span class="cut__word">Unavoidable</span>
+            <span class="cut__meta">900 · 484 glyphs · 2019</span>
+            <span class="cut__stat">€240</span>
+          </a>
+          <a class="cut" href="#tester" data-weight="700" data-track="-0.012" data-size="200">
+            <span class="cut__idx">02</span>
+            <span class="cut__name">Strike Condensed 7</span>
+            <span class="cut__word">Fit&#8209;it&#8209;in</span>
+            <span class="cut__meta">700 · 612 glyphs · 2021</span>
+            <span class="cut__stat">€180</span>
+          </a>
+          <a class="cut" href="#tester" data-weight="400" data-track="0.06" data-size="168" data-hot="1">
+            <span class="cut__idx">03</span>
+            <span class="cut__name">Strike Outline Cut</span>
+            <span class="cut__word">Hollow</span>
+            <span class="cut__meta">400 · 388 glyphs · 2022</span>
+            <span class="cut__stat">New</span>
+          </a>
+          <a class="cut" href="#tester" data-weight="500" data-track="0.02" data-size="176">
+            <span class="cut__idx">04</span>
+            <span class="cut__name">Strike Mono 05</span>
+            <span class="cut__word">Tabular</span>
+            <span class="cut__meta">500 · 540 glyphs · 2020</span>
+            <span class="cut__stat">€150</span>
+          </a>
+          <a class="cut" href="#tester" data-weight="800" data-track="0.11" data-size="150">
+            <span class="cut__idx">05</span>
+            <span class="cut__name">Strike Wide 8</span>
+            <span class="cut__word">Occupying</span>
+            <span class="cut__meta">800 · 466 glyphs · 2023</span>
+            <span class="cut__stat">€260</span>
+          </a>
+          <a class="cut" href="#tester" data-weight="300" data-track="-0.005" data-size="190">
+            <span class="cut__idx">06</span>
+            <span class="cut__name">Strike Stencil 3</span>
+            <span class="cut__word">Crates</span>
+            <span class="cut__meta">300 · 312 glyphs · 2026</span>
+            <span class="cut__stat">Beta</span>
+          </a>
+        </div>
+      </section>
+
+      <!-- ================= 03 TYPE TESTER ================= -->
+      <section class="sec" id="tester" tabindex="-1">
+        <div class="sec__head reveal">
+          <div>
+            <span class="sec__num">03 / Type Tester</span>
+            <h2 class="sec__title">Push it<br>until it breaks</h2>
+          </div>
+          <p class="sec__note">Editable word. Drag the sliders, or focus one and use the arrow keys. Values print live, monospaced.</p>
+        </div>
+        <div class="tester reveal">
+          <div class="tester__stage">
+            <div class="tester__label">Specimen field — click to retype</div>
+            <div id="word" contenteditable="true" spellcheck="false" role="textbox" aria-multiline="false" aria-label="Editable specimen word">Strike</div>
+            <p class="tester__hint">
+              Type anything up to 14 characters · <kbd>↑</kbd><kbd>↓</kbd> on a slider nudges it ·
+              <kbd>Shift</kbd>+drag for fine tracking · double-click the word to reset
+            </p>
+          </div>
+
+          <div class="tester__panel">
+            <div>
+              <div class="ctrl__head"><span class="ctrl__name">Size</span><span class="ctrl__val" id="sizeVal">184 px</span></div>
+              <div class="slider" id="sSize" tabindex="0" role="slider" aria-label="Size in pixels"
+                   aria-valuemin="40" aria-valuemax="280" aria-valuenow="184" aria-valuetext="184 pixels" data-min="40" data-max="280" data-val="184">
+                <span class="slider__fill"></span>
+                <span class="slider__ticks" aria-hidden="true"></span>
+                <span class="slider__knob"></span>
+              </div>
+              <div class="slider__scale"><span>40</span><span>160</span><span>280 px</span></div>
+            </div>
+
+            <div>
+              <div class="ctrl__head"><span class="ctrl__name">Tracking</span><span class="ctrl__val" id="trackVal">−0.020 em</span></div>
+              <div class="slider" id="sTrack" tabindex="0" role="slider" aria-label="Tracking in em"
+                   aria-valuemin="-120" aria-valuemax="300" aria-valuenow="-20" aria-valuetext="minus 0.020 em" data-min="-120" data-max="300" data-val="-20">
+                <span class="slider__fill"></span>
+                <span class="slider__ticks" aria-hidden="true"></span>
+                <span class="slider__knob"></span>
+              </div>
+              <div class="slider__scale"><span>−0.12</span><span>0</span><span>+0.30 em</span></div>
+            </div>
+
+            <div>
+              <div class="ctrl__head"><span class="ctrl__name">Weight</span><span class="ctrl__val" id="weightVal">900</span></div>
+              <div class="slider" id="sWeight" tabindex="0" role="slider" aria-label="Weight"
+                   aria-valuemin="100" aria-valuemax="900" aria-valuenow="900" aria-valuetext="900" data-min="100" data-max="900" data-val="900">
+                <span class="slider__fill"></span>
+                <span class="slider__ticks" aria-hidden="true"></span>
+                <span class="slider__knob"></span>
+              </div>
+              <div class="slider__scale"><span>100</span><span>500</span><span>900</span></div>
+            </div>
+
+            <div class="presets">
+              <button class="btn" type="button" data-preset="poster">Poster</button>
+              <button class="btn" type="button" data-preset="ledger">Ledger</button>
+              <button class="btn" type="button" data-preset="wire">Wire</button>
+              <button class="btn btn--alarm" type="button" data-preset="reset">Reset</button>
+            </div>
+
+            <div class="readout" id="readout" aria-live="polite"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= 04 GLYPHS ================= -->
+      <section class="sec" id="glyphs" tabindex="-1">
+        <div class="sec__head reveal">
+          <div>
+            <span class="sec__num">04 / Charset</span>
+            <h2 class="sec__title">Forty-eight<br>promotable</h2>
+          </div>
+          <p class="sec__note">Click — or focus and press Enter — to promote a glyph to the stage. It arrives with a cut, not a fade.</p>
+        </div>
+        <div class="glyphs reveal">
+          <div class="stage">
+            <div class="stage__frame">
+              <div class="stage__corner" id="stageCorner">A — 0x41</div>
+              <svg class="stage__cross" aria-hidden="true" focusable="false">
+                <line x1="50%" y1="0" x2="50%" y2="100%" stroke="#0d0d0d" stroke-opacity=".22" stroke-width="1" stroke-dasharray="5 7"></line>
+                <line x1="0" y1="50%" x2="100%" y2="50%" stroke="#0d0d0d" stroke-opacity=".22" stroke-width="1" stroke-dasharray="5 7"></line>
+                <rect x="10" y="10" width="26" height="26" fill="none" stroke="#0d0d0d" stroke-width="3"></rect>
+                <rect x="10" y="10" width="26" height="26" fill="#d8ff00" opacity="0"></rect>
+              </svg>
+              <div id="bigGlyph">A</div>
+            </div>
+            <div class="stage__bar">
+              <span>Slot <b id="stageSlot">01 / 48</b></span>
+              <span>Decimal <b id="stageDec">65</b></span>
+              <span>Advance <b id="stageAdv">712</b></span>
+            </div>
+          </div>
+          <div class="gtable" id="gtable" role="group" aria-label="Glyph grid, 6 columns by 8 rows"></div>
+        </div>
+      </section>
+
+      <!-- ================= 05 KERN LAB ================= -->
+      <section class="sec" id="kern" tabindex="-1">
+        <div class="sec__head reveal">
+          <div>
+            <span class="sec__num">05 / Kern Lab</span>
+            <h2 class="sec__title">Two letters,<br>one fight</h2>
+          </div>
+          <p class="sec__note">Adjust the second letter. Values are recorded to the studio ledger — the worst offenders get fixed first.</p>
+        </div>
+        <div class="kern reveal">
+          <div class="kern__stage">
+            <div class="kern__pair" id="kernPair">
+              <span class="base" id="kBase">A</span><span class="adj" id="kAdj">V</span>
+            </div>
+            <div class="kern__rows">
+              <button class="btn" type="button" id="kOut">Tighten −4</button>
+              <button class="btn" type="button" id="kIn">Open +4</button>
+              <button class="btn" type="button" id="kZero">Zero</button>
+              <span class="mono" style="align-self:center" id="kLedger">PAIR AV · −12 px · COLLISION</span>
+            </div>
+          </div>
+          <div class="kern__side">
+            <h3>Pairs on the bench</h3>
+            <div class="pairs" id="pairs" role="group" aria-label="Kerning pair selector"></div>
+            <p>Every STRIKE cut ships with 1 240 pairs. We kern by printing the pair at 400&nbsp;% and taping it to the wall. If you can read it from the door, the pair is done.</p>
+            <p class="mono">Ledger stamp: 2026‑09‑01 14:22 CET</p>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- ================= 06 LICENCE / FOOTER ================= -->
+    <footer class="foot" id="licence">
+      <div class="wrap">
+        <div class="sec__head" style="border:0">
+          <div>
+            <span class="sec__num" style="background:var(--acid);color:var(--ink)">06 / Licence</span>
+            <h2 class="sec__title" style="color:var(--paper)">Buy it,<br>use it loudly</h2>
+          </div>
+          <p class="sec__note" style="color:var(--acid)">Three blocks, no asterisks. Everything below is the whole legal text — we could not afford more pages.</p>
+        </div>
+      </div>
+      <div class="wrap"><div class="foot__top">
+        <div class="lic">
+          <span class="lic__tag">Block A — Desktop</span>
+          <h3 class="lic__name">Desk</h3>
+          <p class="lic__body">Five seats. Print without page limits. Logos, posters, packaging, and anything you will bolt to a building. No resale of the outlines, no re-hosting the files, no letting a client’s intern keep a copy.</p>
+          <p class="lic__price">€180 <s>€240</s> <span class="mono">/ 5 seats</span></p>
+        </div>
+        <div class="lic lic--hot">
+          <span class="lic__tag">Block B — Web</span>
+          <h3 class="lic__name">Screen</h3>
+          <p class="lic__body">Self-host the WOFF2. Unlimited pages on one domain, 2 000 000 monthly impressions, subsetting allowed and encouraged. We do not serve fonts and we will never ask for your analytics login.</p>
+          <p class="lic__price">€210 <span class="mono">/ domain</span></p>
+        </div>
+        <div class="lic">
+          <span class="lic__tag">Block C — Everything</span>
+          <h3 class="lic__name">Whole<br>Foundry</h3>
+          <p class="lic__body">All six cuts, all future cuts for as long as STRIKE exists, perpetual, unlimited seats, app and broadcast included. One invoice. Written on paper, signed with a pen, scanned badly, as tradition requires.</p>
+          <p class="lic__price">€1 450 <span class="mono">/ perpetual</span></p>
+        </div>
+      </div></div>
+      <div class="wrap">
+        <div class="foot__strip">
+          <span>© 2019—2026 Strike Foundry BV · Rotterdam</span>
+          <span>Set in Strike Grotesk No.1 &amp; Mono 05</span>
+          <span>Institutions: write to <b>desk@strike.type</b></span>
+          <span>No cookies · No trackers · 1 file</span>
+        </div>
+      </div>
+    </footer>
+  </main>
+</div>
+<script>
+(function(){
+  "use strict";
+  var reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  /* ------------------------------------------------------------------
+     1. Scroll reveals (hard cut in, never a soft fade-up over long distance)
+     ------------------------------------------------------------------ */
+  var revealables = [].slice.call(document.querySelectorAll(".reveal"));
+  if ("IntersectionObserver" in window && !reduced){
+    var io = new IntersectionObserver(function(entries){
+      entries.forEach(function(e){
+        if (e.isIntersecting){ e.target.classList.add("in"); io.unobserve(e.target); }
+      });
+    }, { rootMargin:"0px 0px -8% 0px", threshold:0.08 });
+    revealables.forEach(function(el){ io.observe(el); });
+  } else {
+    revealables.forEach(function(el){ el.classList.add("in"); });
+  }
+
+  /* ------------------------------------------------------------------
+     2. Sticky index rail: scrollspy + coordinate readout
+     ------------------------------------------------------------------ */
+  var railLinks = [].slice.call(document.querySelectorAll("#railList a"));
+  var sections = railLinks.map(function(a){
+    return document.querySelector(a.getAttribute("href"));
+  });
+
+  function spy(){
+    var probe = window.scrollY + window.innerHeight * 0.28;
+    var active = -1;
+    sections.forEach(function(sec, i){
+      if (!sec) return;
+      var top = sec.offsetTop, bottom = top + sec.offsetHeight;
+      if (probe >= top && probe < bottom) active = i;
+    });
+    var doc = document.documentElement;
+    if (window.innerHeight + window.scrollY >= doc.scrollHeight - 4) active = sections.length - 1;
+    railLinks.forEach(function(a, i){
+      if (i === active) a.setAttribute("aria-current","true");
+      else a.removeAttribute("aria-current");
+    });
+  }
+
+  var coord = document.getElementById("coord");
+  var pending = false;
+  function onScrollOrMove(){
+    if (pending) return;
+    pending = true;
+    requestAnimationFrame(function(){ pending = false; spy(); });
+  }
+  window.addEventListener("scroll", onScrollOrMove, { passive:true });
+  window.addEventListener("resize", onScrollOrMove);
+  document.addEventListener("pointermove", function(ev){
+    var px = Math.round(ev.clientX * 0.75), py = Math.round(ev.clientY * 0.75);
+    coord.textContent = "X " + px + " · Y " + py + " PT";
+  }, { passive:true });
+  spy();
+
+  /* ------------------------------------------------------------------
+     3. Brutalist sliders — custom drawn, pointer + keyboard driven
+     ------------------------------------------------------------------ */
+  var STEPS = { sSize:1, sTrack:2, sWeight:10 };
+  var sliderState = { size:184, track:-20, weight:900 };
+  var sliders = {};
+
+  function Slider(el, key, onInput){
+    this.el = el;
+    this.key = key;
+    this.min = parseFloat(el.getAttribute("data-min"));
+    this.max = parseFloat(el.getAttribute("data-max"));
+    this.step = STEPS[el.id] || 1;
+    this.val = parseFloat(el.getAttribute("data-val"));
+    this.onInput = onInput;
+    this.fill = el.querySelector(".slider__fill");
+    this.knob = el.querySelector(".slider__knob");
+    var ticks = el.querySelector(".slider__ticks");
+    for (var i = 0; i < 25; i++){ ticks.appendChild(document.createElement("i")); }
+    this.bind();
+    this.render();
+  }
+  Slider.prototype.render = function(){
+    var p = (this.val - this.min) / (this.max - this.min);
+    this.fill.style.width = (p * 100).toFixed(3) + "%";
+    this.knob.style.left = (p * 100).toFixed(3) + "%";
+    this.el.setAttribute("aria-valuenow", String(this.val));
+    this.el.setAttribute("aria-valuetext", this.text());
+    sliderState[this.key] = this.val;
+    this.onInput();
+  };
+  Slider.prototype.text = function(){
+    if (this.key === "size") return this.val + " pixels";
+    if (this.key === "weight") return "weight " + this.val;
+    return (this.val / 1000).toFixed(3) + " em";
+  };
+  Slider.prototype.set = function(v, silent){
+    var snapped = Math.round((v - this.min) / this.step) * this.step + this.min;
+    snapped = Math.min(this.max, Math.max(this.min, snapped));
+    if (snapped === this.val) return;
+    this.val = snapped;
+    this.render();
+    if (silent !== true) this.el.setAttribute("data-live","1");
+  };
+  Slider.prototype.fromClientX = function(cx, fine){
+    var r = this.el.getBoundingClientRect();
+    var p = (cx - r.left) / r.width;
+    p = Math.max(0, Math.min(1, p));
+    var raw = this.min + p * (this.max - this.min);
+    if (fine){
+      // fine mode: half a normal step, so tracking can be nudged a hair at a time
+      this.set(this.min + (raw - this.min) * 0.5, true);
+    } else {
+      this.set(raw, true);
+    }
+  };
+  Slider.prototype.bind = function(){
+    var self = this, dragging = false;
+    this.el.addEventListener("pointerdown", function(ev){
+      dragging = true;
+      self.el.setAttribute("data-live","1");
+      try { self.el.setPointerCapture(ev.pointerId); } catch(err){ /* capture optional */ }
+      self.fromClientX(ev.clientX, ev.shiftKey);
+      ev.preventDefault();
+    });
+    this.el.addEventListener("pointermove", function(ev){
+      if (!dragging) return;
+      self.fromClientX(ev.clientX, ev.shiftKey);
+    });
+    function end(){
+      dragging = false;
+      self.el.removeAttribute("data-live");
+    }
+    self.el.addEventListener("pointerup", end);
+    self.el.addEventListener("pointercancel", end);
+    self.el.addEventListener("lostpointercapture", end);
+    self.el.addEventListener("keydown", function(ev){
+      var big = self.step * 10, handled = true;
+      switch (ev.key){
+        case "ArrowRight": case "ArrowUp":   self.set(self.val + self.step); break;
+        case "ArrowLeft":  case "ArrowDown": self.set(self.val - self.step); break;
+        case "PageUp":     self.set(self.val + big); break;
+        case "PageDown":   self.set(self.val - big); break;
+        case "Home":       self.set(self.min); break;
+        case "End":        self.set(self.max); break;
+        default: handled = false;
+      }
+      if (handled) ev.preventDefault();
+    });
+  };
+
+  /* ------------------------------------------------------------------
+     4. The type tester
+     ------------------------------------------------------------------ */
+  var word      = document.getElementById("word");
+  var sizeVal   = document.getElementById("sizeVal");
+  var trackVal  = document.getElementById("trackVal");
+  var weightVal = document.getElementById("weightVal");
+  var readout   = document.getElementById("readout");
+  var DEFAULT_WORD = "Strike";
+  var MAXCH = 14;
+
+  function signedEm(milli){
+    var v = milli / 1000;
+    var s = Math.abs(v).toFixed(3);
+    if (v < 0) return "−" + s;
+    if (v > 0) return "+" + s;
+    return " 0.000";
+  }
+
+  function applyTester(){
+    var s = sliderState.size, t = sliderState.track, w = sliderState.weight;
+    word.style.fontSize = s + "px";
+    word.style.letterSpacing = (t / 1000) + "em";
+    word.style.fontWeight = String(w);
+    // system families only, so fake the top of the weight axis with a stroke
+    var stroke = w > 700 ? (((w - 700) / 200) * 0.019) : 0;
+    word.style.webkitTextStroke = stroke > 0 ? stroke.toFixed(4) + "em currentColor" : "0em";
+    sizeVal.textContent   = s + " px";
+    trackVal.textContent  = signedEm(t) + " em";
+    weightVal.textContent = String(w);
+
+    var text = word.textContent || "";
+    var wpx = Math.round(word.getBoundingClientRect().width);
+    var per = text.length ? Math.round(wpx / text.length) : 0;
+    var line = "SIZE " + s + "PX" +
+               " · TRACK " + signedEm(t) + "EM" +
+               " · WEIGHT " + w +
+               " · CHARS " + text.length +
+               " · RUN " + wpx + "PX" +
+               " · AVG " + per + "PX" +
+               "\n" +
+               "WORD \"" + (text.toUpperCase() || "—") + "\"" +
+               " · FAMILY SYSTEM GROTESK" +
+               " · STROKE " + (stroke > 0 ? stroke.toFixed(3) + "EM" : "0") +
+               " · STATUS " + (t < -60 ? "COLLIDE" : w >= 800 && s < 90 ? "TOO HEAVY" : "OK");
+    readout.textContent = line;
+  }
+
+  sliders.size   = new Slider(document.getElementById("sSize"),   "size",   applyTester);
+  sliders.track  = new Slider(document.getElementById("sTrack"),  "track",  applyTester);
+  sliders.weight = new Slider(document.getElementById("sWeight"), "weight", applyTester);
+
+  function setSliders(o){
+    if (typeof o.size === "number")   sliders.size.set(o.size);
+    if (typeof o.track === "number")  sliders.track.set(o.track);
+    if (typeof o.weight === "number") sliders.weight.set(o.weight);
+    applyTester();
+  }
+
+  word.addEventListener("beforeinput", function(ev){
+    var isInsert = (ev.inputType || "").indexOf("insert") === 0;
+    if (!isInsert) return;
+    var len = (word.textContent || "").length;
+    var added = (ev.data || "").length;
+    if (ev.isComposing) return;
+    if (len + added > MAXCH) ev.preventDefault();
+  });
+  word.addEventListener("paste", function(ev){
+    ev.preventDefault();
+    var txt = (ev.clipboardData || window.clipboardData).getData("text") || "";
+    txt = txt.replace(/\s+/g, "").slice(0, MAXCH);
+    if (!txt) return;
+    var sel = window.getSelection();
+    if (!sel || !sel.rangeCount) return;
+    sel.deleteFromDocument();
+    if ((word.textContent || "").length + txt.length > MAXCH){
+      txt = txt.slice(0, Math.max(0, MAXCH - (word.textContent || "").length));
+    }
+    word.appendChild(document.createTextNode(txt));
+    applyTester();
+  });
+  word.addEventListener("input", applyTester);
+  word.addEventListener("blur", function(){
+    if (!(word.textContent || "").trim()){ word.textContent = DEFAULT_WORD; }
+    applyTester();
+  });
+  word.addEventListener("dblclick", function(){
+    word.textContent = DEFAULT_WORD;
+    applyTester();
+  });
+
+  var PRESETS = {
+    poster:  { size:264, track:-70, weight:900 },
+    ledger:  { size:96,  track:18,  weight:500 },
+    wire:    { size:150, track:190, weight:300 },
+    reset:   { size:184, track:-20, weight:900 }
+  };
+  [].slice.call(document.querySelectorAll("[data-preset]")).forEach(function(btn){
+    btn.addEventListener("click", function(){
+      var p = PRESETS[btn.getAttribute("data-preset")];
+      if (p) setSliders(p);
+    });
+  });
+
+  /* cut rows load their own numbers into the tester, then the anchor jumps */
+  [].slice.call(document.querySelectorAll(".cut")).forEach(function(row){
+    row.addEventListener("click", function(){
+      setSliders({
+        size:   parseFloat(row.getAttribute("data-size")),
+        track:  Math.round(parseFloat(row.getAttribute("data-track")) * 1000),
+        weight: parseFloat(row.getAttribute("data-weight"))
+      });
+    });
+  });
+
+  /* ------------------------------------------------------------------
+     5. Glyph grid — 6 x 8, promotion to the stage is a hard cut
+     ------------------------------------------------------------------ */
+  var GLYPHS = ("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789").split("")
+    .concat(["&","@","?","!","%","#","*","+","/","§","¶","†"]);
+  var NAMES = {
+    "&":"AMPERSAND","@":"AT","?":"QUESTION","!":"EXCLAM","%":"PERCENT","#":"NUMBER","*":"ASTERISK",
+    "+":"PLUS","/":"SLASH","§":"SECTION","¶":"PARA","†":"DAGGER","0":"ZERO","1":"ONE","2":"TWO",
+    "3":"THREE","4":"FOUR","5":"FIVE","6":"SIX","7":"SEVEN","8":"EIGHT","9":"NINE"
+  };
+  var gtable    = document.getElementById("gtable");
+  var bigGlyph  = document.getElementById("bigGlyph");
+  var stageSlot = document.getElementById("stageSlot");
+  var stageDec  = document.getElementById("stageDec");
+  var stageAdv  = document.getElementById("stageAdv");
+  var stageCorner = document.getElementById("stageCorner");
+  var frag = document.createDocumentFragment();
+
+  function pad(n){ return (n < 10 ? "0" : "") + n; }
+
+  function promote(cell){
+    var ch = cell.getAttribute("data-glyph");
+    var idx = parseInt(cell.getAttribute("data-idx"), 10);
+    var code = ch.charCodeAt(0);
+    [].slice.call(gtable.children).forEach(function(c){ c.setAttribute("aria-pressed","false"); });
+    cell.setAttribute("aria-pressed","true");
+    bigGlyph.textContent = ch;
+    bigGlyph.classList.remove("cut-in");
+    void bigGlyph.offsetWidth;              // restart the cut, no fade
+    if (!reduced) bigGlyph.classList.add("cut-in");
+    var name = NAMES[ch] || ("LETTER " + ch);
+    stageSlot.textContent   = pad(idx + 1) + " / 48";
+    stageDec.textContent    = String(code);
+    stageAdv.textContent    = String(512 + ((code * 37) % 401));
+    stageCorner.textContent = name + " — 0x" + code.toString(16).toUpperCase();
+  }
+
+  GLYPHS.forEach(function(ch, i){
+    var b = document.createElement("button");
+    b.type = "button";
+    b.className = "gcell";
+    b.setAttribute("data-glyph", ch);
+    b.setAttribute("data-idx", String(i));
+    b.setAttribute("aria-pressed", i === 0 ? "true" : "false");
+    b.setAttribute("aria-label", "Promote glyph " + (NAMES[ch] || ch) + " to the stage");
+    var s = document.createElement("small");
+    s.textContent = pad(i + 1);
+    b.appendChild(s);
+    b.appendChild(document.createTextNode(ch));
+    b.addEventListener("click", function(){ promote(b); });
+    frag.appendChild(b);
+  });
+  gtable.appendChild(frag);
+
+  /* arrow-key roaming around the grid, like a catalog drawer */
+  gtable.addEventListener("keydown", function(ev){
+    var cell = ev.target.closest ? ev.target.closest(".gcell") : null;
+    if (!cell) return;
+    var i = parseInt(cell.getAttribute("data-idx"), 10), n = -1;
+    if (ev.key === "ArrowRight") n = i + 1;
+    else if (ev.key === "ArrowLeft") n = i - 1;
+    else if (ev.key === "ArrowDown") n = i + 6;
+    else if (ev.key === "ArrowUp") n = i - 6;
+    if (n >= 0 && n < GLYPHS.length){
+      gtable.children[n].focus();
+      ev.preventDefault();
+    }
+  });
+
+  /* ------------------------------------------------------------------
+     6. Kern lab
+     ------------------------------------------------------------------ */
+  var PAIRS = [["A","V",-16],["A","W",-13],["L","T",-22],["R","Y",-11],
+               ["T","a",-18],["V","a",-15],["P","a",-9],["F",".",-26]];
+  var kBase = document.getElementById("kBase");
+  var kAdj  = document.getElementById("kAdj");
+  var kLedger = document.getElementById("kLedger");
+  var pairsBox = document.getElementById("pairs");
+  var current = 0;
+
+  function verdict(v){
+    if (v <= -20) return "COLLISION";
+    if (v <= -10) return "TIGHT";
+    if (v < 0)    return "NEGGED";
+    if (v === 0)  return "ZERO";
+    if (v <= 12)  return "AIRY";
+    return "TOO FAR";
+  }
+  function drawKern(){
+    var p = PAIRS[current];
+    kBase.textContent = p[0];
+    kAdj.textContent  = p[1];
+    kAdj.style.setProperty("--k", p[2] + "px");
+    if (p[2] <= -20) kAdj.setAttribute("data-warn","1"); else kAdj.removeAttribute("data-warn");
+    var sign = p[2] < 0 ? "−" : (p[2] > 0 ? "+" : "±");
+    kLedger.textContent = "PAIR " + p[0] + p[1] + " · " + sign + Math.abs(p[2]) + " PX · " + verdict(p[2]);
+    [].slice.call(pairsBox.children).forEach(function(b, i){
+      b.setAttribute("aria-pressed", i === current ? "true" : "false");
+    });
+  }
+  PAIRS.forEach(function(p, i){
+    var b = document.createElement("button");
+    b.type = "button";
+    b.textContent = p[0] + p[1];
+    b.setAttribute("aria-pressed","false");
+    b.addEventListener("click", function(){ current = i; drawKern(); });
+    pairsBox.appendChild(b);
+  });
+  function nudge(d){
+    var p = PAIRS[current];
+    p[2] = Math.max(-40, Math.min(40, p[2] + d));
+    drawKern();
+  }
+  document.getElementById("kOut").addEventListener("click", function(){ nudge(-4); });
+  document.getElementById("kIn").addEventListener("click",  function(){ nudge(4); });
+  document.getElementById("kZero").addEventListener("click", function(){ PAIRS[current][2] = 0; drawKern(); });
+  document.getElementById("kernPair").addEventListener("wheel", function(ev){
+    nudge(ev.deltaY > 0 ? -3 : 3);
+    ev.preventDefault();
+  }, { passive:false });
+  drawKern();
+
+  applyTester();
+})();
+</script>
+</body>
+</html>

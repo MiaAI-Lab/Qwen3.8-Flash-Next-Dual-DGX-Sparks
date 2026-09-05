@@ -1,0 +1,94 @@
+--- qsa.py.orig	2026-09-02 15:29:40.837325491 +0300
++++ qsa.py	2026-09-02 15:29:40.845794634 +0300
+@@ -14,6 +14,46 @@
+ _LOGITS_WORKSPACE_BYTES = 128 * 1024 * 1024
+ _TOPK_WORKSPACE_BYTES = 1024 * 1024
+ 
++# ---------------------------------------------------------------------------
++# [qsa_gb10 overlay] device-specific launch profiles.
++#
++# Upstream tile tables were tuned on GB300 (160 SMs). A DGX Spark GB10 has 48 SMs,
++# so the decode profile (block_n=16, 64 split-K partials, 4 warps) launches ~5x more
++# CTAs than the machine can run concurrently and then pays a merge kernel over 64
++# partials. Selected by VLLM_QSA_PROFILE={stock,gb10} or a JSON file from
++# bench_qsa_kernels.py via VLLM_QSA_PROFILE_JSON.
++# ---------------------------------------------------------------------------
++import json as _json
++import os as _os
++
++# (block_n, target_splits, num_warps) for the sparse GQA kernel, keyed by the same
++# base_programs buckets used below; and (tiles_per_program_small, tiles_per_program_large)
++# for the MQA scorer.
++GB10_PROFILES = {
++    "sparse": {
++        "small": (32, 16, 4),  # base_programs <= small_profile_limit  (decode, 1-2 reqs)
++        "lt32": (32, 8, 4),    # base_programs < 32                     (decode, up to 8 reqs)
++        "le256": (64, 4, 2),
++        "le512": (64, 2, 2),
++        "large": (64, 1, 2),
++    },
++    "mqa": {"tiles_small": 2, "tiles_large": 8, "num_warps": 2},
++}
++
++
++def _load_qsa_profile():
++    path = _os.environ.get("VLLM_QSA_PROFILE_JSON", "").strip()
++    if path:
++        with open(path) as fh:
++            return _json.load(fh)
++    name = _os.environ.get("VLLM_QSA_PROFILE", "stock").strip().lower()
++    if name == "gb10":
++        return GB10_PROFILES
++    return None
++
++
++_QSA_PROFILE = _load_qsa_profile()
++
+ 
+ @triton.jit
+ def _qsa_mqa_paged_kernel(
+@@ -642,6 +682,11 @@
+     MAX_N = max(16, triton.next_power_of_2(q.shape[1]))
+     # Tuned on GB300: larger row batches provide enough parallelism to reuse Q.
+     tiles_per_program = 1 if q.shape[0] <= 32 else 8
++    mqa_warps = 2
++    if _QSA_PROFILE is not None and "mqa" in _QSA_PROFILE:  # [qsa_gb10 overlay]
++        _m = _QSA_PROFILE["mqa"]
++        tiles_per_program = _m["tiles_small"] if q.shape[0] <= 32 else _m["tiles_large"]
++        mqa_warps = int(_m.get("num_warps", 2))
+     _qsa_mqa_paged_kernel[
+         (q.shape[0], triton.cdiv(columns, BLOCK_N * tiles_per_program))
+     ](
+@@ -677,7 +722,7 @@
+         STAGES=2,
+         MAX_N=MAX_N,
+         COMPRESS_RATIO=compress_ratio,
+-        num_warps=2,
++        num_warps=mqa_warps,
+     )
+     return logits, visible_blocks
+ 
+@@ -863,14 +908,23 @@
+     # Narrow tiles favor decode; wide tiles improve throughput for prefill.
+     if base_programs <= small_profile_limit:
+         block_n, target_splits, partial_warps = 16, 64, 4
++        _bucket = "small"
+     elif base_programs < 32:
+         block_n, target_splits, partial_warps = 16, 32, 4
++        _bucket = "lt32"
+     elif base_programs <= 256:
+         block_n, target_splits, partial_warps = 64, 8, 2
++        _bucket = "le256"
+     elif base_programs <= 512:
+         block_n, target_splits, partial_warps = 64, 4, 2
++        _bucket = "le512"
+     else:
+         block_n, target_splits, partial_warps = 64, 1, 2
++        _bucket = "large"
++    if _QSA_PROFILE is not None and "sparse" in _QSA_PROFILE:  # [qsa_gb10 overlay]
++        block_n, target_splits, partial_warps = (
++            int(v) for v in _QSA_PROFILE["sparse"][_bucket]
++        )
+ 
+     num_tiles = triton.cdiv(logical_indices.shape[1], block_n)
+     # Avoid empty splits when the selection width is smaller than the profile.

@@ -1,0 +1,73 @@
+<!doctype html>
+<!--
+  Layout probe for the 100-html gallery. Loads a page in a sized iframe and
+  reports real horizontal overflow plus paint signals.
+
+  Usage (from html/):
+    ~/.cache/ms-playwright/chromium-1208/chrome-linux/chrome \
+      --headless --disable-gpu --no-sandbox --allow-file-access-from-files \
+      --virtual-time-budget=20000 --window-size=520,1000 \
+      --dump-dom "file://$PWD/probe.html#file://$PWD/100-html/011-luxury-chrono.html|390" \
+      2>/dev/null | grep -o 'METRICS {.*}' | tail -1
+
+  Emits: METRICS {"iw":390,"docScroll":531,"overflow":141,"culprits":[...]}
+  overflow > 2px is a responsiveness failure; culprits name the offending elements.
+-->
+<meta charset="utf-8">
+<style>html,body{margin:0;font:12px/1.3 monospace}iframe{border:0;display:block}</style>
+<body><iframe id="f"></iframe><pre id="out">pending</pre>
+<script>
+var parts = decodeURIComponent(location.hash.slice(1)).split('|');
+var W = parseInt(parts[1] || '390', 10);
+var f = document.getElementById('f');
+f.style.width = W + 'px';
+f.style.height = '1000px';
+
+function report(txt) {
+  document.getElementById('out').textContent = txt;
+  document.title = txt.slice(0, 200);
+}
+
+function measure() {
+  var d, w;
+  try { d = f.contentDocument; w = f.contentWindow; } catch (e) { return report('METRICS_ERR ' + e.message); }
+  if (!d || !d.body) { return setTimeout(measure, 200); }
+  var iw = w.innerWidth;
+  var se = d.scrollingElement || d.documentElement;
+  var over = se.scrollWidth - iw;
+  var culprits = [];
+  var all = d.querySelectorAll('body *');
+  for (var i = 0; i < all.length; i++) {
+    var e = all[i], r, p, clipped = false;
+    var cs = w.getComputedStyle(e);
+    if (cs.position === 'fixed') continue;
+    for (p = e; p && p !== d.body; p = p.parentElement) {
+      var c = w.getComputedStyle(p).overflowX;
+      if (c === 'hidden' || c === 'clip' || c === 'auto' || c === 'scroll') { clipped = true; break; }
+    }
+    if (clipped) continue;
+    r = e.getBoundingClientRect();
+    if (!r.width && !r.height) continue;
+    var spill = Math.round(r.right - iw);
+    if (spill > 4) {
+      var cls = (e.className && e.className.toString) ? e.className.toString().split(' ')[0] : '';
+      culprits.push([spill, e.tagName.toLowerCase() + (cls ? '.' + cls : '') + (e.id ? '#' + e.id : ''), Math.round(r.width)]);
+    }
+  }
+  culprits.sort(function (a, b) { return b[0] - a[0]; });
+  var text = (d.body.innerText || '').replace(/\s+/g, ' ');
+  report('METRICS ' + JSON.stringify({
+    iw: iw,
+    docScroll: se.scrollWidth,
+    overflow: over,
+    culprits: culprits.slice(0, 4),
+    chars: text.length,
+    canvases: d.querySelectorAll('canvas').length,
+    svgs: d.querySelectorAll('svg').length
+  }));
+}
+
+f.addEventListener('load', function () { setTimeout(measure, 400); });
+f.src = parts[0];
+setTimeout(function () { if (!/METRICS \{/.test(document.getElementById('out').textContent)) measure(); }, 3000);
+</script>

@@ -1,0 +1,1175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kinetic Type Scramble — A Pointer-Driven Letterform Instrument</title>
+<meta name="description" content="A full-bleed kinetic typography instrument: sculpt, scramble, wave, shatter and elastic-drag a single giant word with the pointer.">
+<style>
+/* ============================================================
+   KINETIC TYPE SCRAMBLE
+   Palette: stage #08090b, ink #f2f3f5, hairline #22252b,
+   signal #d8d9dd, mute #6b7078, accent ember #ff5a2c
+   ============================================================ */
+:root{
+  --stage:#08090b;
+  --stage-2:#0b0d10;
+  --ink:#f2f3f5;
+  --ink-dim:#9a9ea6;
+  --mute:#62666e;
+  --hair:#22252b;
+  --hair-2:#171a1f;
+  --panel:rgba(12,13,16,.82);
+  --ember:#ff5a2c;
+  --ember-soft:rgba(255,90,44,.16);
+  --cool:#8fb4d8;
+  --heavy:"Impact","Haettenschweiler","Arial Narrow Bold","Arial Black","Helvetica Neue",system-ui,sans-serif;
+  --black:"Arial Black","Helvetica Neue",Impact,system-ui,sans-serif;
+  --light:"Helvetica Neue","Segoe UI Light",system-ui,"Arial Narrow",sans-serif;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Courier New",monospace;
+  --bar-h:58px;
+  --strip-h:96px;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;
+  background:var(--stage);
+  color:var(--ink);
+  font-family:var(--light);
+  overflow:hidden;
+  -webkit-font-smoothing:antialiased;
+  text-rendering:optimizeLegibility;
+  cursor:crosshair;
+  touch-action:none;
+}
+button,input{font:inherit;color:inherit;background:none;border:0;margin:0}
+::selection{background:var(--ember);color:#0a0a0a}
+
+/* ---------- backdrop ---------- */
+#grid{
+  position:fixed;inset:0;pointer-events:none;z-index:0;
+  background-image:
+    linear-gradient(to right,rgba(255,255,255,.030) 1px,transparent 1px),
+    linear-gradient(to bottom,rgba(255,255,255,.030) 1px,transparent 1px);
+  background-size:var(--gs,64px) var(--gs,64px);
+  mask-image:radial-gradient(ellipse 78% 68% at 50% 46%,#000 20%,transparent 82%);
+  -webkit-mask-image:radial-gradient(ellipse 78% 68% at 50% 46%,#000 20%,transparent 82%);
+  transition:background-size .5s ease;
+}
+#vignette{
+  position:fixed;inset:0;pointer-events:none;z-index:1;
+  background:
+    radial-gradient(circle at var(--px,50%) var(--py,50%),rgba(255,90,44,.075),transparent 34%),
+    radial-gradient(ellipse 120% 90% at 50% 50%,transparent 40%,rgba(0,0,0,.72) 100%);
+}
+#scan{
+  position:fixed;inset:0;pointer-events:none;z-index:6;opacity:.30;
+  background:repeating-linear-gradient(to bottom,rgba(255,255,255,.028) 0 1px,transparent 1px 3px);
+  mix-blend-mode:overlay;
+}
+#crosshair{
+  position:fixed;z-index:5;pointer-events:none;
+  width:var(--cs,340px);height:var(--cs,340px);
+  left:0;top:0;margin:calc(var(--cs,340px) / -2) 0 0 calc(var(--cs,340px) / -2);
+  border:1px solid rgba(255,90,44,.16);
+  border-radius:50%;
+  opacity:0;transition:opacity .35s ease;
+  background:radial-gradient(circle,rgba(255,90,44,.055),transparent 62%);
+}
+#crosshair::before,#crosshair::after{
+  content:"";position:absolute;background:rgba(255,90,44,.13);
+}
+#crosshair::before{left:50%;top:-14px;bottom:-14px;width:1px}
+#crosshair::after{top:50%;left:-14px;right:-14px;height:1px}
+body.live #crosshair{opacity:1}
+body.mode-shatter #crosshair,body.mode-elastic #crosshair{opacity:0}
+
+/* ---------- stage / word ---------- */
+#stage{
+  position:fixed;inset:0;z-index:2;
+  display:flex;align-items:center;justify-content:center;
+  padding:0 3vw;
+}
+#word{
+  display:flex;align-items:baseline;justify-content:center;
+  font-family:var(--heavy);
+  font-size:clamp(3.1rem,22vw,20rem);
+  line-height:.86;
+  letter-spacing:-.02em;
+  white-space:nowrap;
+  max-width:100%;
+  user-select:none;
+  perspective:900px;
+}
+.glyph{
+  display:inline-block;
+  position:relative;
+  will-change:transform,filter,opacity;
+  transform-origin:50% 62%;
+  font-family:var(--light);
+  font-weight:300;
+  color:var(--ink);
+  transition:color .3s ease;
+  backface-visibility:hidden;
+}
+.glyph.is-space{width:.3em}
+.glyph .face{display:inline-block}
+.glyph.hot{font-family:var(--heavy);font-weight:400}
+/* ghost layer used by scramble flicker */
+.glyph::after{
+  content:attr(data-g);
+  position:absolute;left:0;top:0;
+  color:var(--ember);
+  opacity:0;
+  pointer-events:none;
+  transform:translate(var(--gx,0),var(--gy,0));
+  clip-path:inset(0 0 52% 0);
+}
+body.mode-scramble .glyph::after{opacity:var(--gho,0)}
+
+/* ---------- masthead ---------- */
+#mast{
+  position:fixed;z-index:7;top:0;left:0;right:0;
+  display:flex;align-items:center;gap:18px;
+  padding:16px 22px;
+  font-family:var(--mono);
+  font-size:11px;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--mute);
+  pointer-events:none;
+}
+#mast .brand{color:var(--ink);letter-spacing:.34em}
+#mast .brand b{color:var(--ember);font-weight:400}
+#mast .sep{flex:1;height:1px;background:linear-gradient(to right,var(--hair),transparent)}
+#mast .kv{color:var(--ink-dim)}
+#mast .kv i{color:var(--mute);font-style:normal}
+
+/* ---------- status line ---------- */
+#status{
+  position:fixed;z-index:7;left:22px;bottom:calc(var(--bar-h) + var(--strip-h) + 20px);
+  font-family:var(--mono);font-size:11.5px;letter-spacing:.13em;
+  color:var(--ink-dim);
+  display:flex;align-items:center;gap:10px;
+  text-transform:uppercase;
+  pointer-events:none;
+}
+#status .dot{
+  width:6px;height:6px;border-radius:50%;background:var(--ember);
+  box-shadow:0 0 10px 1px rgba(255,90,44,.7);
+  animation:pulse 1.9s ease-in-out infinite;
+}
+@keyframes pulse{50%{opacity:.24;transform:scale(.7)}}
+#status .v{color:var(--ink)}
+#status .u{color:var(--mute)}
+
+/* ---------- hint ---------- */
+#hint{
+  position:fixed;z-index:7;right:22px;bottom:calc(var(--bar-h) + var(--strip-h) + 20px);
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.15em;
+  color:var(--mute);text-transform:uppercase;text-align:right;
+  pointer-events:none;transition:opacity .5s ease;
+  max-width:44ch;
+}
+#hint b{color:var(--ink-dim);font-weight:400}
+#hint.gone{opacity:0}
+/* ---------- control strip ---------- */
+#strip{
+  position:fixed;z-index:8;left:0;right:0;bottom:var(--bar-h);
+  height:var(--strip-h);
+  display:flex;align-items:stretch;
+  border-top:1px solid var(--hair);
+  background:linear-gradient(to top,rgba(8,9,11,.96),rgba(8,9,11,.62));
+  backdrop-filter:blur(7px);
+  -webkit-backdrop-filter:blur(7px);
+}
+.pad{
+  padding:13px 22px;
+  border-right:1px solid var(--hair-2);
+  min-width:0;
+}
+.lab{
+  font-family:var(--mono);font-size:9.5px;letter-spacing:.24em;
+  color:var(--mute);text-transform:uppercase;
+  display:flex;align-items:baseline;gap:8px;margin-bottom:9px;flex-wrap:wrap;
+}
+.lab>span{min-width:0}
+.lab .num{color:var(--ink);letter-spacing:.06em;font-size:10.5px}
+.lab .rng{color:#33383f;letter-spacing:.1em;font-size:9px;margin-left:auto}
+.sliders{display:flex;flex:0 1 auto}
+.fader{flex:1 1 170px;min-width:132px}
+.track{
+  position:relative;height:22px;display:flex;align-items:center;
+  cursor:ew-resize;
+}
+.track .rail{
+  position:absolute;left:0;right:0;height:1px;background:var(--hair);
+}
+.track .fill{
+  position:absolute;left:0;height:1px;background:var(--ember);
+  box-shadow:0 0 8px rgba(255,90,44,.55);
+}
+.track .knob{
+  position:absolute;width:9px;height:9px;margin-left:-4.5px;
+  background:var(--stage);border:1px solid var(--ink);
+  transform:rotate(45deg);
+  transition:background .2s ease,border-color .2s ease;
+}
+.track:hover .knob,.track.act .knob{background:var(--ember);border-color:var(--ember)}
+.track .ticks{position:absolute;left:0;right:0;bottom:0;height:5px;display:flex;justify-content:space-between}
+.track .ticks i{width:1px;height:3px;background:#1e2126}
+.pips{display:flex;gap:3px;align-items:flex-end;height:22px}
+.pips i{width:3px;height:5px;background:#1d2025;transition:height .18s ease,background .18s ease}
+.pips i.on{height:16px;background:var(--ember)}
+.pips i.mid{height:11px;background:#5c6068}
+
+/* word input */
+.wordbox{flex:1 1 320px;min-width:210px;display:flex;flex-direction:column}
+#wordin{
+  font-family:var(--black);font-size:19px;letter-spacing:.05em;
+  text-transform:uppercase;color:var(--ink);
+  width:100%;padding:0 0 5px;
+  border-bottom:1px solid var(--hair);
+  caret-color:var(--ember);
+  outline:none;
+  text-overflow:ellipsis;
+}
+#wordin:focus{border-bottom-color:var(--ember)}
+#chips{display:flex;gap:6px;margin-top:8px;overflow:hidden;flex-wrap:nowrap}
+.chip{
+  font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;
+  padding:2.5px 7px;border:1px solid var(--hair);color:var(--ink-dim);
+  text-transform:uppercase;cursor:pointer;white-space:nowrap;
+  transition:border-color .2s,color .2s,background .2s;
+}
+.chip:hover{border-color:var(--ink-dim);color:var(--ink)}
+.chip.on{border-color:var(--ember);color:var(--ember);background:var(--ember-soft)}
+.meter{flex:0 0 116px;display:flex;flex-direction:column;justify-content:center}
+
+/* ---------- mode bar ---------- */
+#bar{
+  position:fixed;z-index:9;left:0;right:0;bottom:0;height:var(--bar-h);
+  display:flex;align-items:stretch;
+  border-top:1px solid var(--hair);
+  background:rgba(6,7,9,.96);
+}
+.mode{
+  flex:1 1 0;position:relative;cursor:pointer;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+  font-family:var(--mono);font-size:10px;letter-spacing:.22em;
+  color:var(--mute);text-transform:uppercase;
+  border-right:1px solid var(--hair-2);
+  transition:color .25s ease,background .25s ease;
+}
+.mode:first-child{border-left:1px solid var(--hair-2)}
+.mode .idx{font-size:8.5px;letter-spacing:.18em;color:#3a3e45;transition:color .25s}
+.mode:hover{color:var(--ink-dim);background:rgba(255,255,255,.022)}
+.mode.on{color:var(--ink);background:rgba(255,90,44,.055)}
+.mode.on .idx{color:var(--ember)}
+.mode.on::after{
+  content:"";position:absolute;left:0;right:0;top:-1px;height:1px;
+  background:var(--ember);box-shadow:0 0 9px rgba(255,90,44,.8);
+}
+#cycle-ind{
+  flex:0 0 74px;display:flex;align-items:center;justify-content:center;
+  border-left:1px solid var(--hair-2);
+  font-family:var(--mono);font-size:9px;letter-spacing:.16em;color:#3a3e45;
+  text-transform:uppercase;gap:6px;
+}
+#cycle-ind.auto{color:var(--ember)}
+#cycle-ind .ring{
+  width:9px;height:9px;border:1px solid currentColor;border-radius:50%;
+  border-top-color:transparent;
+}
+#cycle-ind.auto .ring{animation:spin 1.6s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ---------- shatter debris ---------- */
+.spark{
+  position:fixed;z-index:4;pointer-events:none;
+  width:2px;height:2px;background:var(--ember);
+  left:0;top:0;opacity:.9;
+}
+/* ---------- responsive ---------- */
+@media (max-width:900px){
+  :root{--strip-h:88px;--bar-h:54px}
+  #hint{display:none}
+  .meter{display:none}
+  #word{font-size:clamp(2.6rem,25vw,12rem)}
+  .fader{flex-basis:120px;min-width:96px}
+}
+@media (max-width:640px){
+  :root{--strip-h:132px;--bar-h:52px}
+  #strip{flex-wrap:wrap;height:auto}
+  .sliders{order:2;width:100%;border-top:1px solid var(--hair-2)}
+  .wordbox{order:1;flex:1 1 100%;border-right:0}
+  .pad{padding:11px 14px}
+  .mode{font-size:8.5px;letter-spacing:.1em}
+  .mode .idx{display:none}
+  #mast{font-size:9px;gap:10px;padding:12px 14px}
+  #mast .kv{display:none}
+  #status{font-size:9.5px;left:14px;letter-spacing:.1em}
+  #word{font-size:clamp(2.2rem,17vw,7rem)}
+}
+@media (min-width:1900px){
+  :root{--bar-h:64px;--strip-h:108px}
+  #word{font-size:22vw}
+}
+@media (max-height:520px){
+  :root{--strip-h:64px;--bar-h:44px}
+  .lab{margin-bottom:4px}
+  #chips{display:none}
+  #word{font-size:clamp(2rem,15vh,7rem)}
+}
+/* ---------- reduced motion ---------- */
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{
+    animation-duration:.001ms!important;
+    animation-iteration-count:1!important;
+    transition-duration:.001ms!important;
+  }
+  #scan{display:none}
+  #crosshair{display:none}
+  .glyph{transition:none}
+}
+</style>
+</head>
+<body class="mode-sculpt">
+
+<div id="grid" aria-hidden="true"></div>
+<div id="vignette" aria-hidden="true"></div>
+<div id="crosshair" aria-hidden="true"></div>
+<div id="scan" aria-hidden="true"></div>
+
+<header id="mast">
+  <span class="brand">KINETIC<b>/</b>TYPE</span>
+  <span class="sep"></span>
+  <span class="kv"><i>font</i> heavy&thinsp;⇄&thinsp;light swap</span>
+  <span class="kv"><i>field</i> radial falloff</span>
+  <span class="kv"><i>rate</i> <span id="fps">60</span>fps</span>
+</header>
+
+<main id="stage" aria-label="Kinetic type stage">
+  <div id="word" role="img" aria-label="Displayed word"></div>
+</main>
+
+<div id="status" aria-live="polite">
+  <span class="dot" aria-hidden="true"></span>
+  <span>MODE — <span class="v" id="s-mode">SCULPT</span></span>
+  <span class="u">·</span><span>r=<span class="v" id="s-r">340</span>px</span>
+  <span class="u">·</span><span>f=<span class="v" id="s-f">0.62</span></span>
+  <span class="u">·</span><span>d=<span class="v" id="s-d">0.84</span></span>
+  <span class="u">·</span><span id="s-x">x 0000 y 0000</span>
+</div>
+
+<div id="hint">
+  <b>Move</b> to sculpt · <b>click</b> to fire · <b>drag</b> to stretch<br>
+  keys <b>1–5</b> modes · <b>space</b> new word · <b>T</b> typing
+</div>
+
+<section id="strip" aria-label="Instrument controls">
+  <div class="pad fader" data-param="radius">
+    <div class="lab"><span>Radius</span><span class="num" data-out="radius">340</span><span class="rng">60–900</span></div>
+    <div class="track" tabindex="0" role="slider" aria-label="Field radius in pixels" aria-valuemin="60" aria-valuemax="900" aria-valuenow="340">
+      <span class="rail"></span><span class="fill"></span><span class="knob"></span>
+      <span class="ticks"><i></i><i></i><i></i><i></i><i></i></span>
+    </div>
+  </div>
+  <div class="pad fader" data-param="force">
+    <div class="lab"><span>Force</span><span class="num" data-out="force">0.62</span><span class="rng">0–1</span></div>
+    <div class="track" tabindex="0" role="slider" aria-label="Field force" aria-valuemin="0" aria-valuemax="1" aria-valuenow="0.62">
+      <span class="rail"></span><span class="fill"></span><span class="knob"></span>
+      <span class="ticks"><i></i><i></i><i></i><i></i><i></i></span>
+    </div>
+  </div>
+  <div class="pad fader" data-param="damping">
+    <div class="lab"><span>Damping</span><span class="num" data-out="damping">0.84</span><span class="rng">.50–.99</span></div>
+    <div class="track" tabindex="0" role="slider" aria-label="Motion damping" aria-valuemin="0.5" aria-valuemax="0.99" aria-valuenow="0.84">
+      <span class="rail"></span><span class="fill"></span><span class="knob"></span>
+      <span class="ticks"><i></i><i></i><i></i><i></i><i></i></span>
+    </div>
+  </div>
+  <div class="pad wordbox">
+    <div class="lab"><span>Word</span><span class="rng">type or pick</span></div>
+    <input id="wordin" type="text" maxlength="14" spellcheck="false" autocomplete="off" value="SCULPT" aria-label="Word to display">
+    <div id="chips"></div>
+  </div>
+  <div class="pad meter">
+    <div class="lab"><span>Activity</span></div>
+    <div class="pips" id="pips"></div>
+  </div>
+</section>
+
+<nav id="bar" aria-label="Animation modes"></nav>
+
+<script>
+/* ============================================================
+   023 · KINETIC TYPE SCRAMBLE
+   A pointer-driven letterform instrument. No dependencies.
+   ============================================================ */
+'use strict';
+
+/* ---------- environment ---------- */
+var REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+var wordEl   = document.getElementById('word');
+var stageEl  = document.getElementById('stage');
+var barEl    = document.getElementById('bar');
+var inputEl  = document.getElementById('wordin');
+var pipsEl   = document.getElementById('pips');
+var chipsEl  = document.getElementById('chips');
+var hintEl   = document.getElementById('hint');
+var fpsEl    = document.getElementById('fps');
+var sMode = document.getElementById('s-mode');
+var sR = document.getElementById('s-r');
+var sF = document.getElementById('s-f');
+var sD = document.getElementById('s-d');
+var sX = document.getElementById('s-x');
+var root = document.documentElement;
+
+/* ---------- curated word list ---------- */
+var WORDS = ['SCULPT','FERRITE','MAGNETO','KINETIC','IRON FILINGS','VELVET',
+             'TORSION','HALFTONE','RESONANT','OBELISK','QUARRY','ANVIL',
+             'LUMEN','STATICK','PYRE','GRANITE'];
+var GLYPHPOOL = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789#%@&$*+=/\\<>[]{}§¶∆◊•';
+
+/* ---------- instrument parameters ---------- */
+var P = { radius:340, force:0.62, damping:0.84 };
+var RANGE = {
+  radius:{min:60,max:900,step:1,fmt:function(v){return String(Math.round(v))}},
+  force:{min:0,max:1,step:0.01,fmt:function(v){return v.toFixed(2)}},
+  damping:{min:0.5,max:0.99,step:0.01,fmt:function(v){return v.toFixed(2)}}
+};
+
+var MODES = [
+  {id:'sculpt',  name:'Sculpt'},
+  {id:'scramble',name:'Scramble'},
+  {id:'wave',    name:'Wave'},
+  {id:'shatter', name:'Shatter'},
+  {id:'elastic', name:'Elastic'}
+];
+var mode = 'sculpt';
+var modeIndex = 0;
+
+/* ---------- pointer ---------- */
+var ptr = { x:innerWidth*0.5, y:innerHeight*0.44, px:0, py:0, vx:0, vy:0, down:false, has:false };
+var glyphRects = [];      /* cached screen rects per glyph */
+var glyphs = [];          /* {el, ch, i, x,y, tx,ty, sx,sy, rot, skew, sc, bl, w, ...} */
+var word = inputEl.value || 'SCULPT';
+var t0 = performance.now();
+var lastInteraction = t0;
+var autoTimer = null, autoOn = false, cycleIdx = 0;
+
+/* ---------- build glyphs ---------- */
+function buildWord(text, silent){
+  word = (text || '').toUpperCase().slice(0,14);
+  if(!word) word = 'TYPE';
+  wordEl.textContent = '';
+  wordEl.setAttribute('aria-label','Displayed word: ' + word);
+  glyphs = [];
+  for(var i=0;i<word.length;i++){
+    var ch = word.charAt(i);
+    var s = document.createElement('span');
+    s.className = 'glyph';
+    if(ch === ' '){
+      s.classList.add('is-space');
+      s.setAttribute('data-g',' ');
+      s.innerHTML = '&nbsp;';
+    }else{
+      s.setAttribute('data-g',ch);
+      s.textContent = ch;
+    }
+    wordEl.appendChild(s);
+    glyphs.push({
+      el:s, ch:ch, i:i,
+      ox:0, oy:0,           /* animated offset */
+      vx:0, vy:0,           /* velocity (elastic) */
+      tx:0, ty:0,           /* target offset */
+      rot:0, sc:1, skew:0, bl:0, w:0,
+      phase:Math.random()*Math.PI*2,
+      show:ch,
+      dead:false,
+      fx:0, fy:0, fr:0, fs:1, frot:0, fo:1
+    });
+  }
+  measure();
+  if(!silent) resetModes();
+}
+
+function measure(){
+  /* rects must be read from the untransformed layout, otherwise animated
+     offsets would feed back into the recorded home positions */
+  var saved = [], i;
+  for(i=0;i<glyphs.length;i++){ saved.push(glyphs[i].el.style.transform); glyphs[i].el.style.transform = 'none'; }
+  glyphRects = [];
+  for(i=0;i<glyphs.length;i++){
+    var r = glyphs[i].el.getBoundingClientRect();
+    glyphRects.push({ x:r.left + r.width*0.5, y:r.top + r.height*0.5, w:r.width, h:r.height });
+  }
+  for(i=0;i<glyphs.length;i++) glyphs[i].el.style.transform = saved[i];
+}
+
+/* ---------- helpers ---------- */
+function clamp(v,a,b){ return v<a?a:(v>b?b:v); }
+function lerp(a,b,t){ return a+(b-a)*t; }
+function smooth(t){ return t*t*(3-2*t); }
+function rnd(a,b){ return a+Math.random()*(b-a); }
+function poolChar(){ return GLYPHPOOL.charAt((Math.random()*GLYPHPOOL.length)|0); }
+function pad4(n){ n = Math.round(Math.abs(n)); return ('0000'+n).slice(-4); }
+
+/* ---------- SCULPT : radial distance field ---------- */
+var punchR = 0;   /* transient radius added by a click-punch */
+function runSculpt(dt, now){
+  var R = P.radius + punchR, F = P.force;
+  for(var i=0;i<glyphs.length;i++){
+    var g = glyphs[i], rc = glyphRects[i];
+    if(!rc) continue;
+    var dx = ptr.x - rc.x, dy = (ptr.y - rc.y) * 1.35;
+    var d = Math.sqrt(dx*dx + dy*dy);
+    var k = clamp(1 - d/R, 0, 1);
+    k = smooth(k) * (ptr.has ? 1 : 0.16);
+    var influence = k * F;
+    var dirx = d > 0.001 ? dx/d : 0, diry = d > 0.001 ? dy/d : 0;
+    /* letters lean toward the pointer like filings, but never collide at centre */
+    var pull = (R - d) * 0.11 * influence;
+    g.tx = dirx * pull * (d < R*0.34 ? 0.35 : 1);
+    g.ty = diry * pull * 0.62 - influence * R * 0.09;
+    g.rot = -dirx * influence * 15;
+    g.skew = dirx * influence * 13;
+    g.sc = 1 + influence * 0.30;
+    g.bl = influence * 2.4;
+    g.w = influence;
+    applySpring(g, dt);
+    g.el.style.transform = 'translate3d(' + g.ox.toFixed(2) + 'px,' + g.oy.toFixed(2) +
+      'px,0) rotate(' + g.rot.toFixed(2) + 'deg) skewX(' + g.skew.toFixed(2) +
+      'deg) scale(' + g.sc.toFixed(3) + ')';
+    g.el.style.filter = g.bl > 0.12 ? 'blur(' + g.bl.toFixed(2) + 'px)' : 'none';
+    setWeight(g, g.w > 0.34);
+    g.el.style.color = g.w > 0.5
+      ? 'rgba(255,' + Math.round(lerp(150,96,g.w)) + ',' + Math.round(lerp(110,52,g.w)) + ',1)'
+      : '';
+    g.el.style.textShadow = g.w > 0.15
+      ? '0 0 ' + (10 + g.w*40).toFixed(0) + 'px rgba(255,90,44,' + (g.w*0.4).toFixed(2) + ')'
+      : 'none';
+  }
+}
+
+/* shared spring integrator for offsets */
+function applySpring(g, dt){
+  var damp = Math.pow(P.damping, dt*60/16.67);
+  var stiff = 0.16 * (1.02 - P.damping) * 6;
+  g.vx = (g.vx + (g.tx - g.ox) * stiff * dt * 60) * damp;
+  g.vy = (g.vy + (g.ty - g.oy) * stiff * dt * 60) * damp;
+  g.ox += g.vx * dt * 60;
+  g.oy += g.vy * dt * 60;
+}
+
+function setWeight(g, heavy){
+  if(g.dead) return;
+  if(heavy && !g.el.classList.contains('hot')) g.el.classList.add('hot');
+  else if(!heavy && g.el.classList.contains('hot')) g.el.classList.remove('hot');
+}
+
+/* ---------- SCRAMBLE : decode animation ---------- */
+var scr = { locks:[], tick:0, seedWave:0 };
+function resetScramble(){
+  scr.locks = [];
+  for(var i=0;i<glyphs.length;i++) scr.locks.push(-Math.random()*46);
+  scr.tick = 0;
+}
+function runScramble(dt, now){
+  scr.tick += dt*60;
+  var F = P.force, R = P.radius;
+  for(var i=0;i<glyphs.length;i++){
+    var g = glyphs[i], rc = glyphRects[i];
+    if(!rc) continue;
+    var near = ptr.has ? clamp(1 - Math.hypot(ptr.x-rc.x,(ptr.y-rc.y)*1.3)/Math.max(70,R), 0, 1) : 0;
+    /* letters far from the pointer decode first; near ones keep churning */
+    var lockAt = scr.locks[i] + 44 + near*90/F;
+    var t = scr.tick;
+    if(g.ch === ' '){ g.el.textContent = '\u00a0'; continue; }
+    if(t > lockAt){
+      if(g.show !== g.ch){ g.show = g.ch; g.el.textContent = g.ch; g.el.style.opacity = 1; }
+      g.el.style.setProperty('--gho','0');
+    }else{
+      var rate = 1 + Math.round((1-near)*3 + F*4);
+      if((scr.tick*rate|0) % 2 === 0 || g.show === g.ch){
+        g.show = poolChar();
+        g.el.textContent = g.show;
+      }
+      g.el.style.setProperty('--gho', (0.22 + near*0.5).toFixed(2));
+      g.el.style.setProperty('--gx', rnd(-2.5,2.5).toFixed(1)+'px');
+      g.el.style.setProperty('--gy', rnd(-2.5,2.5).toFixed(1)+'px');
+      g.el.style.opacity = (0.55 + near*0.45).toFixed(2);
+    }
+    var relax = (t>lockAt? 0 : 1);
+    g.tx = 0; g.ty = relax * Math.sin(t*0.22 + g.phase)*6*F;
+    applySpring(g, dt);
+    g.el.style.transform = 'translate3d(' + g.ox.toFixed(2) + 'px,' + g.oy.toFixed(2) +
+      'px,0) scale(' + (1 + relax*0.03).toFixed(3) + ')';
+    g.el.style.filter = 'none';
+    g.el.style.textShadow = relax ? '0 0 18px rgba(255,90,44,.25)' : 'none';
+    setWeight(g, t > lockAt && Math.abs(g.oy) < 1.5);
+    if(t > lockAt + 120){ scr.locks[i] = -Math.random()*40; }
+  }
+  if(scr.tick > 520){ resetScramble(); }
+}
+
+/* ---------- WAVE : sine stagger ---------- */
+function runWave(dt, now){
+  var tt = (now - t0)/1000;
+  var F = P.force;
+  var amp = 12 + F*44;
+  var R = P.radius;
+  for(var i=0;i<glyphs.length;i++){
+    var g = glyphs[i], rc = glyphRects[i];
+    if(!rc) continue;
+    var dptr = ptr.has ? Math.hypot(ptr.x-rc.x,(ptr.y-rc.y)) : 1e9;
+    var lift = clamp(1 - dptr/R, 0, 1) * F * 42;
+    var ph = tt*(1.4 + F*2.2) - i*0.52 + g.phase*0.15;
+    var s = Math.sin(ph), s2 = Math.sin(ph*0.5 + 1.1);
+    g.ox = s2 * amp * 0.22;
+    g.oy = s * amp - lift;
+    g.rot = s * 7 * (0.4 + F);
+    g.skew = s2 * 5;
+    g.sc = 1 + Math.abs(s)*0.10 + lift*0.0022;
+    g.bl = Math.max(0,(Math.abs(s)-0.72))*5;
+    g.el.style.transform = 'translate3d(' + g.ox.toFixed(2) + 'px,' + g.oy.toFixed(2) +
+      'px,0) rotate(' + g.rot.toFixed(2) + 'deg) skewX(' + g.skew.toFixed(2) +
+      'deg) scale(' + g.sc.toFixed(3) + ')';
+    g.el.style.filter = g.bl > 0.2 ? 'blur(' + g.bl.toFixed(2) + 'px)' : 'none';
+    setWeight(g, s > 0.42 || lift > 6);
+    g.el.style.color = '';
+    g.el.style.textShadow = s > 0.2
+      ? '0 ' + (s*14).toFixed(1) + 'px ' + (16 + s*22).toFixed(0) + 'px rgba(143,180,216,' + (0.06 + s*0.14).toFixed(2) + ')'
+      : 'none';
+  }
+}
+
+/* ---------- SHATTER : explode on click, reassemble ---------- */
+var sh = { state:'held', t:0, debris:[] };
+function resetShatter(){ sh.state='held'; sh.t=0; }
+function fireShatter(x,y){
+  if(REDUCED){ return; }
+  sh.state='burst'; sh.t=0;
+  var cx = x == null ? innerWidth/2 : x;
+  var cy = y == null ? innerHeight*0.45 : y;
+  for(var i=0;i<glyphs.length;i++){
+    var g = glyphs[i], rc = glyphRects[i];
+    if(!rc) continue;
+    var dx = rc.x - cx, dy = rc.y - cy;
+    var d = Math.max(24, Math.hypot(dx,dy));
+    var pw = (12 + P.force*46) * (1 - clamp(d/(P.radius*2.6),0,0.72));
+    g.fx = (dx/d) * pw * rnd(0.7,1.5);
+    g.fy = (dy/d) * pw * rnd(0.7,1.5) - rnd(4,26);
+    g.frot = rnd(-320,320) * (0.4 + P.force);
+    g.fs = rnd(0.42,1.7);
+    g.fo = 0;
+    g.dead = false;
+    setWeight(g, true);
+    g.el.style.color = 'rgba(255,255,255,.9)';
+  }
+  spawnSparks(cx, cy, 26);
+}
+function spawnSparks(x,y,n){
+  for(var i=0;i<n;i++){
+    var s = document.createElement('i');
+    s.className = 'spark';
+    document.body.appendChild(s);
+    var a = Math.random()*Math.PI*2, v = rnd(50,340)*(0.4+P.force);
+    sh.debris.push({el:s,x:x,y:y,vx:Math.cos(a)*v,vy:Math.sin(a)*v - 60,life:rnd(.45,1.15),t:0});
+  }
+}
+function runDebris(dt){
+  for(var i=sh.debris.length-1;i>=0;i--){
+    var d = sh.debris[i];
+    d.t += dt;
+    if(d.t > d.life){ if(d.el.parentNode) d.el.parentNode.removeChild(d.el); sh.debris.splice(i,1); continue; }
+    d.vy += 520*dt;
+    d.x += d.vx*dt; d.y += d.vy*dt;
+    var k = 1 - d.t/d.life;
+    d.el.style.transform = 'translate3d(' + d.x.toFixed(1) + 'px,' + d.y.toFixed(1) + 'px,0) scaleY(' + (1+k*6).toFixed(1) + ')';
+    d.el.style.opacity = k.toFixed(2);
+  }
+}
+function runShatter(dt, now){
+  sh.t += dt;
+  var gather = sh.state === 'burst' ? clamp((sh.t - 0.55)/1.25, 0, 1) : 1;
+  var spread = sh.state === 'burst' ? Math.max(0, 1 - sh.t/0.55) : 0;
+  for(var i=0;i<glyphs.length;i++){
+    var g = glyphs[i], rc = glyphRects[i];
+    if(!rc) continue;
+    var wob = Math.sin(now*0.0016 + g.phase)*(1-gather)*0;
+    var ox = g.fx * (1-gather) * (1 + spread*2.4) + wob;
+    var oy = g.fy * (1-gather) * (1 + spread*2.4) + (1-gather)*(1-gather)*38;
+    g.el.style.transform = 'translate3d(' + ox.toFixed(2) + 'px,' + oy.toFixed(2) + 'px,0) rotate(' +
+      (g.frot*(1-gather)).toFixed(1) + 'deg) scale(' + lerp(g.fs,1,gather).toFixed(3) + ')';
+    g.el.style.opacity = (0.25 + gather*0.75).toFixed(2);
+    g.el.style.filter = gather < 0.85 ? 'blur(' + ((1-gather)*3.2).toFixed(2) + 'px)' : 'none';
+    if(gather > 0.72){
+      g.el.style.color = '';
+      g.el.style.textShadow = 'none';
+      setWeight(g,false);
+      if(sh.state==='burst' && gather >= 1){ sh.state='held'; }
+    }else{
+      var heat = 1-gather;
+      g.el.style.color = 'rgba(255,' + Math.round(lerp(120,240,heat)) + ',' + Math.round(lerp(70,200,heat)) + ',.95)';
+      g.el.style.textShadow = '0 0 ' + (12+heat*44).toFixed(0) + 'px rgba(255,90,44,' + (heat*0.5).toFixed(2) + ')';
+    }
+  }
+  runDebris(dt);
+}
+
+/* ---------- ELASTIC : drag and snap ---------- */
+var el = { idx:-1, ox:0, oy:0 };
+function runElastic(dt, now){
+  var F = 0.2 + P.force*0.8;
+  for(var i=0;i<glyphs.length;i++){
+    var g = glyphs[i], rc = glyphRects[i];
+    if(!rc) continue;
+    var isGrabbed = (el.idx === i && ptr.down);
+    if(isGrabbed){
+      g.tx = ptr.x - rc.x;
+      g.ty = ptr.y - rc.y;
+    }else{
+      /* neighbours sag toward a grabbed letter, then whip back */
+      var tgt = 0;
+      if(el.idx >= 0 && ptr.down){
+        var dist = Math.abs(i - el.idx);
+        tgt = clamp(1 - dist/Math.max(1.6, P.radius/110), 0, 1);
+      }
+      g.tx = tgt * (el.tx0||0) * 0.5;
+      g.ty = tgt * (el.ty0||0) * 0.5;
+    }
+    var stiff = isGrabbed ? 0.42 : 0.10 + F*0.16;
+    var damp = Math.pow(isGrabbed ? 0.72 : P.damping, dt*60/16.67);
+    g.vx = (g.vx + (g.tx - g.ox) * stiff * dt * 60) * damp;
+    g.vy = (g.vy + (g.ty - g.oy) * stiff * dt * 60) * damp;
+    g.ox += g.vx * dt*60; g.oy += g.vy * dt*60;
+    var sp = Math.hypot(g.vx,g.vy);
+    g.el.style.transform = 'translate3d(' + g.ox.toFixed(2) + 'px,' + g.oy.toFixed(2) +
+      'px,0) rotate(' + clamp(g.vx*0.5,-26,26).toFixed(2) + 'deg) scale(' + (1 + clamp(sp*0.004,0,0.22)).toFixed(3) + ')';
+    g.el.style.filter = sp > 30 ? 'blur(' + clamp(sp*0.03,0,3).toFixed(2) + 'px)' : 'none';
+    setWeight(g, sp > 5 || isGrabbed);
+    g.el.style.color = isGrabbed ? '#ff5a2c' : '';
+    g.el.style.textShadow = sp > 8
+      ? '0 0 ' + (10 + sp*0.5).toFixed(0) + 'px rgba(255,90,44,' + clamp(sp*0.006,0,.5).toFixed(2) + ')'
+      : 'none';
+    if(isGrabbed){ el.tx0 = g.tx; el.ty0 = g.ty; }
+  }
+  if(!ptr.down){ el.idx = -1; el.tx0 = 0; el.ty0 = 0; }
+}
+
+function nearestGlyph(x,y){
+  var best = -1, bd = 1e9;
+  for(var i=0;i<glyphs.length;i++){
+    var rc = glyphRects[i];
+    if(!rc) continue;
+    var d = Math.hypot(x-rc.x, y-rc.y);
+    if(d < bd){ bd = d; best = i; }
+  }
+  return bd < 190 ? best : -1;
+}
+
+/* ---------- reset per mode ---------- */
+function resetModes(){
+  for(var i=0;i<glyphs.length;i++){
+    var g = glyphs[i];
+    g.ox = g.oy = g.vx = g.vy = g.tx = g.ty = 0;
+    g.el.style.transform = 'none';
+    g.el.style.filter = 'none';
+    g.el.style.opacity = 1;
+    g.el.style.color = '';
+    g.el.style.textShadow = 'none';
+    g.el.style.setProperty('--gho','0');
+    g.el.textContent = g.ch === ' ' ? '\u00a0' : g.ch;
+    g.show = g.ch;
+    g.dead = false;
+    g.el.classList.remove('hot');
+  }
+  el.idx = -1;
+  resetScramble();
+  resetShatter();
+}
+/* ---------- main loop ---------- */
+var last = performance.now();
+var frames = 0, fpsClock = last, activity = 0;
+var pipEls = [];
+(function buildPips(){
+  for(var i=0;i<13;i++){
+    var b = document.createElement('i');
+    pipsEl.appendChild(b);
+    pipEls.push(b);
+  }
+})();
+
+function tick(now){
+  var dt = Math.min(0.05, (now - last)/1000);
+  last = now;
+
+  /* pointer velocity, used by meters + auto-cycle wake */
+  ptr.vx = (ptr.x - ptr.px)/Math.max(dt,0.001);
+  ptr.vy = (ptr.y - ptr.py)/Math.max(dt,0.001);
+  ptr.px = ptr.x; ptr.py = ptr.y;
+  var speed = Math.min(1, Math.hypot(ptr.vx, ptr.vy)/1400);
+  activity = lerp(activity, speed, 0.14);
+
+  /* click-punch relaxation */
+  if(punchR > 0.4) punchR *= Math.pow(0.87, dt*60); else punchR = 0;
+
+  /* keep rects fresh while the layout can move (fonts, resize, drag) */
+  if((frames & 31) === 0) measure();
+
+  if(mode === 'sculpt')       runSculpt(dt, now);
+  else if(mode === 'scramble')runScramble(dt, now);
+  else if(mode === 'wave')    runWave(dt, now);
+  else if(mode === 'shatter') runShatter(dt, now);
+  else                        runElastic(dt, now);
+
+  /* crosshair + vignette light follow */
+  cross.style.transform = 'translate3d(' + ptr.x.toFixed(1) + 'px,' + ptr.y.toFixed(1) + 'px,0)';
+  root.style.setProperty('--px', (ptr.x/innerWidth*100).toFixed(2) + '%');
+  root.style.setProperty('--py', (ptr.y/innerHeight*100).toFixed(2) + '%');
+  root.style.setProperty('--cs', Math.round((P.radius + punchR)*2) + 'px');
+
+  /* activity meter */
+  var lit = Math.round(activity*13 + (mode==='scramble' ? Math.random()*3 : 0));
+  for(var i=0;i<pipEls.length;i++){
+    var on = i < lit;
+    pipEls[i].className = on ? (i > 9 ? 'on' : (i > 6 ? 'mid' : '')) : '';
+  }
+
+  /* fps readout, twice a second */
+  frames++;
+  if(now - fpsClock > 500){
+    fpsEl.textContent = String(Math.round(frames*1000/(now-fpsClock)));
+    frames = 0; fpsClock = now;
+    sX.textContent = 'x ' + pad4(ptr.x) + ' y ' + pad4(ptr.y);
+  }
+
+  /* idle -> auto demo */
+  if(!autoOn && !typing && now - lastInteraction > 6000 && !REDUCED) startAuto();
+
+  requestAnimationFrame(tick);
+}
+
+/* ---------- crosshair ref (after DOM query) ---------- */
+var cross = document.getElementById('crosshair');
+
+/* ---------- mode switching ---------- */
+var cycleInd = document.createElement('div');
+cycleInd.id = 'cycle-ind';
+cycleInd.innerHTML = '<span class="ring" aria-hidden="true"></span><span>idle</span>';
+
+(function buildBar(){
+  MODES.forEach(function(m, i){
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'mode' + (i===0 ? ' on' : '');
+    b.setAttribute('data-mode', m.id);
+    b.innerHTML = '<span class="idx">0' + (i+1) + '</span><span>' + m.name + '</span>';
+    b.addEventListener('click', function(){ setMode(i, true); });
+    barEl.appendChild(b);
+  });
+  barEl.appendChild(cycleInd);
+})();
+
+function setMode(i, manual){
+  i = (i + MODES.length) % MODES.length;
+  modeIndex = i;
+  mode = MODES[i].id;
+  var prevModes = [];
+  document.body.classList.forEach(function(c){ if(c.indexOf('mode-') === 0) prevModes.push(c); });
+  prevModes.forEach(function(c){ document.body.classList.remove(c); });
+  document.body.classList.add('mode-' + mode);
+  var btns = barEl.querySelectorAll('.mode');
+  for(var k=0;k<btns.length;k++) btns[k].classList.toggle('on', k === i);
+  sMode.textContent = MODES[i].name.toUpperCase();
+  resetModes();
+  if(mode === 'shatter') fireShatter(ptr.x, ptr.y);
+  if(manual) wake();
+  flashHint();
+}
+
+/* ---------- auto-cycle demo ---------- */
+var autoChain = [];
+function startAuto(){
+  autoOn = true;
+  cycleInd.classList.add('auto');
+  cycleInd.lastChild.textContent = 'auto';
+  document.body.classList.add('live');
+  autoChain.push(setTimeout(function(){
+    if(!autoOn) return;
+    setMode((modeIndex+1) % MODES.length, false);
+    if(MODES[modeIndex].id === 'sculpt'){ sweepPointer(); }
+    autoChain.push(setTimeout(cycleWord, 2600));
+    autoChain.push(setTimeout(loopAgain, 5200));
+  }, 2400));
+}
+function loopAgain(){
+  if(!autoOn) return;
+  setMode((modeIndex+1) % MODES.length, false);
+  if(MODES[modeIndex].id === 'sculpt') sweepPointer();
+  autoChain.push(setTimeout(cycleWord, 2400));
+  autoChain.push(setTimeout(loopAgain, 5200));
+}
+function stopAuto(){
+  autoOn = false;
+  autoChain.forEach(clearTimeout);
+  autoChain = [];
+  cycleInd.classList.remove('auto');
+  cycleInd.lastChild.textContent = 'idle';
+}
+function cycleWord(){
+  if(!autoOn) return;
+  cycleIdx = (cycleIdx + 1) % WORDS.length;
+  var w = WORDS[cycleIdx];
+  inputEl.value = w;
+  buildWord(w);
+  markChip(w);
+}
+/* the auto demo moves a virtual pointer in a lazy lissajous */
+var sweep = null;
+function sweepPointer(){
+  if(sweep) cancelAnimationFrame(sweep);
+  var k = 0;
+  var originX = ptr.x, originY = ptr.y, t = performance.now();
+  function glide(now){
+    if(!autoOn){ sweep = null; return; }
+    var e = Math.min(1,(now - t)/900);
+    k += 0.024;
+    var tx = innerWidth/2 + Math.sin(k*1.7)*innerWidth*0.30;
+    var ty = innerHeight*0.44 + Math.cos(k*1.1)*innerHeight*0.12;
+    ptr.x = lerp(e < 1 ? originX : ptr.x, tx, Math.max(e,0.08));
+    ptr.y = lerp(e < 1 ? originY : ptr.y, ty, Math.max(e,0.08));
+    ptr.has = true;
+    if(e < 1 || autoOn) sweep = requestAnimationFrame(glide);
+  }
+  sweep = requestAnimationFrame(glide);
+}
+
+/* ---------- interaction bookkeeping ---------- */
+var typing = false;
+function wake(){
+  lastInteraction = performance.now();
+  if(autoOn){ stopAuto(); if(sweep){ cancelAnimationFrame(sweep); sweep = null; } }
+  document.body.classList.add('live');
+}
+var hintTimer = null;
+function flashHint(){
+  hintEl.classList.remove('gone');
+  clearTimeout(hintTimer);
+  hintTimer = setTimeout(function(){ hintEl.classList.add('gone'); }, 3200);
+}
+/* ---------- faders (custom sliders) ---------- */
+var faders = {};
+Array.prototype.forEach.call(document.querySelectorAll('.fader'), function(box){
+  var key = box.getAttribute('data-param');
+  var track = box.querySelector('.track');
+  var fill = box.querySelector('.fill');
+  var knob = box.querySelector('.knob');
+  var out = box.querySelector('[data-out]');
+  faders[key] = { track:track, fill:fill, knob:knob, out:out, cfg:RANGE[key] };
+
+  function fromEvent(e){
+    var r = track.getBoundingClientRect();
+    var t = clamp((e.clientX - r.left)/r.width, 0, 1);
+    var c = RANGE[key];
+    var raw = c.min + t*(c.max - c.min);
+    var v = Math.round(raw/c.step)*c.step;
+    setParam(key, v);
+    wake();
+  }
+  var dragging = false;
+  track.addEventListener('pointerdown', function(e){
+    dragging = true; track.classList.add('act');
+    try{ track.setPointerCapture(e.pointerId); }catch(err){}
+    fromEvent(e); e.preventDefault();
+  });
+  track.addEventListener('pointermove', function(e){ if(dragging) fromEvent(e); });
+  function end(e){
+    dragging = false; track.classList.remove('act');
+    try{ track.releasePointerCapture(e.pointerId); }catch(err){}
+  }
+  track.addEventListener('pointerup', end);
+  track.addEventListener('pointercancel', end);
+  track.addEventListener('keydown', function(e){
+    var c = RANGE[key], big = (c.max-c.min)/12;
+    var d = 0;
+    if(e.key === 'ArrowRight' || e.key === 'ArrowUp') d = c.step*4;
+    else if(e.key === 'ArrowLeft' || e.key === 'ArrowDown') d = -c.step*4;
+    else if(e.key === 'PageUp') d = big;
+    else if(e.key === 'PageDown') d = -big;
+    else if(e.key === 'Home') { setParam(key,c.min); wake(); e.preventDefault(); return; }
+    else if(e.key === 'End') { setParam(key,c.max); wake(); e.preventDefault(); return; }
+    else return;
+    setParam(key, P[key] + d); wake(); e.preventDefault();
+  });
+  track.addEventListener('wheel', function(e){
+    setParam(key, P[key] + (e.deltaY < 0 ? 1 : -1) * RANGE[key].step * 6);
+    wake(); e.preventDefault();
+  }, {passive:false});
+});
+
+function setParam(key, v){
+  var c = RANGE[key];
+  v = clamp(v, c.min, c.max);
+  P[key] = v;
+  var f = faders[key];
+  if(!f) return;
+  var t = (v - c.min)/(c.max - c.min);
+  f.fill.style.width = (t*100).toFixed(2) + '%';
+  f.knob.style.left = (t*100).toFixed(2) + '%';
+  f.out.textContent = c.fmt(v);
+  f.track.setAttribute('aria-valuenow', c.fmt(v));
+  sR.textContent = RANGE.radius.fmt(P.radius);
+  sF.textContent = RANGE.force.fmt(P.force);
+  sD.textContent = RANGE.damping.fmt(P.damping);
+  var gs = clamp(Math.round(P.radius/5.4), 22, 190);
+  root.style.setProperty('--gs', gs + 'px');
+}
+
+/* ---------- chips + word input ---------- */
+var chipEls = [];
+(function buildChips(){
+  WORDS.slice(0,7).forEach(function(w){
+    var c = document.createElement('button');
+    c.type = 'button';
+    c.className = 'chip';
+    c.textContent = w;
+    c.addEventListener('click', function(){
+      inputEl.value = w;
+      buildWord(w);
+      markChip(w);
+      wake();
+    });
+    chipsEl.appendChild(c);
+    chipEls.push(c);
+  });
+})();
+function markChip(w){
+  chipEls.forEach(function(c){ c.classList.toggle('on', c.textContent === w); });
+}
+
+var inputDebounce = null;
+inputEl.addEventListener('input', function(){
+  clearTimeout(inputDebounce);
+  typing = true;
+  inputDebounce = setTimeout(function(){
+    buildWord(inputEl.value);
+    markChip(inputEl.value.toUpperCase());
+  }, 130);
+  wake();
+});
+inputEl.addEventListener('focus', function(){ typing = true; stopSweepIfIdle(); });
+inputEl.addEventListener('blur', function(){ typing = false; buildWord(inputEl.value); });
+inputEl.addEventListener('keydown', function(e){
+  if(e.key === 'Enter'){ inputEl.blur(); wake(); e.preventDefault(); }
+  if(e.key === 'Escape'){ inputEl.blur(); }
+});
+function stopSweepIfIdle(){ if(autoOn){ stopAuto(); } }
+
+/* ---------- pointer on stage ---------- */
+function inChrome(e){
+  var t = e.target;
+  return !!(t && t.closest && t.closest('#strip, #bar'));
+}
+window.addEventListener('pointermove', function(e){
+  ptr.x = e.clientX; ptr.y = e.clientY; ptr.has = true;
+  if(!autoOn) wake();
+}, {passive:true});
+
+window.addEventListener('pointerdown', function(e){
+  if(inChrome(e)) return;
+  ptr.down = true; ptr.x = e.clientX; ptr.y = e.clientY; ptr.has = true;
+  wake();
+  if(mode === 'shatter'){
+    fireShatter(e.clientX, e.clientY);
+  }else if(mode === 'elastic'){
+    el.idx = nearestGlyph(e.clientX, e.clientY);
+  }else if(mode === 'scramble'){
+    resetScramble();
+  }else if(mode === 'wave'){
+    for(var i=0;i<glyphs.length;i++) glyphs[i].phase += Math.random()*2.4;
+  }else{
+    /* sculpt: a click punches the field outward for a beat */
+    punch(e.clientX, e.clientY);
+  }
+});
+window.addEventListener('pointerup', function(){ ptr.down = false; });
+window.addEventListener('pointerleave', function(){ ptr.has = false; ptr.down = false; });
+document.addEventListener('mouseleave', function(){ ptr.has = false; });
+window.addEventListener('blur', function(){ ptr.down = false; });
+
+/* sculpt click-punch: briefly swells the field radius, then decays */
+function punch(x,y){
+  if(REDUCED) return;
+  punchR = 120 + P.force*280;
+  spawnSparks(x, y, 10);
+}
+
+/* touch: keep the page from scrolling under the instrument */
+document.addEventListener('touchmove', function(e){
+  if(inChrome(e)) return;
+  if(e.cancelable) e.preventDefault();
+}, {passive:false});
+
+/* ---------- keyboard ---------- */
+window.addEventListener('keydown', function(e){
+  if(e.target === inputEl) return;
+  if(e.metaKey || e.ctrlKey || e.altKey) return;
+  var n = parseInt(e.key, 10);
+  if(n >= 1 && n <= MODES.length){ setMode(n-1, true); e.preventDefault(); return; }
+  if(e.key === ' '){
+    cycleIdx = (cycleIdx + 1 + (Math.random()*3|0)) % WORDS.length;
+    var w = WORDS[cycleIdx];
+    inputEl.value = w; buildWord(w); markChip(w); wake();
+    e.preventDefault(); return;
+  }
+  if(e.key === 't' || e.key === 'T'){ inputEl.focus(); inputEl.select(); wake(); e.preventDefault(); return; }
+  if(e.key === 'ArrowRight'){ setMode(modeIndex+1, true); e.preventDefault(); }
+  if(e.key === 'ArrowLeft'){ setMode(modeIndex-1, true); e.preventDefault(); }
+  if(e.key === 'm' || e.key === 'M'){ autoOn ? (stopAuto(), wake()) : startAuto(); e.preventDefault(); }
+});
+
+/* ---------- resize ---------- */
+var rz = null;
+window.addEventListener('resize', function(){
+  clearTimeout(rz);
+  rz = setTimeout(function(){ measure(); }, 90);
+});
+if(document.fonts && document.fonts.ready && document.fonts.ready.then){
+  document.fonts.ready.then(function(){ measure(); });
+}
+
+/* ---------- boot ---------- */
+setParam('radius', P.radius);
+setParam('force', P.force);
+setParam('damping', P.damping);
+buildWord(inputEl.value, true);
+markChip(inputEl.value.toUpperCase());
+sMode.textContent = 'SCULPT';
+flashHint();
+setTimeout(function(){ hintEl.classList.add('gone'); }, 6000);
+
+/* opening flourish: a one-time decode in, then hand control to the pointer */
+(function boot(){
+  measure();
+  if(!REDUCED){
+    var k = 0, iv = setInterval(function(){
+      k++;
+      for(var i=0;i<glyphs.length;i++){
+        var g = glyphs[i];
+        if(g.ch === ' ') continue;
+        if(k > 6 + i*2){ g.el.textContent = g.ch; }
+        else { g.el.textContent = poolChar(); g.el.classList.add('hot'); }
+      }
+      if(k > 8 + glyphs.length*2){
+        clearInterval(iv);
+        for(var j=0;j<glyphs.length;j++) glyphs[j].el.classList.remove('hot');
+      }
+    }, 42);
+  }
+  requestAnimationFrame(function(now){ last = now; tick(now); });
+})();
+</script>
+</body>
+</html>

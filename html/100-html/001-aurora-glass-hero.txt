@@ -1,0 +1,53 @@
+TITLE:
+001 — NORDLYS: Aurora Glass Forecast
+
+PROMPT:
+Build a single self-contained HTML page for a fictional polar-aurora forecasting service called
+"NORDLYS". Full-bleed polar-night scene on a base of #050816. A canvas layer draws drifting aurora
+curtains: several vertical ribbon bands built from layered translucent gradients (colours #4cc9f0,
+#4361ee, #7b2cbf, #b5179e, #80ffdb), displaced over time by hand-written value noise so the curtains
+undulate, breathe and shear like real auroral arcs. The ribbons parallax slowly and respond to the
+pointer, so moving the cursor bends the field subtly.
+
+Foreground: a set of frosted-glass panels floating at a slight 3D tilt — backdrop-filter blur plus
+saturate, a 1px inner top highlight, soft inner shadow, faint translucent border. The panels hold a
+live Kp-index readout that counts up on load, and three stat cards (visibility band, magnetic
+latitude, cloud cover) with plausible invented values. A specular highlight inside each glass panel
+tracks the pointer position. Headline set in a huge display serif stack ("Iowan Old Style", "Hoefler
+Text", Didot); all micro-labels in tracked-out uppercase ui-monospace.
+
+Add procedurally placed twinkling stars along a horizon-line footer, a station list, and a thin
+horizontal "solar wind" ticker with tabular numerals. Add a radial vignette and an ultra-fine grain
+overlay.
+
+Rules: all CSS in one <style> block, all JS in one <script> block, zero external references (no CDN,
+no web fonts, no images, no libraries), system font stacks only, <html lang="en">, charset utf-8,
+viewport meta, valid HTML5, no console errors, works offline by double-clicking, responsive from
+360px to 2560px, and prefers-reduced-motion freezes the animation while leaving the layout readable.
+
+DESIGN:
+Awe first, data second. The page should feel like standing on a frozen fjord checking an instrument:
+the sky is doing something magnificent and unrepeatable while the interface stays calm, legible and
+quietly precise. Glass is used only where information lives, so the frosted panels read as
+instruments suspended in front of the phenomenon rather than as decoration. The palette is cold and
+deep with a single warm accent, typography contrasts a romantic display serif against clinical mono
+numerals, and all motion is slow, continuous and non-looping so nothing ever visibly repeats.
+
+TECHNIQUES:
+- Canvas ribbon curtains from layered translucent gradients displaced by hand-written value noise / fBm
+- Additive 'lighter' compositing plus radial-gradient bloom for auroral glow
+- Procedural star field with per-star twinkle phase; vignette and fine grain overlays
+- Frosted glass cards: backdrop-filter blur + saturate, 1px inner highlight, inset shadow
+- Pointer-driven specular highlight (radial gradient positioned from cursor coordinates inside each panel)
+- Slight 3D perspective tilt on panels; parallax depth between sky, panels and horizon
+- Count-up numeric animation and a horizontally looping ticker with tabular monospace figures
+- Fluid clamp()-based type scale; CSS custom properties driving the palette
+- prefers-reduced-motion guard; devicePixelRatio-aware canvas
+
+INTERACTION:
+- Pointer movement bends and parallaxes the aurora curtains.
+- A specular sheen inside each glass panel follows the cursor.
+- Kp index and stat values count up on load; solar-wind ticker streams continuously.
+- Hovering a panel raises it, sharpens its highlight and reveals a short explanatory caption.
+- Station list items highlight their corresponding sky sector on hover.
+- Reduced-motion mode renders a single composed static frame with all text intact.

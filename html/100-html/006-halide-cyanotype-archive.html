@@ -1,0 +1,1540 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<meta name="description" content="Halide: a working archive of cyanotype plates of marine micro-organisms, with exposure logs and chemical bath notes.">
+<title>Halide · A Cyanotype Archive of Marine Micro-organisms</title>
+<style>
+/*
+  HALIDE — palette
+  ink      #08213a   deepest Prussian, drawer shadow
+  blue     #0d3a63   wash mid
+  blue2    #1d5c92   wash highlight / rule
+  pale     #7fa8c9   caption text on blue
+  paper    #e7ecef   plate paper, white line art
+  stamp    #b53a2b   archive stamp red
+  Derived tints are written out longhand; color-mix() only appears inside
+  @supports, and never as a text fill.
+*/
+*,*::before,*::after{box-sizing:border-box}
+:root{
+  --ink:#08213a;
+  --ink-2:#061a2e;
+  --blue:#0d3a63;
+  --blue-2:#1d5c92;
+  --pale:#7fa8c9;
+  --paper:#e7ecef;
+  --stamp:#b53a2b;
+  --gap:clamp(18px,3vw,44px);
+  --pad:clamp(16px,2.4vw,34px);
+  --serif:"Iowan Old Style",Palatino,Georgia,"Times New Roman",serif;
+  --body:Optima,"Avenir Next","Helvetica Neue",system-ui,sans-serif;
+  --mono:ui-monospace,Menlo,Consolas,monospace;
+  --ease:cubic-bezier(.22,.72,.16,1);
+}
+html{scroll-behavior:smooth}
+body{
+  margin:0;
+  font:400 16px/1.62 var(--body);
+  color:var(--paper);
+  background-color:var(--ink);
+  background-image:
+    radial-gradient(125% 90% at 12% -12%,rgba(63,122,178,.5) 0%,rgba(63,122,178,0) 58%),
+    radial-gradient(90% 70% at 104% 4%,rgba(29,92,146,.42) 0%,rgba(29,92,146,0) 62%),
+    radial-gradient(120% 120% at 50% 118%,rgba(3,12,22,.78) 0%,rgba(3,12,22,0) 62%);
+  background-repeat:no-repeat;
+  background-attachment:fixed;
+  -webkit-font-smoothing:antialiased;
+}
+h1,h2,h3,h4{margin:0;font-family:var(--serif);font-variant:small-caps;font-weight:600;letter-spacing:.025em}
+p{margin:0}
+a{color:inherit}
+.mono{font-family:var(--mono);font-size:.68rem;letter-spacing:.15em;text-transform:uppercase}
+.skip{
+  position:absolute;left:var(--pad);top:-60px;z-index:20;
+  background:var(--paper);color:var(--ink);padding:8px 14px;border:0;
+  font-family:var(--mono);font-size:.68rem;letter-spacing:.14em;text-transform:uppercase;
+  text-decoration:none;transition:top .18s var(--ease);
+}
+.skip:focus{top:10px}
+:focus-visible{outline:1px solid var(--paper);outline-offset:3px}
+
+/* ---------- masthead ---------- */
+.mast{
+  max-width:1560px;margin:0 auto;
+  padding:clamp(30px,6vw,76px) var(--gap) clamp(20px,3vw,30px);
+  display:grid;grid-template-columns:minmax(0,1.32fr) minmax(0,.68fr);
+  gap:clamp(22px,4vw,64px);align-items:end;
+}
+.eyebrow{display:block;color:var(--pale);margin-bottom:clamp(12px,2vw,20px)}
+h1{font-size:clamp(3.05rem,10vw,7.6rem);line-height:.86;color:var(--paper)}
+.deck{
+  max-width:54ch;margin-top:clamp(14px,2vw,22px);
+  color:#d3e0ea;opacity:.86;font-size:clamp(1rem,.62rem + .62vw,1.17rem);
+}
+.mast-meta{display:grid;gap:0;border-top:1px solid rgba(231,236,239,.26);padding-top:10px}
+.mast-meta div{
+  display:flex;justify-content:space-between;gap:14px;align-items:baseline;
+  padding:7px 0;border-bottom:1px dotted rgba(231,236,239,.17);
+}
+.mast-meta dt{color:var(--pale);font-family:var(--mono);font-size:.63rem;letter-spacing:.16em;text-transform:uppercase}
+.mast-meta dd{margin:0;font-family:var(--mono);font-size:.68rem;letter-spacing:.06em;color:#e7ecef;text-align:right}
+.rules{
+  max-width:1560px;margin:0 auto;padding:0 var(--gap);
+  display:flex;gap:5px;align-items:flex-end;
+}
+.rules i{display:block;height:34px;flex:1 1 0;background:linear-gradient(to bottom,rgba(231,236,239,.4),rgba(231,236,239,0))}
+.rules i:nth-child(3n){height:52px;background:linear-gradient(to bottom,rgba(127,168,201,.62),rgba(127,168,201,0))}
+.rules i:nth-child(7n){height:20px;background:linear-gradient(to bottom,var(--stamp),rgba(181,58,43,0))}
+
+/* ---------- drawer ---------- */
+.drawer{
+  max-width:1560px;margin:clamp(26px,4vw,52px) auto 0;
+  padding:0 var(--gap);
+  display:grid;grid-template-columns:268px minmax(0,1fr);gap:var(--gap);
+  align-items:start;
+}
+@supports (color-mix(in srgb,#fff 10%,#000)){
+  .drawer{background:color-mix(in srgb,var(--ink) 84%,#000);border-radius:3px}
+}
+.rail{position:sticky;top:0;max-height:100vh;overflow:auto;padding:var(--pad) 0;overscroll-behavior:contain}
+.rail-head{display:flex;justify-content:space-between;align-items:baseline;color:var(--pale);gap:10px}
+.rail-head .bar{flex:1 1 auto;height:1px;background:rgba(127,168,201,.3);margin:0 0 4px}
+#idx{list-style:none;margin:14px 0 0;padding:0}
+#idx li{margin:0}
+#idx li+li{border-top:1px dotted rgba(127,168,201,.26)}
+.idx-item{
+  width:100%;display:grid;grid-template-columns:34px minmax(0,1fr);gap:0 10px;
+  padding:9px 8px 9px 9px;border:0;border-left:2px solid transparent;
+  background:transparent;color:inherit;text-align:left;cursor:pointer;font:inherit;
+  transition:background .2s var(--ease),border-color .2s var(--ease),padding-left .2s var(--ease);
+}
+.idx-item:hover{background:rgba(127,168,201,.09);padding-left:14px}
+.idx-n{grid-row:1 / span 2;font-family:var(--mono);font-size:1.02rem;letter-spacing:.02em;color:var(--pale);line-height:1.25}
+.idx-name{
+  font-family:var(--serif);font-variant:small-caps;font-size:.95rem;letter-spacing:.02em;
+  color:#dfe8ee;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.idx-tag{color:rgba(127,168,201,.62);font-size:.58rem}
+.idx-item[aria-current="true"]{background:rgba(127,168,201,.15);border-left-color:var(--paper)}
+.idx-item[aria-current="true"] .idx-n{color:var(--paper)}
+.idx-item[aria-current="true"] .idx-name{color:#fff}
+.rail-note{
+  margin-top:16px;padding-top:12px;border-top:1px solid rgba(127,168,201,.24);
+  color:rgba(127,168,201,.78);font-size:.78rem;
+}
+.rail-note .mono{display:block;margin-bottom:5px;color:var(--pale)}
+
+/* ---------- bath / wash control ---------- */
+.ctl{margin-top:18px;padding:13px;border:1px solid rgba(127,168,201,.3)}
+.ctl-top{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.ctl label{color:var(--pale);font-family:var(--mono);font-size:.6rem;letter-spacing:.16em;text-transform:uppercase}
+.ctl-out{font-family:var(--mono);font-size:.94rem;color:var(--paper);letter-spacing:.02em}
+.ctl-out em{font-style:normal;color:var(--pale);font-size:.62rem;letter-spacing:.14em}
+.ctl-ruler{display:flex;justify-content:space-between;margin-top:8px;color:rgba(127,168,201,.6);font-size:.52rem;letter-spacing:.1em}
+input[type=range]{-webkit-appearance:none;appearance:none;width:100%;margin:10px 0 8px;background:transparent;display:block}
+input[type=range]:focus{outline:none}
+input[type=range]::-webkit-slider-runnable-track{height:2px;border-radius:2px;background:linear-gradient(90deg,#0a2a49,var(--blue-2) 58%,var(--paper))}
+input[type=range]::-moz-range-track{height:2px;border-radius:2px;background:linear-gradient(90deg,#0a2a49,var(--blue-2) 58%,var(--paper))}
+input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;appearance:none;width:13px;height:19px;margin-top:-9px;border-radius:1px;
+  background:var(--paper);border:1px solid var(--ink);
+  box-shadow:0 0 0 1px rgba(231,236,239,.32),0 6px 14px rgba(3,15,28,.6);cursor:ew-resize;
+}
+input[type=range]::-moz-range-thumb{
+  width:12px;height:18px;border-radius:1px;background:var(--paper);border:1px solid var(--ink);
+  box-shadow:0 0 0 1px rgba(231,236,239,.32),0 6px 14px rgba(3,15,28,.6);cursor:ew-resize;
+}
+input[type=range]:focus-visible::-webkit-slider-thumb{background:var(--stamp);border-color:var(--paper)}
+.ctl-verdict{margin-top:2px;color:#cfdde8;font-size:.79rem}
+.ctl-hint{margin-top:9px;color:rgba(127,168,201,.72);font-size:.72rem}
+
+/* ---------- plates ---------- */
+.plates{display:grid;gap:clamp(26px,4vw,58px);padding:var(--pad) 0}
+.plate{position:relative;padding:clamp(28px,3.4vw,52px);background:var(--ink-2)}
+@supports (color-mix(in srgb,#fff 10%,#000)){
+  .plate{background:color-mix(in srgb,var(--blue) 42%,var(--ink))}
+}
+.plate::after{
+  content:"";position:absolute;left:clamp(28px,3.4vw,52px);right:clamp(28px,3.4vw,52px);top:13px;
+  height:1px;background:linear-gradient(90deg,var(--stamp) 0 26px,rgba(181,58,43,.18) 26px 100%);
+  opacity:.75;
+}
+.plate:focus{outline:none}
+.plate.lift{animation:lift 1s var(--ease)}
+@keyframes lift{
+  0%{transform:translateY(0)}
+  26%{transform:translateY(-9px)}
+  100%{transform:translateY(0)}
+}
+.plate-inner{
+  position:relative;overflow:hidden;isolation:isolate;
+  --ex:0;--dev:calc(.25 + .75 * var(--ex));
+  --wash-l:21;--wash-s:64;--wash-h:208;
+  --ink-a1:1;--ink-a2:.5;--ink-a3:.32;
+  --sc-a1:.96;--sc-a2:.8;--sc-a3:.66;
+  --halftone:26%;
+  --grain:none;--mg-ink:none;--mg-wash:none;
+  --grain-o:.2;--grain-s:1;
+  --bleed:.2;--fox:.14;
+  --scrim:1;
+  background:hsl(var(--wash-h) calc(var(--wash-s) * 1%) calc(var(--wash-l) * 1%));
+  box-shadow:0 26px 60px -26px rgba(2,10,20,.92),0 2px 0 rgba(231,236,239,.06);
+}
+.plate.lift .plate-inner{animation:lift-shadow 1s var(--ease)}
+@keyframes lift-shadow{
+  0%{box-shadow:0 26px 60px -26px rgba(2,10,20,.92),0 2px 0 rgba(231,236,239,.06)}
+  26%{box-shadow:0 44px 92px -26px rgba(2,10,20,.98),0 2px 0 rgba(231,236,239,.12)}
+  100%{box-shadow:0 26px 60px -26px rgba(2,10,20,.92),0 2px 0 rgba(231,236,239,.06)}
+}
+.lay{position:absolute;inset:0;z-index:1;pointer-events:none}
+.lay.paper{
+  z-index:0;opacity:var(--dev);
+  background-image:
+    radial-gradient(58% 48% at 20% 10%,rgba(244,247,248,.17),rgba(244,247,248,0) 72%),
+    repeating-linear-gradient(93deg,rgba(255,255,255,.03) 0 1px,rgba(255,255,255,0) 1px 4px),
+    repeating-linear-gradient(0deg,rgba(4,18,34,.05) 0 1px,rgba(4,18,34,0) 1px 5px);
+}
+.lay.wash{
+  opacity:calc(var(--dev) * .92);
+  background-image:
+    radial-gradient(58% 44% at 26% 18%,
+      hsl(var(--wash-h) calc(var(--wash-s) * 1% + 6%) calc(var(--wash-l) * 1% + 8)),
+      hsl(var(--wash-h) calc(var(--wash-s) * 1%) calc(var(--wash-l) * 1%)) 64%),
+    radial-gradient(40% 32% at 78% 76%,
+      hsl(var(--wash-h) calc(var(--wash-s) * 1% + 9%) calc(var(--wash-l) * 1% - 6)),
+      hsl(var(--wash-h) calc(var(--wash-s) * 1%) calc(var(--wash-l) * 1%)) 70%),
+    repeating-radial-gradient(circle at 47% 41%,
+      hsl(var(--wash-h) calc(var(--wash-s) * 1%) calc(var(--wash-l) * 1% + 4)) 0 2px,
+      hsl(var(--wash-h) calc(var(--wash-s) * 1%) calc(var(--wash-l) * 1% - 2)) 2px 5px),
+    radial-gradient(122% 116% at 50% 50%,
+      hsl(var(--wash-h) calc(var(--wash-s) * 1%) calc(var(--wash-l) * 1%)) 44%,
+      hsl(var(--wash-h) calc(var(--wash-s) * 1%) calc(var(--wash-l) * 1% - 7)) 100%);
+}
+.lay.halftone{
+  z-index:2;opacity:var(--halftone);mix-blend-mode:soft-light;
+  background-image:radial-gradient(circle at 50% 50%,rgba(8,33,58,.92) 0 38%,rgba(8,33,58,0) 71%);
+  background-size:5px 5px;
+}
+.lay.fox{
+  z-index:2;opacity:var(--fox);mix-blend-mode:soft-light;
+  background-image:
+    radial-gradient(28% 22% at 84% 18%,rgba(181,58,43,.5),rgba(181,58,43,0) 70%),
+    radial-gradient(20% 26% at 10% 78%,rgba(181,58,43,.34),rgba(181,58,43,0) 72%);
+}
+.lay.grain{
+  z-index:3;opacity:var(--grain-o);mix-blend-mode:overlay;
+  background-image:var(--grain);
+  background-repeat:repeat;background-size:320px 320px;
+  animation:grain 7.2s steps(6) infinite;
+}
+@keyframes grain{
+  0%{background-position:0 0}
+  16%{background-position:-72px 38px}
+  33%{background-position:54px -61px}
+  50%{background-position:-31px -22px}
+  66%{background-position:83px 47px}
+  83%{background-position:-46px 69px}
+  100%{background-position:0 0}
+}
+.lay.exposure{
+  z-index:5;mix-blend-mode:multiply;
+  background:
+    radial-gradient(118% 100% at 50% 50%,rgba(231,236,239,1) calc(var(--ex) * 128%),
+      rgba(215,226,232,.94) calc(var(--ex) * 128% + 9%),
+      rgba(198,213,222,.88) calc(var(--ex) * 128% + 22%),
+      rgba(198,213,222,.88) 140%);
+}
+.lay.vignette{
+  z-index:4;opacity:calc(1 - var(--ex) * .55);mix-blend-mode:multiply;
+  background-image:
+    radial-gradient(116% 96% at 50% 48%,rgba(198,213,222,0) 52%,rgba(158,180,197,.85) 100%),
+    radial-gradient(100% 100% at 50% 50%,rgba(198,213,222,0) 78%,rgba(120,150,175,.9) 100%);
+}
+.plate.developing .lay.exposure,.plate.developing .lay.vignette{transition:none}
+
+/* ---------- the drawing ---------- */
+.plate-art{position:relative;z-index:2;padding:clamp(16px,2.6vw,34px)}
+.artwrap{
+  position:relative;max-width:min(560px,100%);margin:0 auto;
+  opacity:var(--dev);transition:opacity .9s var(--ease);
+}
+.bleed{
+  position:absolute;inset:-11% -9%;border-radius:50%;
+  filter:blur(20px);opacity:var(--bleed);pointer-events:none;
+  background:radial-gradient(50% 50% at 50% 50%,rgba(247,250,251,.5),rgba(247,250,251,0) 64%);
+}
+.art{display:block;width:100%;height:auto}
+.art .ink{fill:none;stroke:#f7fafb;stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+.art .w1{stroke-width:1}
+.art .w13{stroke-width:1.3}
+.art .w18{stroke-width:1.8}
+.art .w26{stroke-width:2.6}
+.art .a1{stroke-opacity:var(--sc-a1)}
+.art .a2{stroke-opacity:var(--sc-a2)}
+.art .a3{stroke-opacity:var(--sc-a3)}
+.art .dust{stroke-width:1;stroke-opacity:calc(var(--sc-a2) * .85)}
+.art .tick{stroke-width:1;stroke-opacity:var(--sc-a3)}
+.art .halo{fill:none;stroke:#f7fafb;stroke-width:22;stroke-opacity:calc(var(--ink-a1) * .14);vector-effect:non-scaling-stroke}
+.art .hatch{opacity:var(--ink-a3);transition:opacity .35s var(--ease)}
+.art .h1{stroke-width:.7;stroke-opacity:.5}
+.art .h2{stroke-width:.9;stroke-opacity:.34}
+.art .spec{fill:#f7fafb;fill-opacity:var(--sc-a1);stroke:none}
+.art .spec3{fill:#f7fafb;fill-opacity:var(--sc-a3);stroke:none}
+.art .label{
+  fill:#f7fafb;fill-opacity:.55;stroke:none;font-family:var(--mono);
+  font-size:9px;letter-spacing:.16em;text-transform:uppercase;
+}
+.magnifier .label{fill-opacity:.86}
+
+/* ---------- magnifier ---------- */
+.mg{
+  position:absolute;inset:0;z-index:6;width:100%;height:100%;
+  opacity:0;transition:opacity .2s var(--ease);pointer-events:none;
+  --mx:50%;--my:50%;--mgx:50%;--mgy:50%;--sc:3.1;--mclip:circle(74px at 50% 50%);
+}
+.mg.live{opacity:1}
+.mg-l{
+  position:absolute;inset:0;
+  background-color:hsl(var(--wash-h) calc(var(--wash-s) * 1%) calc(var(--wash-l) * 1%));
+  background-repeat:no-repeat;
+  background-size:calc(100% * var(--sc)) calc(100% * var(--sc));
+  background-position:var(--mgx) var(--mgy);
+  -webkit-mask:var(--mclip);mask:var(--mclip);
+}
+.mg-l.wash{
+  background-color:transparent;background-image:var(--mg-wash);
+  filter:invert(1) sepia(.16) saturate(1.5) hue-rotate(184deg) brightness(.99) contrast(1.12);
+}
+.mg-l.ink{
+  background-color:transparent;background-image:var(--mg-ink);
+  filter:invert(1) sepia(.2) saturate(2.1) hue-rotate(186deg) brightness(1.16) contrast(2.4);
+}
+.mg-ring{
+  position:absolute;left:var(--mx);top:var(--my);width:150px;height:150px;margin:-75px 0 0 -75px;
+  border-radius:50%;border:1px solid rgba(231,236,239,.72);
+  box-shadow:0 0 0 1px rgba(8,33,58,.5),0 14px 34px -10px rgba(3,14,26,.8),inset 0 0 26px rgba(8,33,58,.4);
+}
+.mg-ring::before,.mg-ring::after{
+  content:"";position:absolute;background:rgba(231,236,239,.4);
+}
+.mg-ring::before{left:50%;top:12px;bottom:12px;width:1px}
+.mg-ring::after{top:50%;left:12px;right:12px;height:1px}
+.mg-tag{
+  position:absolute;left:var(--mx);top:var(--my);transform:translate(-50%,86px);
+  white-space:nowrap;color:#eef4f8;font-family:var(--mono);font-size:.54rem;
+  letter-spacing:.16em;text-transform:uppercase;text-shadow:0 1px 3px rgba(6,20,34,.9);
+}
+
+/* ---------- caption rail ---------- */
+.plate-cap{position:relative;z-index:2;margin-top:clamp(14px,2vw,22px)}
+.cap-row{display:flex;flex-wrap:wrap;gap:6px clamp(14px,2.2vw,34px);align-items:baseline}
+.cap-no{
+  font-family:var(--serif);font-variant:small-caps;color:var(--paper);
+  font-size:1.34rem;letter-spacing:.05em;white-space:nowrap;
+}
+.cap-bin{color:rgba(127,168,201,.9);font-size:.6rem;letter-spacing:.2em}
+.cap-text{min-width:0;flex:1 1 260px}
+.cap-text h3{font-size:clamp(1.32rem,1rem + 1.35vw,2.05rem);line-height:1.08;color:#fff}
+.cap-text h3 em{font-style:italic;font-variant:normal;opacity:.68;font-size:.62em;letter-spacing:.01em;margin-left:.5em}
+.cap-where{margin-top:5px;color:rgba(127,168,201,.92);font-size:.58rem;letter-spacing:.14em}
+.cap-toggle{
+  margin-left:auto;border:1px solid rgba(231,236,239,.34);background:transparent;color:#dfe8ee;
+  font-family:var(--mono);font-size:.58rem;letter-spacing:.18em;text-transform:uppercase;
+  padding:7px 12px;cursor:pointer;transition:background .2s var(--ease),color .2s var(--ease);
+}
+.cap-toggle:hover{background:rgba(231,236,239,.92);color:var(--ink)}
+.cap-toggle::after{content:" + "}
+.cap-toggle[aria-expanded="true"]::after{content:" −"}
+.log{display:grid;grid-template-columns:repeat(auto-fit,minmax(178px,1fr));gap:1px;background:rgba(127,168,201,.24)}
+.log-pad{padding-top:16px}
+.log>div{background:rgba(8,33,58,.5);padding:10px 12px;min-width:0}
+.log dt{color:var(--pale);font-family:var(--mono);font-size:.55rem;letter-spacing:.18em;text-transform:uppercase}
+.log dd{margin:5px 0 0;font-family:var(--mono);font-size:.72rem;line-height:1.45;color:#e9f0f5;overflow-wrap:break-word}
+.log dd b{font-weight:400;color:#fff}
+.log .stamp dd{color:#e8b3a9}
+.logbox{max-height:0;overflow:hidden;opacity:0;transition:max-height .52s var(--ease),opacity .34s var(--ease)}
+.plate.open .logbox{opacity:1}
+.foot-mark{
+  position:absolute;right:clamp(10px,1.6vw,20px);bottom:8px;z-index:2;
+  color:rgba(231,236,239,.42);font-size:.52rem;letter-spacing:.22em;
+}
+
+/* ---------- colophon ---------- */
+.colophon{
+  max-width:1560px;margin:clamp(30px,5vw,70px) auto 0;padding:0 var(--gap);
+}
+.col-in{border-top:1px solid rgba(231,236,239,.26);padding:clamp(20px,3vw,34px) 0 clamp(34px,5vw,60px)}
+.col-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(232px,1fr));gap:clamp(18px,3vw,44px)}
+.col-grid h4{font-size:1.02rem;color:var(--paper);margin-bottom:8px}
+.col-grid p{color:#c6d6e2;font-size:.86rem;opacity:.9}
+.col-grid .mono{display:block;color:rgba(127,168,201,.72);margin-bottom:7px;font-size:.55rem}
+.swatch{display:flex;flex-wrap:wrap;gap:7px;margin:10px 0 0}
+.swatch i{width:26px;height:26px;border:1px solid rgba(231,236,239,.3);display:block}
+.swatch i span{display:none}
+.sign{
+  margin-top:clamp(20px,3vw,34px);padding-top:14px;border-top:1px dotted rgba(127,168,201,.3);
+  display:flex;flex-wrap:wrap;gap:8px clamp(14px,2vw,30px);align-items:baseline;
+  color:rgba(127,168,201,.8);font-size:.56rem;letter-spacing:.18em;
+}
+.sign .k{color:rgba(231,236,239,.9)}
+
+/* ---------- responsive ---------- */
+@media (max-width:1080px){
+  .mast{grid-template-columns:minmax(0,1fr)}
+  .drawer{grid-template-columns:minmax(0,1fr)}
+  .rail{position:static;max-height:none;padding-bottom:0}
+  #idx{display:grid;grid-template-columns:repeat(auto-fit,minmax(212px,1fr))}
+  #idx li+li{border-top:0}
+  .idx-item{border-left:0;border-top:2px solid transparent;border-bottom:1px dotted rgba(127,168,201,.26)}
+  .idx-item[aria-current="true"]{border-left-color:transparent;border-top-color:var(--paper)}
+  .idx-item:hover{padding-left:8px}
+  .ctl{margin-top:14px}
+}
+@media (max-width:660px){
+  body{font-size:15px}
+  .plate{padding:20px 12px}
+  .plate::after{left:12px;right:12px}
+  .plate-art{padding:12px 8px}
+  .cap-toggle{margin-left:0}
+  .cap-text{flex:1 1 100%}
+  .cap-no{font-size:1.1rem}
+  #idx{grid-template-columns:minmax(0,1fr)}
+  .mg,.mg-ring,.mg-tag{display:none}
+  .rules i:nth-child(n+16){display:none}
+}
+@media (max-width:420px){
+  .mast-meta div{flex-direction:column;gap:2px}
+  .mast-meta dd{text-align:left}
+  .rules{display:none}
+}
+
+/* ---------- reduced motion ---------- */
+@media (prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  .lay.grain{animation:none}
+  .artwrap,.mg,.cap-toggle,.idx-item{transition:none}
+  .plate.lift,.plate.lift .plate-inner{animation:none}
+  .logbox{transition:none}
+}
+</style>
+</head>
+<body>
+<a class="skip" href="#plates">Skip to plates</a>
+
+<header class="mast">
+  <div>
+    <span class="eyebrow mono">Halide · Cyanotype archive · Bench 3 · Marine photograms</span>
+    <h1>Halide</h1>
+    <p class="deck">Six contact plates of plankton, printed from ferric ammonium citrate and
+      potassium ferri-cyanide onto rag paper and developed in running sea water. The sheets are
+      kept flat, unmounted, and in the dark; what follows is the drawer as the bench keeps it —
+      plate numbers, exposure logs, and the bath notes that decided each one.</p>
+  </div>
+  <dl class="mast-meta">
+    <div><dt>Accession</dt><dd>HAL.CYAN.1897&ndash;1911</dd></div>
+    <div><dt>Sheets</dt><dd>6 of 214</dd></div>
+    <div><dt>Process</dt><dd>Contact, 4&nbsp;h sun</dd></div>
+    <div><dt>Fix</dt><dd>Running water, 20&nbsp;min</dd></div>
+    <div><dt>Acc. no. range</dt><dd>1897.04.17&nbsp;&rarr;&nbsp;1911.02.11</dd></div>
+  </dl>
+</header>
+<div class="rules" aria-hidden="true"></div>
+
+<main class="drawer">
+  <aside class="rail">
+    <div class="rail-head"><span class="mono">Drawer index</span><span class="bar"></span><span class="mono" id="idx-count">vi / vi</span></div>
+    <ol id="idx"></ol>
+    <p class="rail-note"><span class="mono">Handling</span>Plates are shown at bench scale.
+      Lift only by the caption rail; the emulsion takes a fingernail.</p>
+    <div class="ctl">
+      <div class="ctl-top">
+        <label for="wash">Bath / wash time</label>
+        <output class="ctl-out" id="washOut" for="wash">10.0<em>min</em></output>
+      </div>
+      <input id="wash" type="range" min="0" max="20" step="0.5" value="10"
+             aria-describedby="washVerdict">
+      <div class="ctl-ruler mono"><span>0</span><span>5</span><span>10</span><span>15</span><span>20 min</span></div>
+      <p class="ctl-verdict mono" id="washVerdict">Printing blue</p>
+      <p class="ctl-hint">Rerinsing the sheet in the bench tray drives out free Prussian and lifts the
+        line contrast. Applies to the plate on top of the drawer.</p>
+    </div>
+  </aside>
+  <div class="plates" id="plates"></div>
+</main>
+
+<footer class="colophon">
+  <div class="col-in">
+    <div class="col-grid">
+      <section>
+        <span class="mono">On the process</span>
+        <h4>Two salts, one sun</h4>
+        <p>Equal parts ferric ammonium citrate and potassium ferri-cyanide are brushed in the shade
+          and dried flat. Ultraviolet reduces Fe(III) to Fe(II) and precipitates insoluble Prussian
+          blue wherever the light reaches; the specimen is laid in direct contact, so nothing is
+          imaged through a lens. What survives the wash is a shadowgram, one-to-one, laterally
+          correct, and irreversible.</p>
+      </section>
+      <section>
+        <span class="mono">On these sheets</span>
+        <h4>Every mark measured twice</h4>
+        <p>Exposure was timed against a standard Wedgwood strip on the same table, and the bath was
+          run from a second watch. Where a plate was re-washed or printed-out afterwards the bench
+          says so in the log rather than quietly correcting the entry. Six sheets are shown here;
+          two hundred and eight remain in the flat file, unnumbered.</p>
+      </section>
+      <section>
+        <span class="mono">On the wash slider</span>
+        <h4>The tray is the only developer</h4>
+        <p>Short washes leave soluble iron in the fibres: the ground greys toward steel and the
+          specimen line loses edge. At ten minutes the blue is at its densest and the whites are
+          clean. Past fifteen the ground begins to go slate and, on the finer strokes, the line goes
+          with it &mdash; the same failure that cost us plates III and V.</p>
+      </section>
+      <section>
+        <span class="mono">Bench palette</span>
+        <h4>Six mixings</h4>
+        <div class="swatch" aria-hidden="true">
+          <i style="background:#08213a"></i><i style="background:#0d3a63"></i><i style="background:#1d5c92"></i>
+          <i style="background:#7fa8c9"></i><i style="background:#e7ecef"></i><i style="background:#b53a2b"></i>
+        </div>
+      </section>
+    </div>
+    <div class="sign mono">
+      <span><span class="k">Halide</span> · Cyanotype archive · Bench 3</span>
+      <span>Plates <span class="k">i&ndash;vi</span> of 214</span>
+      <span>Drawn as vectors, printed as light</span>
+      <span>No lens · No dye · No second impression</span>
+    </div>
+  </div>
+</footer>
+
+<script>
+(function () {
+  'use strict';
+
+  var RMQ = window.matchMedia('(prefers-reduced-motion: reduce)');
+  var reduce = RMQ.matches;
+  var $ = function (s, r) { return (r || document).querySelector(s); };
+  var D = function (n) { return Math.round(n * 10) / 10; };
+
+  /* Deterministic pseudo-random so every drawing is stable across reloads. */
+  function mulberry(seed) {
+    return function () {
+      seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
+      var t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  function rng(seed) { var r = mulberry(seed); r.range = function (a, b) { return a + r() * (b - a); }; return r; }
+
+  /* ---- path builders: every one returns path data, never markup ---- */
+  function ellipse(cx, cy, rx, ry, rot) {
+    rot = rot || 0;
+    var k = Math.PI / 180 * rot, c = Math.cos(k), s = Math.sin(k);
+    function P(a, b) { return [D(cx + a * c - b * s), D(cy + a * s + b * c)]; }
+    var e = P(rx, 0), f = P(-rx, 0);
+    return 'M' + e[0] + ' ' + e[1] + 'A' + D(rx) + ' ' + D(ry) + ' ' + rot + ' 0 1 ' + f[0] + ' ' + f[1] +
+           'A' + D(rx) + ' ' + D(ry) + ' ' + rot + ' 0 1 ' + e[0] + ' ' + e[1] + 'Z';
+  }
+  function circle(cx, cy, r) { return ellipse(cx, cy, r, r, 0); }
+  function polyline(pts, close) {
+    var d = '', i;
+    for (i = 0; i < pts.length; i++) d += (i ? 'L' : 'M') + D(pts[i][0]) + ' ' + D(pts[i][1]);
+    return close ? d + 'Z' : d;
+  }
+  function wave(p0, p1, amp, n) {
+    var dx = p1[0] - p0[0], dy = p1[1] - p0[1];
+    var len = Math.sqrt(dx * dx + dy * dy) || 1;
+    var nx = -dy / len, ny = dx / len, pts = [], t, w;
+    for (t = 0; t <= n; t++) {
+      w = Math.sin(t / n * Math.PI * 2) * amp * Math.sin(t / n * Math.PI);
+      pts.push([p0[0] + dx * t / n + nx * w, p0[1] + dy * t / n + ny * w]);
+    }
+    return polyline(pts, false);
+  }
+  function arcLine(cx, cy, r, a0, a1, n) {
+    var pts = [], i, a;
+    n = n || 40;
+    for (i = 0; i <= n; i++) {
+      a = a0 + (a1 - a0) * i / n;
+      pts.push([cx + Math.cos(a) * r, cy + Math.sin(a) * r]);
+    }
+    return polyline(pts, false);
+  }
+  function arcTick(cx, cy, r0, r1, a, n) {
+    var d = '', i, t, r;
+    for (i = 0; i < n; i++) {
+      t = a + i / n * Math.PI * 2;
+      r = r0 + (r1 - r0) * ((i % 3) / 2);
+      d += 'M' + D(cx + Math.cos(t) * r0) + ' ' + D(cy + Math.sin(t) * r0) +
+           'L' + D(cx + Math.cos(t) * r) + ' ' + D(cy + Math.sin(t) * r);
+    }
+    return d;
+  }
+  /* parallel hairlines: `ang` is the offset normal, `rot` the half-length */
+  function stripes(cx, cy, ang, half, step, rot) {
+    var ca = Math.cos(ang), sa = Math.sin(ang), px = -sa, py = ca, d = '', o, mx, my;
+    for (o = -half; o <= half; o += step) {
+      mx = cx + ca * o; my = cy + sa * o;
+      d += 'M' + D(mx + px * rot) + ' ' + D(my + py * rot) + 'L' + D(mx - px * rot) + ' ' + D(my - py * rot);
+    }
+    return d;
+  }
+  function sh(c, d, s, cl) { return { c: c, d: d, s: s || '', k: cl ? 1 : 0 }; }
+
+  /* ------------------------------------------------------------------ *
+   * The six plates. Each returns { ink, hatch, dots, texts, clip }
+   * ------------------------------------------------------------------ */
+  var DRAW = {};
+
+  /* I — Coscinodiscus: a valve seen face-on, so the whole drawing is concentric. */
+  DRAW.diatom = function (r) {
+    var cx = 200, cy = 200, i, a, ink = [], hatch = [], dots = [], s;
+    ink.push(sh('halo', circle(cx, cy, 178)));
+    ink.push(sh('w26 a1', circle(cx, cy, 178)));
+    ink.push(sh('w1 a3', circle(cx, cy, 171)));
+    hatch.push(sh('h1', arcTick(cx, cy, 151, 169, 0, 148)));
+    ink.push(sh('w13 a1', circle(cx, cy, 147)));
+
+    /* coarse fasciculated ribs, each a narrow wedge */
+    s = '';
+    for (i = 0; i < 26; i++) {
+      a = i / 26 * Math.PI * 2;
+      var w = 0.016;
+      s += 'M' + D(cx + Math.cos(a - w) * 121) + ' ' + D(cy + Math.sin(a - w) * 121) +
+           'L' + D(cx + Math.cos(a - w * 2.4) * 144) + ' ' + D(cy + Math.sin(a - w * 2.4) * 144) +
+           'M' + D(cx + Math.cos(a + w) * 121) + ' ' + D(cy + Math.sin(a + w) * 121) +
+           'L' + D(cx + Math.cos(a + w * 2.4) * 144) + ' ' + D(cy + Math.sin(a + w * 2.4) * 144);
+    }
+    ink.push(sh('w1 a2', s));
+
+    ink.push(sh('w18 a1', circle(cx, cy, 118)));
+    ink.push(sh('w1 a3', circle(cx, cy, 113)));
+
+    /* a single ring of large central areolae */
+    s = '';
+    for (i = 0; i < 34; i++) {
+      a = i / 34 * Math.PI * 2;
+      s += circle(cx + Math.cos(a) * 101, cy + Math.sin(a) * 101, 5.4);
+    }
+    ink.push(sh('w1 a2', s));
+    hatch.push(sh('h2', arcTick(cx, cy, 95, 108, 0.09, 34)));
+
+    ink.push(sh('w13 a1', circle(cx, cy, 88)));
+    hatch.push(sh('h1', stripes(cx, cy, 0, 88, 7.5, 88), '', 1));
+    hatch.push(sh('h2', stripes(cx, cy, Math.PI / 3, 88, 7.5, 88), '', 1));
+    hatch.push(sh('h2', stripes(cx, cy, -Math.PI / 3, 88, 7.5, 88), '', 1));
+    for (i = 1; i <= 5; i++) hatch.push(sh('h2', circle(cx, cy, 14 * i + 6), '', 1));
+
+    /* the rostrum and its crown */
+    ink.push(sh('w18 a1', circle(cx, cy, 13)));
+    ink.push(sh('w1 a2', arcTick(cx, cy, 16, 27, 0, 9)));
+    ink.push(sh('w1 a3', circle(cx, cy, 31)));
+    for (i = 0; i < 7; i++) {
+      a = i / 7 * Math.PI * 2 + 0.4;
+      dots.push(sh('spec3', circle(cx + Math.cos(a) * 41, cy + Math.sin(a) * 41, 2.1)));
+    }
+    dots.push(sh('spec', circle(cx, cy, 3.4)));
+
+    /* the plate carries its own scale, scratched into the emulsion */
+    ink.push(sh('tick', 'M40 356H160M40 350v12M100 352v8M160 350v12'));
+    var texts = [['label', 40, 344, 'P 001 · 40 µm'], ['label', 268, 358, 'valve view']];
+    return { ink: ink, hatch: hatch, dots: dots, texts: texts, clip: circle(cx, cy, 87) };
+  };
+
+  /* II — a spumellarian: lattice sphere, hexactine rays, a collapsed outer pellicle. */
+  DRAW.radiolarian = function (r) {
+    var cx = 200, cy = 200, i, a, ink = [], hatch = [], dots = [], s;
+    var prim = [0, 1, 2, 3, 4, 5], sec = [], k;
+    for (k = 0; k < 18; k++) sec.push((k + 0.5) / 18 * Math.PI * 2);
+
+    /* hexactine primary rays, each forking twice near the tip */
+    s = '';
+    for (i = 0; i < 6; i++) {
+      a = prim[i] * Math.PI / 3 - Math.PI / 2;
+      var L = r.range(158, 178), M = 96;
+      var x0 = cx + Math.cos(a) * M, y0 = cy + Math.sin(a) * M;
+      var x1 = cx + Math.cos(a) * L, y1 = cy + Math.sin(a) * L;
+      var bm = 0.2, t;
+      t = L - 26;
+      s += 'M' + D(x0) + ' ' + D(y0) + 'L' + D(x1) + ' ' + D(y1);
+      s += 'M' + D(cx + Math.cos(a) * t) + ' ' + D(cy + Math.sin(a) * t) +
+           'L' + D(cx + Math.cos(a + bm) * (L + 12)) + ' ' + D(cy + Math.sin(a + bm) * (L + 12));
+      s += 'M' + D(cx + Math.cos(a) * t) + ' ' + D(cy + Math.sin(a) * t) +
+           'L' + D(cx + Math.cos(a - bm) * (L + 12)) + ' ' + D(cy + Math.sin(a - bm) * (L + 12));
+      s += circle(cx + Math.cos(a) * (L + 15), cy + Math.sin(a) * (L + 15), 3.2);
+    }
+    ink.push(sh('w18 a1', s));
+
+    /* secondary spines with barbed termini */
+    s = '';
+    for (i = 0; i < sec.length; i++) {
+      a = sec[i];
+      var L2 = r.range(116, 140);
+      s += 'M' + D(cx + Math.cos(a) * 92) + ' ' + D(cy + Math.sin(a) * 92) +
+           'L' + D(cx + Math.cos(a) * L2) + ' ' + D(cy + Math.sin(a) * L2);
+      s += 'M' + D(cx + Math.cos(a - 0.09) * (L2 - 9)) + ' ' + D(cy + Math.sin(a - 0.09) * (L2 - 9)) +
+           'L' + D(cx + Math.cos(a) * L2) + ' ' + D(cy + Math.sin(a) * L2) +
+           'L' + D(cx + Math.cos(a + 0.09) * (L2 - 9)) + ' ' + D(cy + Math.sin(a + 0.09) * (L2 - 9));
+    }
+    ink.push(sh('w1 a2', s));
+
+    /* the lattice shell, three girdles */
+    ink.push(sh('w18 a1', circle(cx, cy, 94)));
+    ink.push(sh('w13 a2', circle(cx, cy, 78)));
+    ink.push(sh('w1 a2', circle(cx, cy, 62)));
+    hatch.push(sh('h1', stripes(cx, cy, 0, 94, 9, 94), '', 1));
+    hatch.push(sh('h2', stripes(cx, cy, Math.PI / 3, 94, 9, 94), '', 1));
+    hatch.push(sh('h2', stripes(cx, cy, -Math.PI / 3, 94, 9, 94), '', 1));
+
+    /* central capsule with two body nuclei */
+    ink.push(sh('w18 a1', circle(cx, cy, 34)));
+    ink.push(sh('w1 a3', circle(cx, cy, 27)));
+    dots.push(sh('spec', circle(cx - 9, cy - 5, 5.2)));
+    dots.push(sh('spec3', circle(cx + 10, cy + 8, 3.6)));
+
+    /* collapsed pellicle and the filaments that hold the spicules */
+    ink.push(sh('w1 a3', circle(cx, cy, 190), 'stroke-dasharray:2 7'));
+    s = '';
+    for (i = 0; i < 18; i++) {
+      a = i / 18 * Math.PI * 2 + 0.12;
+      s += arcLine(cx, cy, 172, a, a + 0.2, 5);
+    }
+    hatch.push(sh('h2', s));
+    for (i = 0; i < 11; i++) {
+      a = r() * Math.PI * 2; var rr = r.range(104, 152);
+      dots.push(sh('spec3', circle(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr, r.range(1.1, 2.4))));
+    }
+    ink.push(sh('tick', 'M252 356H372M252 350v12M312 352v8M372 350v12'));
+    return {
+      ink: ink, hatch: hatch, dots: dots, clip: circle(cx, cy, 93),
+      texts: [['label', 252, 344, 'P 002 · 40 µm'], ['label', 34, 40, 'spumellarian']]
+    };
+  };
+  /* III — an equoreid medusa: exumbrella, lappets, one manubrium, forty-eight streaming lines. */
+  DRAW.medusa = function (r) {
+    var ink = [], hatch = [], dots = [], i, t, s, p, a;
+    var P0 = [52, 230], C = [200, 296], P1 = [348, 230];
+    function marg(t) { var u = 1 - t; return [u * u * P0[0] + 2 * u * t * C[0] + t * t * P1[0],
+                                             u * u * P0[1] + 2 * u * t * C[1] + t * t * P1[1]]; }
+    var bell = 'M52 230C60 120 130 64 200 64C270 64 340 120 348 230Q200 296 52 230Z';
+    ink.push(sh('halo', bell));
+    ink.push(sh('w18 a1', bell));
+
+    /* the margin is torn into eight lappets, so the lower edge breaks into scallops */
+    s = '';
+    for (i = 0; i < 8; i++) {
+      var q0 = marg(i / 8), q1 = marg((i + 0.62) / 8), q2 = marg((i + 1) / 8);
+      s += 'M' + D(q0[0]) + ' ' + D(q0[1]) +
+           'Q' + D((q0[0] + q1[0]) / 2) + ' ' + D((q0[1] + q1[1]) / 2 + 26) + ' ' + D(q1[0]) + ' ' + D(q1[1]) +
+           'Q' + D((q1[0] + q2[0]) / 2) + ' ' + D((q1[1] + q2[1]) / 2 - 7) + ' ' + D(q2[0]) + ' ' + D(q2[1]);
+    }
+    ink.push(sh('w13 a2', s));
+
+    /* growth lines read through the jelly */
+    for (i = 1; i <= 4; i++) {
+      hatch.push(sh('h2', 'M' + D(52 + 17 * i) + ' ' + D(230 - 5 * i) + 'Q200 ' + D(296 - 24 * i) + ' ' +
+        D(348 - 17 * i) + ' ' + D(230 - 5 * i), '', 1));
+    }
+    for (i = 0; i < 22; i++) {
+      t = (i + 0.5) / 22; p = marg(t);
+      hatch.push(sh('h1', 'M' + D(p[0]) + ' ' + D(p[1] - 3) + 'L' + D(200 + (p[0] - 200) * 0.32) + ' ' +
+        D(150 + (p[1] - 230) * 0.2), '', 1));
+    }
+
+    /* manubrium, stomach, and the four canals that leave it */
+    ink.push(sh('w13 a1', 'M189 98C183 138 178 178 172 210M211 98C217 138 222 178 228 210'));
+    ink.push(sh('w1 a2', ellipse(200, 172, 15, 31, 0)));
+    ink.push(sh('w1 a3', ellipse(200, 168, 8, 19, 0)));
+    s = '';
+    for (i = 0; i < 8; i++) {
+      p = marg((i + 0.5) / 8);
+      s += wave([200, 208], [p[0], p[1] - 4], 5, 12);
+    }
+    ink.push(sh('w1 a2', s));
+
+    /* thirty-two marginal tentacles, each one long enough to be a hairline */
+    s = '';
+    for (i = 0; i < 32; i++) {
+      t = (i + 0.5) / 32; p = marg(t);
+      s += wave(p, [p[0] + (p[0] - 200) * 0.16, p[1] + r.range(64, 106)], r.range(9, 17), 15);
+    }
+    ink.push(sh('w1 a2', s));
+
+    /* eight oral arms, drawn as a doubled wave so they read as ribbon */
+    s = '';
+    for (i = 0; i < 8; i++) {
+      t = (i + 0.34) / 8; p = marg(t);
+      var end = [p[0] + (p[0] - 200) * 0.3, p[1] + r.range(74, 108)];
+      s += wave([200 + (p[0] - 200) * 0.22, p[1] + 6], end, 13, 15);
+      s += wave([200 + (p[0] - 200) * 0.22 + 5, p[1] + 8], [end[0] + 4, end[1] - 5], 12, 15);
+    }
+    ink.push(sh('w13 a1', s));
+    hatch.push(sh('h2', (function () {
+      var d = '';
+      for (var j = 0; j < 8; j++) {
+        var q = marg((j + 0.34) / 8);
+        d += wave([200 + (q[0] - 200) * 0.22 + 2.5, q[1] + 7],
+                  [q[0] + (q[0] - 200) * 0.3 + 2, q[1] + 92], 12.5, 15);
+      }
+      return d;
+    })(), '', 1));
+
+    /* the marginal ocelli, the only solid marks on this plate */
+    for (i = 0; i < 24; i++) {
+      p = marg((i + 0.5) / 24);
+      dots.push(sh('spec', circle(p[0], p[1] + 1.5, 1.9)));
+    }
+    a = arcLine(200, 232, 176, 0.30, 1.02, 26);
+    ink.push(sh('tick', a + 'M24 250v12M74 252v8M124 250v12'));
+    dots.push(sh('spec3', circle(300, 96, 2.6)));
+    dots.push(sh('spec3', circle(312, 112, 1.7)));
+    return {
+      ink: ink, hatch: hatch, dots: dots, clip: bell,
+      texts: [['label', 24, 240, 'P 003 · 5 mm'], ['label', 262, 44, 'sub-umbrella view']]
+    };
+  };
+  /* IV — a calanoid copepod, lateral: five swimming legs, one pair of first antennae longer
+          than the whole body, and a caudal ramus carrying two plumose rami. */
+  DRAW.copepod = function (r) {
+    var ink = [], hatch = [], dots = [], i, s;
+    function spine(p0, len, amp, n, ux, uy) {
+      var L = Math.sqrt(ux * ux + uy * uy) || 1, px = -uy / L, py = ux / L, d = '', t, w, x, y;
+      for (t = 0; t <= n; t++) {
+        w = Math.sin(t / n * Math.PI * 1.6) * amp * (0.25 + t / n);
+        x = p0[0] + ux / L * len * t / n + px * w;
+        y = p0[1] + uy / L * len * t / n + py * w;
+        d += (t ? 'L' : 'M') + D(x) + ' ' + D(y);
+        if (t > 2 && t < n - 1 && t % 3 === 0) {
+          d += 'M' + D(x - px * 3.6) + ' ' + D(y - py * 3.6) + 'L' + D(x + px * 3.6) + ' ' + D(y + py * 3.6);
+          d += 'M' + D(x) + ' ' + D(y);
+        }
+      }
+      return d;
+    }
+    function leg(ox, oy, ang, len, amp) {
+      var a = ang * Math.PI / 180;
+      return spine([ox, oy], len, amp, 16, Math.cos(a), Math.sin(a)) +
+             spine([ox, oy], len * 0.78, amp * 0.7, 14, Math.cos(a + 0.3), Math.sin(a + 0.3));
+    }
+
+    /* cephalothorax, brood chamber, three urosomites, telson */
+    var body = 'M126 172C146 138 196 122 236 132C262 138 272 158 268 176' +
+               'C290 178 300 190 296 202C286 212 272 212 264 208' +
+               'C268 224 262 240 250 250C240 258 228 258 220 252' +
+               'C210 260 194 258 186 248C168 240 148 222 138 200C131 189 126 180 126 172Z';
+    ink.push(sh('halo', body));
+    ink.push(sh('w18 a1', body));
+    /* the carapace sutures and the gut, which is the only solid thing inside */
+    ink.push(sh('w1 a3', 'M232 136C226 158 226 180 234 200M252 146C248 166 248 184 254 200'));
+    ink.push(sh('w13 a2', 'M154 176C176 166 206 164 232 170C250 174 258 184 254 194'));
+    hatch.push(sh('h1', 'M160 150C186 142 214 142 236 150M158 162C186 154 216 154 240 162' +
+      'M156 176C184 170 214 170 240 176M160 190C186 186 212 186 234 190' +
+      'M166 204C188 202 210 202 230 204'));
+    ink.push(sh('w1 a3', 'M266 180h30M266 192h30M252 214c8 6 18 6 26 2M240 232c8 5 16 5 22 1'));
+    /* the naupliar eye and the ventral mouth frame */
+    dots.push(sh('spec', circle(150, 158, 4.6)));
+    ink.push(sh('w1 a2', 'M142 188c8 6 16 9 24 9M138 196c6 8 14 13 22 15'));
+
+    /* antennules: the left one sweeps the whole field, the right folds under it */
+    ink.push(sh('w18 a1', spine([130, 166], 168, 44, 22, -0.55, -0.83)));
+    ink.push(sh('w13 a2', spine([134, 172], 150, 30, 20, -0.86, -0.5)));
+    ink.push(sh('w1 a2', spine([128, 178], 92, 20, 16, -0.98, -0.16)));
+    /* second antennae, the swimming pair, bent at the exopod */
+    ink.push(sh('w13 a1', 'M148 196c-16 10-30 26-38 44M152 200c-10 16-16 34-16 52'));
+    ink.push(sh('w1 a2', 'M110 240c10-6 22-8 34-6M136 252c8-8 18-14 28-16'));
+
+    /* five swimming legs, each with setae on both rami */
+    s = '';
+    for (i = 0; i < 5; i++) {
+      s += leg(176 + i * 20, 214 + i * 5, 74 + i * 9, 62 - i * 5, 15 - i * 1.6);
+    }
+    ink.push(sh('w1 a2', s));
+    /* the last leg is reduced to a single spine, as it is in the female */
+    ink.push(sh('w13 a1', spine([262, 214], 46, 6, 12, 0.5, 0.86)));
+
+    /* caudal rami and their two long plumose setae */
+    ink.push(sh('w13 a1', 'M244 252c-4 12-2 22 4 30M258 250c2 12 8 20 16 26'));
+    ink.push(sh('w1 a2', spine([248, 282], 86, 12, 18, 0.16, 1)));
+    ink.push(sh('w1 a2', spine([274, 276], 78, 14, 18, 0.62, 0.78)));
+    hatch.push(sh('h2', spine([248, 282], 86, 12, 18, 0.3, 1)));
+    hatch.push(sh('h2', spine([274, 276], 78, 14, 18, 0.8, 0.7)));
+
+    /* ova carried in the brood chamber, the reason this sheet was printed at all */
+    for (i = 0; i < 5; i++) dots.push(sh('spec3', circle(212 + (i % 3) * 15, 226 + Math.floor(i / 3) * 14, 4.2)));
+    for (i = 0; i < 9; i++) {
+      dots.push(sh('spec3', circle(r.range(52, 356), r.range(46, 366), r.range(0.9, 1.9))));
+    }
+    ink.push(sh('tick', 'M28 372H148M28 366v12M88 368v8M148 366v12'));
+    return {
+      ink: ink, hatch: hatch, dots: dots, clip: '',
+      texts: [['label', 28, 360, 'P 004 · 1 mm'], ['label', 268, 58, 'lateral, female']]
+    };
+  };
+
+  /* V — a stipitary alga: holdfast, stipe, one long undulate blade with a mid rib,
+          quadrilocular receptacles down both margins, and a torn apex. */
+  DRAW.alga = function (r) {
+    var ink = [], hatch = [], dots = [], i, s, p;
+    var A = [196, 366], B = [176, 258], Cp = [224, 156], Dp = [194, 46];
+    /* the stipe-to-blade centre line: one cubic, held to the page by two controls */
+    function cub(t) {
+      var u = 1 - t;
+      return [u * u * u * A[0] + 3 * u * u * t * B[0] + 3 * u * t * t * Cp[0] + t * t * t * Dp[0],
+              u * u * u * A[1] + 3 * u * u * t * B[1] + 3 * u * t * t * Cp[1] + t * t * t * Dp[1]];
+    }
+    function tan(t) {
+      var u = 1 - t;
+      return [3 * u * u * (B[0] - A[0]) + 6 * u * t * (Cp[0] - B[0]) + 3 * t * t * (Dp[0] - Cp[0]),
+              3 * u * u * (B[1] - A[1]) + 6 * u * t * (Cp[1] - B[1]) + 3 * t * t * (Dp[1] - Cp[1])];
+    }
+    function band(t) { return Math.max(3, 5 + 31 * Math.sin(Math.PI * Math.pow(t, 0.7)) - 9 * t); }
+    function side(t, sgn) {
+      var c = cub(t), v = tan(t), L = Math.sqrt(v[0] * v[0] + v[1] * v[1]) || 1;
+      return [c[0] + (-v[1] / L) * band(t) * sgn, c[1] + (v[0] / L) * band(t) * sgn];
+    }
+    function edge(sgn) {
+      var d = '', t, n = 46;
+      for (t = 0; t <= n; t++) {
+        var pt = side(t / n, sgn);
+        d += (t ? 'L' : 'M') + D(pt[0]) + ' ' + D(pt[1]);
+      }
+      return d;
+    }
+    var eL = edge(-1), eR = edge(1);
+    ink.push(sh('halo', eL + 'L' + D(cub(1)[0]) + ' ' + D(cub(1)[1]) + eR.replace('M', 'L') + 'Z'));
+    ink.push(sh('w18 a1', eL));
+    ink.push(sh('w18 a1', eR));
+    /* the mid rib is a double line, and it dies out below the apex */
+    s = '';
+    for (i = 0; i <= 40; i++) {
+      p = cub(i / 40);
+      s += (i ? 'L' : 'M') + D(p[0]) + ' ' + D(p[1]);
+    }
+    ink.push(sh('w13 a2', s));
+    /* a second, fainter strand runs beside it — the mid rib is two cells thick */
+    s = '';
+    for (i = 0; i <= 40; i++) {
+      p = cub(i / 40);
+      var vb = tan(i / 40), vl = Math.sqrt(vb[0] * vb[0] + vb[1] * vb[1]) || 1;
+      s += (i ? 'L' : 'M') + D(p[0] + (-vb[1] / vl) * 4.5) + ' ' + D(p[1] + (vb[0] / vl) * 4.5);
+    }
+    ink.push(sh('w1 a3', s));
+
+    /* the blade is crossed by fine ribs the whole way up */
+    s = '';
+    for (i = 1; i < 44; i++) {
+      var tt = i / 44, a = side(tt, -1), b = side(tt, 1);
+      s += 'M' + D(a[0]) + ' ' + D(a[1]) + 'L' + D(b[0]) + ' ' + D(b[1]);
+    }
+    hatch.push(sh('h1', s, '', 1));
+    for (i = 1; i < 10; i++) {
+      p = cub(i / 10);
+      hatch.push(sh('h2', circle(p[0], p[1], band(i / 10) * 0.55), '', 1));
+    }
+    /* quadrilocular receptacles as dark blisters down both margins */
+    for (i = 0; i < 13; i++) {
+      var u = 0.14 + i * 0.062;
+      if (u > 0.95) break;
+      var l = side(u, -1), rr2 = side(u + 0.012, 1);
+      dots.push(sh('spec3', ellipse((l[0] + rr2[0]) / 2 - band(u) * 0.62, (l[1] + rr2[1]) / 2,
+        3.4, 2.1, -78 + 30 * Math.sin(u * 9))));
+      dots.push(sh('spec3', ellipse((l[0] + rr2[0]) / 2 + band(u) * 0.62, (l[1] + rr2[1]) / 2,
+        3.1, 2.1, -78 - 26 * Math.sin(u * 11))));
+    }
+    /* torn apex: three holes the water cut in the blade */
+    hatch.push(sh('h1', circle(190, 62, 7)));
+    hatch.push(sh('h1', ellipse(208, 92, 5, 9, 18)));
+    hatch.push(sh('h1', ellipse(178, 120, 4, 7, -22)));
+
+    /* holdfast: a disc of ten rhizoids, drawn as crossing arcs */
+    s = '';
+    for (i = 0; i < 10; i++) {
+      var ang = -Math.PI + i / 9 * Math.PI;
+      s += 'M196 366Q' + D(196 + Math.cos(ang) * 34) + ' ' + D(366 + Math.sin(ang) * 5 - 4) +
+           ' ' + D(196 + Math.cos(ang) * 46) + ' ' + D(372 + Math.abs(Math.sin(ang)) * 6);
+    }
+    ink.push(sh('w13 a1', s));
+    ink.push(sh('w1 a2', 'M150 378q46 12 92 0M158 384q38 9 76 0'));
+    ink.push(sh('tick', 'M258 356H378M258 350v12M318 352v8M378 350v12'));
+    for (i = 0; i < 7; i++) dots.push(sh('spec3', circle(r.range(60, 350), r.range(50, 380), r.range(1, 2))));
+    return {
+      ink: ink, hatch: hatch, dots: dots, clip: eL + 'L' + D(cub(1)[0]) + ' ' + D(cub(1)[1]) + eR.replace('M', 'L') + 'Z',
+      texts: [['label', 258, 344, 'P 005 · 20 mm'], ['label', 40, 42, 'habit, whole']]
+    };
+  };
+  /* VI — a rotaliid test, umbilical view: five whorls of chambers coiling out of the
+          umbilicus, the last one flaring into an aperture, the whole surface porose. */
+  DRAW.foraminifera = function (r) {
+    var cx = 205, cy = 198, ink = [], hatch = [], dots = [], i, th, s, pt;
+    var base = 5.2, g = 1.9, turns = 5.25, maxT = turns * Math.PI * 2;
+    function R(t) { return base * Math.pow(g, t / (Math.PI * 2)); }
+    function at(t, k) { k = k === undefined ? 1 : k; return [cx + Math.cos(t) * R(t) * k, cy + Math.sin(t) * R(t) * k]; }
+
+    /* the coil itself: one continuous wall, so the septa are simply the whorls touching */
+    s = '';
+    for (th = 0; th <= maxT; th += 0.05) {
+      pt = at(th);
+      s += (th ? 'L' : 'M') + D(pt[0]) + ' ' + D(pt[1]);
+    }
+    ink.push(sh('halo', s));
+    ink.push(sh('w18 a1', s));
+    /* a second wall a hair inside the outer whorl — the test is two lamellae thick */
+    s = '';
+    var lead = 1;
+    for (th = maxT - Math.PI * 2.05; th <= maxT; th += 0.05) {
+      pt = at(th, 0.925);
+      s += (lead ? 'M' : 'L') + D(pt[0]) + ' ' + D(pt[1]);
+      lead = 0;
+    }
+    ink.push(sh('w1 a3', s));
+
+    /* sutures: where each chamber of the final whorl meets the last */
+    s = '';
+    for (th = Math.PI * 6.15; th < maxT - 0.3; th += 0.46) {
+      var p1 = at(th), p2 = at(th, 0.9);
+      s += 'M' + D(p1[0]) + ' ' + D(p1[1]) + 'L' + D(p2[0]) + ' ' + D(p2[1]);
+    }
+    ink.push(sh('w1 a2', s));
+
+    /* the aperture: a tooth plate and a furrow cut into the final chamber */
+    var ae = at(maxT);
+    ink.push(sh('w18 a1', 'M' + D(ae[0]) + ' ' + D(ae[1]) +
+      'l' + D(Math.cos(maxT) * 16) + ' ' + D(Math.sin(maxT) * 16)));
+    ink.push(sh('w1 a2', arcLine(ae[0], ae[1], 13, maxT + 1.2, maxT + 4.6, 14)));
+    dots.push(sh('spec', circle(ae[0] + Math.cos(maxT) * 9, ae[1] + Math.sin(maxT) * 9, 2.6)));
+
+    /* the umbilicus, where the coil begins */
+    ink.push(sh('w13 a1', circle(cx, cy, 5.6)));
+    ink.push(sh('w1 a3', circle(cx, cy, 11.5)));
+
+    /* stellation: the fine hyaline rim the wash leaves on a well-made test */
+    hatch.push(sh('h1', arcTick(cx, cy, R(maxT), R(maxT) + 11, 0, 96)));
+    /* porosities: rows of pores marching along every whorl */
+    for (i = 1; i <= 5; i++) {
+      var tw = i * Math.PI * 2, rr0 = base * Math.pow(g, i), step = 0.16 + 0.02 * i, d = '';
+      for (th = tw - Math.PI * 2 + 0.4; th < tw + Math.PI * 0.2; th += step) {
+        if (th < 0) continue;
+        pt = at(th);
+        d += circle(pt[0], pt[1], 1.15 + 0.16 * i);
+      }
+      hatch.push(sh('h2', d, '', 1));
+      void rr0;
+    }
+    hatch.push(sh('h2', stripes(cx, cy, 0.5, 150, 11, 150), 'stroke-dasharray:1 10', 1));
+    for (i = 0; i < 8; i++) {
+      dots.push(sh('spec3', circle(r.range(46, 372), r.range(46, 372), r.range(1, 2.1))));
+    }
+    ink.push(sh('tick', 'M32 366H152M32 360v12M92 362v8M152 360v12'));
+    return {
+      ink: ink, hatch: hatch, dots: dots, clip: circle(cx, cy, R(maxT) + 1),
+      texts: [['label', 32, 354, 'P 006 · 200 µm'], ['label', 252, 44, 'umbilical view']]
+    };
+  };
+
+  var SEED = { diatom: 1107, radiolarian: 2293, medusa: 3499, copepod: 4621, alga: 5743, foraminifera: 6871 };
+  var ARTS = {};
+  ['diatom', 'radiolarian', 'medusa', 'copepod', 'alga', 'foraminifera'].forEach(function (k) {
+    ARTS[k] = null;
+  });
+  function art(k) {
+    if (!ARTS[k]) ARTS[k] = DRAW[k](rng(SEED[k]));
+    return ARTS[k];
+  }
+
+  var NS = 'http://www.w3.org/2000/svg';
+  function mk(tag, attrs) {
+    var e = document.createElementNS(NS, tag), k;
+    for (k in attrs) if (Object.prototype.hasOwnProperty.call(attrs, k)) e.setAttribute(k, attrs[k]);
+    return e;
+  }
+  function pick(list, want) {
+    var out = [], i;
+    for (i = 0; i < list.length; i++) if ((list[i].k ? 1 : 0) === want) out.push(list[i]);
+    return out;
+  }
+  function shapeGroup(list, cid) {
+    var g = mk('g', {}), i, s, p;
+    if (cid) g.setAttribute('clip-path', 'url(#' + cid + ')');
+    for (i = 0; i < list.length; i++) {
+      s = list[i];
+      p = mk('path', { 'class': 'ink ' + s.c, d: s.d });
+      if (s.s) p.setAttribute('style', s.s);
+      g.appendChild(p);
+    }
+    return g;
+  }
+  function subLayer(a, key, cid) {
+    var L = mk('g', { 'class': 'layer-' + key });
+    L.appendChild(shapeGroup(pick(a[key], 0), ''));
+    L.appendChild(shapeGroup(pick(a[key], 1), cid));
+    return L;
+  }
+  /* one drawing, returned twice: the same element object is appended to the plate
+     and to the loupe, so the loupe is a genuine second reading of the same strokes. */
+  function buildArt(key) {
+    var a = art(key), cid = 'kc-' + key, i;
+    var svg = mk('svg', { 'class': 'art', viewBox: '0 0 400 400', 'aria-hidden': 'true', focusable: 'false' });
+    var defs = mk('defs', {});
+    if (a.clip) {
+      var cp = mk('clipPath', { id: cid });
+      cp.appendChild(mk('path', { d: a.clip }));
+      defs.appendChild(cp);
+    }
+    svg.appendChild(defs);
+    svg.appendChild(subLayer(a, 'ink', cid));
+    svg.appendChild(subLayer(a, 'hatch', cid));
+    var dots = mk('g', { 'class': 'layer-dots' });
+    for (i = 0; i < a.dots.length; i++) {
+      dots.appendChild(mk('path', { 'class': 'ink ' + a.dots[i].c, d: a.dots[i].d }));
+    }
+    svg.appendChild(dots);
+    for (i = 0; i < a.texts.length; i++) {
+      var t = mk('text', { 'class': a.texts[i][0], x: a.texts[i][1], y: a.texts[i][2] });
+      t.textContent = a.texts[i][3];
+      svg.appendChild(t);
+    }
+    return svg;
+  }
+  /* ------------------------------------------------------------------ *
+   * The drawer: six sheets, transcribed from the bench ledger.
+   * ------------------------------------------------------------------ */
+  var PLATES = [
+    {
+      no: '001', roman: 'i', key: 'diatom', art: 'diatom',
+      name: 'Coscinodiscus waighii', epithet: 'Granular centric diatom',
+      where: 'Station 14 · 50 m · net haul, 24 Nov 1897 · slide 14/7',
+      fields: [
+        ['Sheet', '330 × 330 mm · Whatman 1 rough'],
+        ['Sensitiser', 'Ferric ammonium citrate 20 % + potassium ferri-cyanide 8 % + equal parts, brushed in shade'],
+        ['Contact', 'Specimen in a drop of glycerin jelly under 2 mm crown glass, weighted'],
+        ['Exposure', '17 min to 14 Nov sun on a clear bench; Wedgwood No. 6 at end of run'],
+        ['Bath', 'Running sea water 22 min, then 3 rinses in distilled; 1 % potassium chlorate used to intensify'],
+        ['Drying', 'Blotted, dried flat between felts, 19 h'],
+        ['Condition', 'Valve margin fully printed; granulation holds at 60×. One handling crease, upper right.'],
+        ['Entered', 'E. H. Ward, 24 Nov 1897 · acc. 1897.11.24/7 · plate i of the 1897 net series']
+      ]
+    },
+    {
+      no: '002', roman: 'ii', key: 'radiolarian', art: 'radiolarian',
+      name: 'Calliarctrys hexacta', epithet: 'Spumellarian radiolarian',
+      where: 'Challenger stn 266 · 4 725 fathoms · surface scum, 6 Jun 1899 · slide 22/3',
+      fields: [
+        ['Sheet', '330 × 330 mm · Turner rag, laid'],
+        ['Sensitiser', 'Ferric ammonium citrate (green) 22 % + potassium ferri-cyanide 9 % + 3 drops detergent per 100 ml'],
+        ['Contact', 'Dry mount on collodion film, film side down; no glass — the spicules are 4 mm high'],
+        ['Exposure', '41 min, thin cloud twice; Wedgwood No. 7. Printing-out continued another 40 min in the dark.'],
+        ['Bath', 'Running water 34 min. Second bath 2 min in 0.5 % oxalic acid to clear the ground, then re-washed 15 min.'],
+        ['Drying', 'Air-dried on a glass plate; the film cockled at one corner'],
+        ['Condition', 'Three primary rays came away with the film and are shown as gaps in the lattice. Ground cleared well.'],
+        ['Entered', 'E. H. Ward, 6 Jun 1899 · acc. 1899.06.06/22 · plate ii · deep-water series']
+      ]
+    },
+    {
+      no: '003', roman: 'iii', key: 'medusa', art: 'medusa',
+      name: 'Aequorea forskalea', epithet: 'Common crown medusa, 61 mm bell',
+      where: 'Bermuda, Castle Harbour · surface tow, 14 in · 12 May 1902 · whole',
+      fields: [
+        ['Sheet', '210 × 210 mm · transferred from a glycerin total mount'],
+        ['Sensitiser', 'Ferric ammonium citrate 24 % + potassium ferri-cyanide 8 % + equal parts, coated wet-on-wet'],
+        ['Contact', 'Specimen floated on water under the coated sheet, then drained; no pressure at all'],
+        ['Exposure', '3 min 20 s, noon, vertical frame. The jelly printed faintly on the first pass and the plate was re-sensitised and printed a second time (4 min 5 s).'],
+        ['Bath', 'Still water, 4 changes over 30 min. Never run under the tap — the tentacles would have gone.'],
+        ['Drying', 'Dried on the sheet of glass, shaded; emulsion took 2 days to give up the water'],
+        ['Condition', 'Tentacles complete at the left margin; the right oral arms ran in the second wash and are lost. Marginal ocelli printed as full stops.'],
+        ['Entered', 'A. Loureiro, 12 May 1902 · acc. 1902.05.12/9 · plate iii'],
+        ['Note', 'The wet-contact method was tried here first. It is the only plate in the drawer with no glass scar.']
+      ]
+    },
+    {
+      no: '004', roman: 'iv', key: 'copepod', art: 'copepod',
+      name: 'Calanus hyperboreus', epithet: 'Female, 4.1 mm, with ova',
+      where: 'Melville Bay · 0–40 m · closing net, 71° 12′ N · 3 Aug 1904 · ethanol, slide 4',
+      fields: [
+        ['Sheet', '210 × 210 mm · Whatman 1 rough, sized with gelatin'],
+        ['Sensitiser', 'Ferric ammonium citrate 20 % + potassium ferri-cyanide 8 % + equal parts; one coat, dried 11 h in the dark drawer'],
+        ['Contact', 'Mounted in glycerin under 0.13 mm cover; pressure light — the rostrum printed through'],
+        ['Exposure', '26 min, diffuse daylight, 19 °C bench. No actinometer reading; the strip was in the other tray.'],
+        ['Bath', 'Running water 18 min. Over-washed on the first attempt, so this second impression was printed and fixed in 9 min only.'],
+        ['Drying', 'Between blotting papers, 6 h, weighted with the brass block'],
+        ['Condition', 'Antennules complete, which is a matter of luck. The left fifth swimming leg is doubled by a 0.2 mm slip of the slide.'],
+        ['Entered', 'E. H. Ward, 3 Aug 1904 · acc. 1904.08.03/4 · plate iv · Arctic series']
+      ]
+    },
+    {
+      no: '005', roman: 'v', key: 'alga', art: 'alga',
+      name: 'Dictyopteris plumosa', epithet: 'Stipitate brown alga, 190 mm, fertile',
+      where: 'Roscoff, Île de Sein · lower Laminaria belt, 6 m · scraped from rock, 19 Sep 1907',
+      fields: [
+        ['Sheet', '210 × 279 mm (half-sheet) · hand-coated, both faces'],
+        ['Sensitiser', 'Ferric ammonium citrate 26 % + potassium ferri-cyanide 10 % + 2:1 — a strong coat, because the blade is thick'],
+        ['Contact', 'Specimen laid on the coated sheet and covered with oiled silk, then 4 kg of flat iron'],
+        ['Exposure', '58 min; sun went in at 20 min and the plate had to be carried in and out of the frame three times. Wedgwood No. 8.'],
+        ['Bath', 'Running water 25 min, then a 6 min bath in 2 % hydrochloric acid to bring back the ground, re-washed 12 min.'],
+        ['Drying', 'Pressed between felts with the specimen still in contact for 2 days — the blade left a physical print as well'],
+        ['Condition', 'Receptacles read as blisters along both margins; the apex is torn, as collected. Slight acid bleed at the holdfast.'],
+        ['Entered', 'A. Loureiro, 19 Sep 1907 · acc. 1907.09.19/1 · plate v · herbarium overlaps']
+      ]
+    },
+    {
+      no: '006', roman: 'vi', key: 'foraminifera', art: 'foraminifera',
+      name: 'Rosalinum rotundatum', epithet: 'Rotaliid foraminifer, 0.6 mm, umbilical view',
+      where: 'Siboga stn 251 · 1 240 fathoms · bottom sample, dried · 2 Feb 1911 · dry mount',
+      fields: [
+        ['Sheet', '210 × 210 mm · Turner rag, grained'],
+        ['Sensitiser', 'Ferric ammonium citrate 18 % + potassium ferri-cyanide 7 % + equal parts, two thin coats'],
+        ['Contact', 'Dry test laid directly on the emulsion and held with a 25 mm brass ring; distance ≈ 0'],
+        ['Exposure', '12 min, low February sun through the north glass; Wedgwood No. 5. Underprinted deliberately, to keep the pores.'],
+        ['Bath', 'Still water 11 min only, no acid, no intensifier. The last entry in the ledger written in pencil — the ink had gone.'],
+        ['Drying', 'Dried on the ring, unblotted; a water line stands at the test edge'],
+        ['Condition', 'Aperture chipped before exposure. Chamber walls legible through five whorls; the porose surface prints only in the last two.'],
+        ['Entered', 'E. H. Ward, 2 Feb 1911 · acc. 1911.02.02/6 · plate vi · last dated sheet in the drawer']
+      ]
+    }
+  ];
+
+  var washState = 10;
+  /* ------------------------------------------------------------------ *
+   * Wet chemistry: the tray re-renders the wash density and the white-line
+   * contrast. Everything below is derived from one number — minutes in water.
+   * ------------------------------------------------------------------ */
+  function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
+  function r2(v) { return Math.round(v * 100) / 100; }
+  function r3(v) { return Math.round(v * 1000) / 1000; }
+
+  function washModel(t) {
+    var u = clamp(t / 20, 0, 1);
+    var blue = clamp(1 - Math.abs(u - 0.5) / 0.5, 0, 1);
+    var slate = Math.pow(Math.max(0, u - 0.6) / 0.4, 1.4);
+    var l = 30 - 9 * blue + 6 * slate;
+    var s = 18 + 46 * blue - 8 * slate;
+    var h = 200 + 8 * blue - 12 * slate;
+    return {
+      l: r2(l), s: r2(s), h: r2(h),
+      halftone: r3(0.28 * (1 - blue) + 0.1 * slate),
+      grain: r3(0.12 + 0.16 * u),
+      fox: r3(0.1 + 0.18 * u),
+      bleed: r3(0.16 + 0.24 * slate),
+      line: r3(clamp(0.6 + 0.4 * blue - 0.42 * slate, 0.2, 1))
+    };
+  }
+  function verdict(t) {
+    if (t < 2) return 'Under-washed · steel grey';
+    if (t < 5) return 'Free iron left in the fibres';
+    if (t < 8.5) return 'Ground clearing';
+    if (t < 13) return 'Printing blue';
+    if (t < 16.5) return 'Full blue, line at maximum';
+    if (t < 19) return 'Going slate · line softening';
+    return 'Over-washed · the line is going';
+  }
+
+  /* an SVG turbulence tile, baked once, used as the paper grain */
+  function grainURI(seedn, freq, op) {
+    var s = '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="320">' +
+      '<filter id="g"><feTurbulence type="fractalNoise" baseFrequency="' + freq +
+      '" numOctaves="3" seed="' + seedn + '" stitchTiles="stitch"/>' +
+      '<feColorMatrix type="saturate" values="0"/></filter>' +
+      '<rect width="320" height="320" filter="url(%23g)" opacity="' + op + '"/></svg>';
+    return 'url("data:image/svg+xml;charset=utf-8,' + encodeURIComponent(s) + '")';
+  }
+  var GRAIN = grainURI(19, '0.86', 0.6);
+
+  /* --- presentation attributes must be baked in: page CSS never reaches a data URI --- */
+  var WMAP = { w26: 2.6, w18: 1.8, w13: 1.3, w1: 1, tick: 1, h2: 0.9, h1: 0.7, halo: 22 };
+  function opts(x) {
+    var y = { sc1: .95, sc2: .8, sc3: .58, h1: 1, h2: .85, spec: .95, spec3: .6,
+              tick: .5, label: .5, halo: .12, col: '#0a2743', fill: '#0a2743' }, k;
+    for (k in x) if (Object.prototype.hasOwnProperty.call(x, k)) y[k] = x[k];
+    return y;
+  }
+  function bake(svg, o) {
+    var ps = svg.querySelectorAll('path'), i, p, cls, w, a, solid, k;
+    for (i = 0; i < ps.length; i++) {
+      p = ps[i]; cls = ' ' + (p.getAttribute('class') || '') + ' ';
+      w = 1; a = 1; solid = false;
+      for (k in WMAP) if (WMAP.hasOwnProperty(k) && cls.indexOf(' ' + k + ' ') > -1) w = WMAP[k];
+      if (cls.indexOf(' a1 ') > -1) a = o.sc1;
+      else if (cls.indexOf(' a2 ') > -1) a = o.sc2;
+      else if (cls.indexOf(' a3 ') > -1) a = o.sc3;
+      else if (cls.indexOf(' h1 ') > -1) a = o.h1;
+      else if (cls.indexOf(' h2 ') > -1) a = o.h2;
+      else if (cls.indexOf(' tick ') > -1) a = o.tick;
+      else if (cls.indexOf(' halo ') > -1) a = o.halo;
+      if (cls.indexOf(' spec ') > -1) { solid = true; a = o.spec; }
+      if (cls.indexOf(' spec3 ') > -1) { solid = true; a = o.spec3; }
+      p.setAttribute('stroke', o.col);
+      p.setAttribute('stroke-width', w);
+      p.setAttribute('stroke-opacity', solid ? 0 : a);
+      p.setAttribute('fill', solid ? o.fill : 'none');
+      p.setAttribute('fill-opacity', solid ? a : 0);
+      p.setAttribute('vector-effect', 'non-scaling-stroke');
+    }
+    var ts = svg.querySelectorAll('text'), j;
+    for (j = 0; j < ts.length; j++) {
+      ts[j].setAttribute('fill', o.col);
+      ts[j].setAttribute('fill-opacity', o.label);
+      ts[j].setAttribute('font-family', 'monospace');
+      ts[j].setAttribute('font-size', '9');
+      ts[j].setAttribute('letter-spacing', '1.4');
+    }
+  }
+  /* two data URIs per sheet: the print as it stands, and the hatch layer alone */
+  function loupeURI(key, mode, t) {
+    var svg = buildArt(key), m = washModel(t);
+    svg.setAttribute('xmlns', NS);
+    svg.setAttribute('width', '400');
+    svg.setAttribute('height', '400');
+    var hatch = svg.querySelector('.layer-hatch');
+    var ink = svg.querySelector('.layer-ink');
+    var dots = svg.querySelector('.layer-dots');
+    var o;
+    if (mode === 'wash') {
+      o = opts({ sc1: .95, sc2: .78, sc3: .55, h1: .12, h2: .08, halo: .1,
+                 col: '#0a2743', fill: '#0a2743' });
+      if (hatch) hatch.setAttribute('display', 'none');
+      var bg = mk('rect', { x: 0, y: 0, width: 400, height: 400,
+        fill: 'hsl(' + m.h + ',' + m.s + '%,' + (56 + m.l * 0.7) + '%)' });
+      svg.insertBefore(bg, ink);
+    } else {
+      o = opts({ h1: 1, h2: .8, col: '#0d3a63', fill: '#0d3a63' });
+      if (ink) ink.setAttribute('display', 'none');
+      if (dots) dots.setAttribute('display', 'none');
+    }
+    bake(svg, o);
+    return 'url("data:image/svg+xml;charset=utf-8,' +
+      encodeURIComponent(new XMLSerializer().serializeToString(svg)) + '")';
+  }
+
+  function applyWash(t, reprint) {
+    var m = washModel(t), i, e, nodes = document.querySelectorAll('.plate-inner');
+    washState = t;
+    for (i = 0; i < nodes.length; i++) {
+      e = nodes[i].style;
+      e.setProperty('--wash-l', m.l);
+      e.setProperty('--wash-s', m.s);
+      e.setProperty('--wash-h', m.h);
+      e.setProperty('--halftone', (m.halftone * 100).toFixed(1) + '%');
+      e.setProperty('--grain-o', m.grain);
+      e.setProperty('--fox', m.fox);
+      e.setProperty('--bleed', m.bleed);
+      e.setProperty('--sc-a1', m.line);
+      e.setProperty('--sc-a2', r3(m.line * .82));
+      e.setProperty('--sc-a3', r3(m.line * .66));
+      e.setProperty('--ink-a1', r3(m.line * .92));
+      e.setProperty('--ink-a2', r3(m.line * .5));
+      e.setProperty('--ink-a3', r3(m.line * .34));
+      if (reprint) {
+        e.setProperty('--mg-wash', loupeURI(nodes[i].parentNode.getAttribute('data-art'), 'wash', t));
+        e.setProperty('--mg-ink', loupeURI(nodes[i].parentNode.getAttribute('data-art'), 'ink', t));
+      }
+    }
+    washOut.innerHTML = t.toFixed(1) + '<em>min</em>';
+    washVerdict.textContent = verdict(t);
+  }
+
+  /* ------------------------------------------------------------------ *
+   * The drawer, assembled.
+   * ------------------------------------------------------------------ */
+  function el(tag, cls, txt) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (txt !== null && txt !== undefined) e.textContent = txt;
+    return e;
+  }
+  var idxEl = $('#idx'), platesEl = $('#plates'), washIn = $('#wash');
+  var washOut = $('#washOut'), washVerdict = $('#washVerdict'), countEl = $('#idx-count');
+  var secs = [], items = [], active = -1;
+
+  function setOpen(sec, open) {
+    var box = $('.logbox', sec), btn = $('.cap-toggle', sec);
+    sec.classList.toggle('open', open);
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    box.style.maxHeight = open ? (box.scrollHeight + 'px') : '0px';
+  }
+  function develop(sec) {
+    if (sec.getAttribute('data-dev')) return;
+    sec.setAttribute('data-dev', '1');
+    var inner = $('.plate-inner', sec);
+    if (reduce) { inner.style.setProperty('--ex', '1'); return; }
+    sec.classList.add('developing');
+    var t0 = 0;
+    function step(now) {
+      if (!t0) t0 = now;
+      var k = clamp((now - t0) / 1500, 0, 1);
+      inner.style.setProperty('--ex', r3(1 - Math.pow(1 - k, 3)));
+      if (k < 1) requestAnimationFrame(step);
+      else sec.classList.remove('developing');
+    }
+    requestAnimationFrame(step);
+  }
+  function setActive(i) {
+    if (i === active) return;
+    active = i;
+    var n;
+    for (n = 0; n < items.length; n++) {
+      if (n === i) items[n].setAttribute('aria-current', 'true');
+      else items[n].removeAttribute('aria-current');
+    }
+    countEl.textContent = PLATES[i] ? (PLATES[i].roman + ' / vi') : '';
+  }
+  function lift(sec) {
+    if (reduce) return;
+    sec.classList.remove('lift');
+    void sec.offsetWidth;
+    sec.classList.add('lift');
+    setTimeout(function () { sec.classList.remove('lift'); }, 1050);
+  }
+  function goTo(i) {
+    var sec = secs[i];
+    setActive(i);
+    setOpen(sec, true);
+    develop(sec);
+    sec.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'center' });
+    lift(sec);
+  }
+
+  PLATES.forEach(function (p, i) {
+    var li = el('li');
+    var b = el('button', 'idx-item');
+    b.type = 'button';
+    b.appendChild(el('span', 'idx-n', p.no));
+    b.appendChild(el('span', 'idx-name', p.name));
+    b.appendChild(el('span', 'idx-tag mono', 'plate ' + p.roman + ' · ' + p.art));
+    b.addEventListener('click', function () { goTo(i); });
+    li.appendChild(b); idxEl.appendChild(li); items.push(b);
+
+    var sec = el('article', 'plate');
+    sec.id = 'plate-' + p.key;
+    sec.setAttribute('data-art', p.art);
+    sec.tabIndex = -1;
+    var inner = el('div', 'plate-inner');
+    inner.style.setProperty('--grain', GRAIN);
+    inner.appendChild(el('div', 'lay paper'));
+    inner.appendChild(el('div', 'lay wash'));
+    inner.appendChild(el('div', 'lay halftone'));
+    inner.appendChild(el('div', 'lay fox'));
+    inner.appendChild(el('div', 'lay grain'));
+    var wrap = el('div', 'artwrap');
+    wrap.appendChild(el('div', 'bleed'));
+    wrap.appendChild(buildArt(p.art));
+    var mg = el('div', 'magnifier mg');
+    mg.appendChild(el('div', 'mg-l wash'));
+    mg.appendChild(el('div', 'mg-l ink'));
+    mg.appendChild(el('div', 'mg-ring'));
+    mg.appendChild(el('div', 'mg-tag', 'loupe × 3.1 · hatch layer'));
+    wrap.appendChild(mg);
+    inner.appendChild(wrap);
+    inner.appendChild(el('div', 'foot-mark', 'hal · plate ' + p.roman + ' · ' + p.art));
+    inner.appendChild(el('div', 'lay vignette'));
+    inner.appendChild(el('div', 'lay exposure'));
+    sec.appendChild(inner);
+
+    var cap = el('div', 'plate-cap'), row = el('div', 'cap-row');
+    row.appendChild(el('div', 'cap-no', 'Plate ' + p.no));
+    row.appendChild(el('div', 'cap-bin mono', '№ ' + p.roman));
+    var tx = el('div', 'cap-text'), h3 = el('h3');
+    h3.appendChild(document.createTextNode(p.name));
+    var em = document.createElement('em');
+    em.textContent = p.epithet;
+    h3.appendChild(em);
+    tx.appendChild(h3);
+    tx.appendChild(el('div', 'cap-where mono', p.where));
+    var btn = el('button', 'cap-toggle mono', 'Exposure log');
+    btn.type = 'button';
+    btn.setAttribute('aria-expanded', 'false');
+    row.appendChild(tx); row.appendChild(btn);
+    cap.appendChild(row);
+    var box = el('div', 'logbox'), pad = el('div', 'log-pad'), dl = el('dl', 'log');
+    p.fields.forEach(function (f) {
+      var cell = el('div', /^(Bath|Condition)$/.test(f[0]) ? 'stamp' : '');
+      cell.appendChild(el('dt', null, f[0]));
+      cell.appendChild(el('dd', null, f[1]));
+      dl.appendChild(cell);
+    });
+    pad.appendChild(dl); box.appendChild(pad); cap.appendChild(box);
+    sec.appendChild(cap);
+    btn.addEventListener('click', function () {
+      setOpen(sec, !sec.classList.contains('open'));
+    });
+    platesEl.appendChild(sec);
+    secs.push(sec);
+
+    /* the loupe: it follows the cursor anywhere on the sheet and reveals the hatch layer */
+    function place(e) {
+      var r = wrap.getBoundingClientRect();
+      var sc = 3.1, RR = 74;
+      var x = clamp(e.clientX - r.left, 0, r.width);
+      var y = clamp(e.clientY - r.top, 0, r.height);
+      var st = mg.style;
+      st.setProperty('--mx', x.toFixed(1) + 'px');
+      st.setProperty('--my', y.toFixed(1) + 'px');
+      st.setProperty('--sc', sc);
+      st.setProperty('--mclip', 'circle(' + RR + 'px at ' + x.toFixed(1) + 'px ' + y.toFixed(1) + 'px)');
+      var px = (x - RR * sc) / (r.width * (1 - sc)) * 100;
+      var py = (y - RR * sc) / (r.height * (1 - sc)) * 100;
+      st.setProperty('--mgx', px.toFixed(2) + '%');
+      st.setProperty('--mgy', py.toFixed(2) + '%');
+    }
+    sec.addEventListener('mousemove', function (e) {
+      if (window.matchMedia('(hover: none)').matches) return;
+      place(e);
+      mg.classList.add('live');
+    });
+    sec.addEventListener('mouseleave', function () { mg.classList.remove('live'); });
+  });
+
+  /* the loupe needs its two prints before the first hover */
+  applyWash(10, true);
+  washIn.addEventListener('input', function () { applyWash(parseFloat(washIn.value), false); });
+  washIn.addEventListener('change', function () { applyWash(parseFloat(washIn.value), true); });
+
+  /* the sheets are built by this script, so a #plate-… link arriving before them has to be replayed */
+  if (location.hash) {
+    var want = decodeURIComponent(location.hash.slice(1));
+    for (var h = 0; h < secs.length; h++) {
+      if (secs[h].id === want) {
+        (function (sec) {
+          requestAnimationFrame(function () {
+            sec.scrollIntoView({ behavior: 'instant', block: 'center' });
+            setActive(secs.indexOf(sec));
+          });
+        })(secs[h]);
+        break;
+      }
+    }
+  }
+
+  var devObs = null, spyObs = null;
+  if ('IntersectionObserver' in window) {
+    devObs = new IntersectionObserver(function (en) {
+      var i;
+      for (i = 0; i < en.length; i++) if (en[i].isIntersecting) { develop(en[i].target); devObs.unobserve(en[i].target); }
+    }, { threshold: 0.14 });
+    spyObs = new IntersectionObserver(function (en) {
+      var i;
+      for (i = 0; i < en.length; i++) {
+        if (en[i].isIntersecting) setActive(secs.indexOf(en[i].target));
+      }
+    }, { rootMargin: '-45% 0px -45% 0px', threshold: 0 });
+    for (var q = 0; q < secs.length; q++) { devObs.observe(secs[q]); spyObs.observe(secs[q]); }
+  } else {
+    for (var w2 = 0; w2 < secs.length; w2++) develop(secs[w2]);
+  }
+  setActive(0);
+
+  var rt;
+  window.addEventListener('resize', function () {
+    clearTimeout(rt);
+    rt = setTimeout(function () {
+      var i;
+      for (i = 0; i < secs.length; i++) if (secs[i].classList.contains('open')) setOpen(secs[i], true);
+    }, 180);
+  });
+})();
+</script>
+</body>
+</html>

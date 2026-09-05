@@ -1,0 +1,1396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Anatomy of a Stratovolcano — A Section Through the Edifice</title>
+<meta name="description" content="A scroll-driven geological cross-section: basement, layered edifice, magma chamber, conduit and eruption column, with a VEI 1–8 explainer.">
+<style>
+/* ============================================================
+   ANATOMY OF A STRATOVOLCANO
+   Palette — basalt #14100f · ash #6f6a68 · incandescent #ff6d00
+             ember #ffca28 · cold sky #a7c4d4
+   Type — condensed display (Haettenschweiler/Arial Narrow/Impact)
+          + Georgia body + monospace instrument labels
+   ============================================================ */
+:root{
+  --basalt:#14100f;
+  --basalt-2:#1b1513;
+  --basalt-3:#241b18;
+  --ash:#6f6a68;
+  --ash-2:#8d8681;
+  --ash-3:#b3aaa2;
+  --sky:#a7c4d4;
+  --sky-2:#6f93a8;
+  --incandescent:#ff6d00;
+  --ember:#ffca28;
+  --paper:#f2ece2;
+  --muted:#a1978d;
+  --rule:rgba(226,216,202,.16);
+  --rule-2:rgba(226,216,202,.30);
+  --cond:"Haettenschweiler","Arial Narrow",Impact,"Arial Black","Helvetica Neue",system-ui,sans-serif;
+  --serif:Georgia,"Palatino Linotype",Palatino,Baskerville,"Times New Roman",serif;
+  --mono:ui-monospace,Menlo,Consolas,"Courier New","Trebuchet MS",monospace;
+  --stage-h:100vh;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:auto}
+body{
+  margin:0;
+  background:var(--basalt);
+  color:var(--paper);
+  font-family:var(--serif);
+  font-size:17px;
+  line-height:1.6;
+  -webkit-font-smoothing:antialiased;
+  overflow-x:hidden;
+}
+::selection{background:var(--incandescent);color:#120d0b}
+h1,h2,h3,p,figure,dl,dd{margin:0}
+a{color:var(--ember)}
+
+/* ---------- masthead ---------- */
+.masthead{
+  position:relative;
+  min-height:100vh;
+  min-height:100svh;
+  display:flex;
+  flex-direction:column;
+  justify-content:space-between;
+  padding:clamp(20px,4vw,54px);
+  background:
+    radial-gradient(120% 80% at 50% 118%, rgba(255,109,0,.30) 0%, rgba(255,109,0,0) 58%),
+    radial-gradient(90% 60% at 78% 8%, rgba(167,196,212,.16) 0%, rgba(167,196,212,0) 60%),
+    linear-gradient(180deg,#0d0a09 0%, #14100f 52%, #211611 100%);
+  overflow:hidden;
+}
+.mh-top{display:flex;justify-content:space-between;gap:24px;flex-wrap:wrap;align-items:baseline}
+.kicker{
+  font-family:var(--mono);
+  font-size:11px;letter-spacing:.24em;text-transform:uppercase;
+  color:var(--ash-2);
+}
+.kicker b{color:var(--ember);font-weight:400}
+.mh-title-wrap{position:relative;z-index:3;max-width:min(1200px,96vw)}
+.mh-line{
+  display:block;
+  font-family:var(--cond);
+  text-transform:uppercase;
+  line-height:.82;
+  letter-spacing:-.012em;
+  color:var(--paper);
+}
+.mh-1{font-size:clamp(38px,10.4vw,168px);color:#e9e0d3}
+.mh-2{
+  font-size:clamp(46px,13.6vw,224px);
+  color:transparent;
+  -webkit-text-stroke:1.4px rgba(242,236,226,.62);
+}
+.mh-3{font-size:clamp(46px,13.6vw,224px);color:var(--incandescent)}
+.mh-sub{
+  margin-top:clamp(16px,2.4vw,30px);
+  max-width:52ch;
+  font-size:clamp(16px,1.5vw,21px);
+  color:#d7cec3;
+}
+.mh-sub em{color:var(--ember);font-style:italic}
+.mh-foot{
+  position:relative;z-index:3;
+  display:flex;gap:clamp(18px,4vw,60px);flex-wrap:wrap;align-items:flex-end;
+  border-top:1px solid var(--rule);padding-top:16px;
+}
+.stat{min-width:104px}
+.stat b{
+  display:block;font-family:var(--cond);font-size:clamp(24px,3vw,40px);
+  line-height:1;letter-spacing:.01em;color:var(--paper);font-weight:400;
+}
+.stat span{font-family:var(--mono);font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)}
+.scroll-cue{
+  margin-left:auto;font-family:var(--mono);font-size:10.5px;letter-spacing:.22em;
+  text-transform:uppercase;color:var(--ash-2);display:flex;align-items:center;gap:10px;
+}
+.scroll-cue i{
+  display:block;width:1px;height:44px;
+  background:linear-gradient(180deg,rgba(242,236,226,.05),var(--incandescent));
+  animation:cue 2.4s ease-in-out infinite;transform-origin:top;
+}
+@keyframes cue{0%,100%{transform:scaleY(.35);opacity:.4}50%{transform:scaleY(1);opacity:1}}
+
+/* silhouette on the masthead */
+.mh-ridge{position:absolute;left:-2%;right:-2%;bottom:-1px;height:46vh;z-index:1;opacity:.95}
+.mh-ridge svg{width:100%;height:100%;display:block}
+
+/* ---------- story shell ---------- */
+.story{position:relative;background:var(--basalt)}
+.stage-wrap{
+  position:sticky;top:0;
+  height:var(--stage-h);
+  z-index:1;
+  margin-bottom:calc(-1 * var(--stage-h));
+}
+.stage{position:relative;width:100%;height:100%;overflow:hidden;background:#0f0c0b}
+.sky{
+  position:absolute;inset:0;
+  background:linear-gradient(180deg,#0b0a0a 0%,#151313 44%,#241a16 74%,#31201a 100%);
+  transition:filter .6s linear;
+}
+.art{position:absolute;inset:0}
+.art svg{width:100%;height:100%;display:block}
+#plume{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;mix-blend-mode:screen}
+.grain{
+  position:absolute;inset:0;pointer-events:none;opacity:.5;
+  background-image:
+    repeating-linear-gradient(0deg,rgba(255,255,255,.030) 0 1px,rgba(0,0,0,0) 1px 3px);
+  mix-blend-mode:overlay;
+}
+.vignette{
+  position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(120% 90% at 50% 46%,rgba(0,0,0,0) 42%,rgba(0,0,0,.62) 100%);
+}
+/* ---------- scrolling text column ---------- */
+.flow{position:relative;z-index:2;pointer-events:none}
+.chapter{
+  min-height:118vh;
+  display:flex;align-items:center;
+  padding:14vh clamp(18px,4vw,54px);
+}
+.chapter:first-of-type{min-height:64vh;align-items:flex-start}
+.card{
+  pointer-events:auto;
+  margin-left:auto;
+  width:min(37ch,44vw);
+  background:linear-gradient(180deg,rgba(14,11,10,.90),rgba(14,11,10,.78));
+  border-left:1px solid var(--rule-2);
+  padding:clamp(18px,2vw,30px) clamp(18px,2.2vw,34px);
+  backdrop-filter:blur(2px);
+}
+.ch-idx{
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.28em;text-transform:uppercase;
+  color:var(--incandescent);display:block;margin-bottom:10px;
+}
+.card h2{
+  font-family:var(--cond);text-transform:uppercase;font-weight:400;
+  font-size:clamp(30px,4.6vw,50px);line-height:.86;letter-spacing:-.01em;
+  color:var(--paper);
+  overflow-wrap:anywhere;
+}
+.card h2 .thin{
+  display:block;color:transparent;
+  -webkit-text-stroke:1px rgba(242,236,226,.55);
+}
+.card .lede{
+  margin-top:16px;font-size:clamp(16px,1.15vw,18.5px);
+  color:#e2dad0;font-style:italic;
+}
+.card p{margin-top:14px;color:#cbc3ba;font-size:16.5px}
+.card p:first-of-type::first-letter{
+  float:left;font-family:var(--cond);font-size:3.1em;line-height:.74;
+  padding:.06em .12em 0 0;color:var(--ember);
+}
+.notes{
+  margin-top:20px;border-top:1px dashed rgba(226,216,202,.22);padding-top:14px;
+  font-family:var(--mono);font-size:12px;line-height:1.72;color:var(--ash-3);
+  letter-spacing:.01em;
+}
+.notes dt{color:var(--ember);letter-spacing:.14em;text-transform:uppercase;font-size:10px}
+.notes dd{margin:0 0 9px}
+.notes dd:last-child{margin-bottom:0}
+.pull{
+  margin-top:22px;font-family:var(--cond);text-transform:uppercase;
+  font-size:clamp(20px,2.3vw,31px);line-height:1.02;color:var(--incandescent);
+}
+/* lead-in title card for the pinned section */
+.slate{
+  min-height:96vh;display:flex;flex-direction:column;justify-content:center;
+  padding:0 clamp(18px,4vw,54px);
+}
+.slate .big{
+  font-family:var(--cond);text-transform:uppercase;font-weight:400;
+  font-size:clamp(52px,11vw,180px);line-height:.84;color:#efe7db;
+}
+.slate .big s{text-decoration:none;color:transparent;-webkit-text-stroke:1px rgba(242,236,226,.5)}
+.slate .cap{
+  font-family:var(--mono);font-size:11px;letter-spacing:.24em;text-transform:uppercase;
+  color:var(--ash-2);margin-bottom:14px;
+}
+
+/* ---------- progress rail ---------- */
+.rail{
+  position:absolute;right:clamp(12px,2vw,30px);top:50%;transform:translateY(-50%);
+  z-index:6;display:flex;flex-direction:column;align-items:flex-end;gap:14px;
+  pointer-events:auto;
+}
+.rail-track{position:relative;width:2px;height:min(46vh,340px);background:rgba(226,216,202,.14)}
+.rail-fill{
+  position:absolute;left:0;top:0;width:2px;height:0%;
+  background:linear-gradient(180deg,var(--ember),var(--incandescent));
+  box-shadow:0 0 10px rgba(255,109,0,.55);
+}
+.rail-dots{position:absolute;left:1px;top:0;bottom:0;width:1px}
+.dot{
+  position:absolute;left:50%;transform:translate(-50%,-50%);
+  width:9px;height:9px;border-radius:50%;
+  border:1px solid rgba(226,216,202,.42);background:#120e0d;
+  transition:background .3s,border-color .3s,box-shadow .3s,transform .3s;
+}
+.dot.on{background:var(--ember);border-color:var(--ember);transform:translate(-50%,-50%) scale(1.32);box-shadow:0 0 12px rgba(255,202,40,.7)}
+.dot-lab{
+  position:absolute;right:16px;transform:translateY(-50%);
+  font-family:var(--mono);font-size:9.5px;letter-spacing:.18em;text-transform:uppercase;
+  color:var(--muted);white-space:nowrap;opacity:0;transition:opacity .3s,color .3s;
+}
+.dot-lab.on{opacity:1;color:var(--ember)}
+.rail-pct{
+  font-family:var(--mono);font-size:10px;letter-spacing:.18em;color:var(--ash-2);
+  writing-mode:vertical-rl;
+}
+
+/* ---------- instrument HUD ---------- */
+.hud{
+  position:absolute;left:clamp(12px,2vw,30px);bottom:clamp(12px,2vw,26px);
+  z-index:6;pointer-events:auto;
+  display:flex;flex-direction:column;gap:10px;
+  max-width:min(46vw,520px);
+}
+.readout{
+  display:grid;grid-template-columns:auto auto;gap:2px 12px;align-items:baseline;
+  font-family:var(--mono);font-size:11px;letter-spacing:.1em;
+}
+.readout dt{color:var(--muted);text-transform:uppercase;letter-spacing:.16em;font-size:9.5px;white-space:nowrap}
+.readout dd{margin:0;color:var(--paper);font-size:14px;text-align:right;font-variant-numeric:tabular-nums}
+.readout dd.hot{color:var(--ember)}
+.vei-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.vei-lab{font-family:var(--mono);font-size:9.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted)}
+.vei-set{display:flex;gap:4px}
+.vei-btn{
+  width:26px;height:30px;padding:0;cursor:pointer;
+  background:rgba(242,236,226,.06);
+  border:1px solid rgba(226,216,202,.20);
+  color:var(--ash-3);
+  font-family:var(--cond);font-size:16px;line-height:1;
+  transition:background .2s,color .2s,border-color .2s,transform .2s;
+}
+.vei-btn:hover{border-color:var(--ember);color:var(--paper);transform:translateY(-2px)}
+.vei-btn[aria-pressed="true"]{
+  background:linear-gradient(180deg,var(--ember),var(--incandescent));
+  border-color:var(--incandescent);color:#1a0f06;
+}
+.vei-example{
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--ash-2);
+}
+.vei-example b{color:var(--incandescent);font-weight:400}
+
+/* stratum tooltip */
+.tip{
+  position:absolute;z-index:8;pointer-events:none;
+  padding:6px 10px;min-width:150px;
+  background:#0b0908;border:1px solid var(--rule-2);
+  border-left:2px solid var(--ember);
+  font-family:var(--mono);font-size:11px;letter-spacing:.08em;color:var(--paper);
+  opacity:0;transform:translate(12px,-50%);transition:opacity .16s;
+  white-space:nowrap;
+}
+.tip.on{opacity:1}
+.tip i{display:block;font-style:normal;color:var(--muted);font-size:9.5px;letter-spacing:.16em;text-transform:uppercase;margin-top:3px}
+
+/* ---------- aftermath ---------- */
+.aftermath{
+  position:relative;z-index:3;
+  background:linear-gradient(180deg,#14100f 0%,#141411 34%,#121815 100%);
+  padding:clamp(40px,8vh,120px) clamp(18px,4vw,54px) 0;
+  border-top:1px solid var(--rule);
+}
+.am-head{max-width:60ch}
+.am-head .cap{font-family:var(--mono);font-size:10.5px;letter-spacing:.26em;text-transform:uppercase;color:#8fae8b}
+.am-head h2{
+  font-family:var(--cond);text-transform:uppercase;font-weight:400;
+  font-size:clamp(40px,7.6vw,110px);line-height:.86;margin-top:12px;color:#e9e5d8;
+}
+.am-head p{margin-top:16px;color:#c2bdb0;max-width:56ch}
+.succ{
+  margin-top:clamp(28px,5vw,64px);
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(216px,1fr));
+  gap:1px;background:var(--rule);border:1px solid var(--rule);
+}
+.succ-item{
+  background:#111512;padding:20px 18px 22px;position:relative;
+  transition:background .3s,transform .3s;
+}
+.succ-item:hover{background:#151b17;transform:translateY(-3px)}
+.succ-item .yr{
+  font-family:var(--cond);font-size:clamp(30px,3.4vw,46px);line-height:1;color:var(--ember);
+  font-weight:400;letter-spacing:.01em;
+}
+.succ-item .yr small{font-family:var(--mono);font-size:10px;letter-spacing:.16em;color:var(--muted);margin-left:6px}
+.succ-item h3{
+  margin-top:8px;font-family:var(--cond);text-transform:uppercase;font-weight:400;
+  font-size:19px;letter-spacing:.02em;color:#e6e2d6;
+}
+.succ-item p{margin-top:8px;font-size:14.5px;color:#a8a49a}
+.succ-bar{
+  margin-top:clamp(24px,4vw,46px);height:8px;position:relative;
+  background:linear-gradient(90deg,#4b3a30 0%,#6b6152 34%,#5b6b4a 68%,#3f5a3c 100%);
+}
+.succ-bar span{
+  position:absolute;top:12px;transform:translateX(-50%);
+  font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;color:var(--muted);white-space:nowrap;
+}
+.pagefoot{
+  margin-top:clamp(64px,10vh,140px);
+  border-top:1px solid var(--rule);
+  padding:22px 0 34px;display:flex;gap:26px;flex-wrap:wrap;justify-content:space-between;
+  font-family:var(--mono);font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);
+}
+
+/* ---------- svg state ---------- */
+.strat{cursor:crosshair}
+.rv{opacity:0}
+@media (max-width:900px){
+  :root{--stage-h:64vh}
+  .card{width:100%;margin-left:0}
+  .chapter{padding:10vh clamp(16px,4vw,28px)}
+  .rail{right:8px;gap:8px}
+  .rail-track{height:32vh}
+  .dot-lab{display:none}
+  .hud{max-width:calc(100% - 60px)}
+  .vei-btn{width:22px;height:26px;font-size:14px}
+}
+@media (max-width:560px){
+  body{font-size:16px}
+  .mh-2{-webkit-text-stroke-width:1px}
+  .rail-pct{display:none}
+  .readout{font-size:10px}
+}
+@media (prefers-reduced-motion:reduce){
+  *{animation-duration:.001ms !important;animation-iteration-count:1 !important;transition-duration:.001ms !important}
+  html{scroll-behavior:auto}
+}
+</style>
+</head>
+<body>
+<header class="masthead">
+  <div class="mh-top">
+    <p class="kicker">Field Geology &middot; Section No. 013 &middot; Scale 1:24 000</p>
+    <p class="kicker">Andesitic arc &middot; <b>Subduction margin</b></p>
+  </div>
+
+  <div class="mh-title-wrap">
+    <h1>
+      <span class="mh-line mh-1">Anatomy of a</span>
+      <span class="mh-line mh-2">Stratovol</span>
+      <span class="mh-line mh-3">cano</span>
+    </h1>
+    <p class="mh-sub">A composite cone is not a mountain. It is a <em>stack</em> — several thousand
+      separate eruptions pressed on top of one another, each one a film of ash or a skin of lava.
+      Scroll to build the section from the basement up, then open the conduit.</p>
+  </div>
+
+  <div class="mh-foot">
+    <p class="stat"><b>2 400 m</b><span>Summit elevation</span></p>
+    <p class="stat"><b>11 km</b><span>Basement depth</span></p>
+    <p class="stat"><b>~9 000</b><span>Eruptions, 400 ka</span></p>
+    <p class="stat"><b>62 %</b><span>Andesite by volume</span></p>
+    <p class="scroll-cue">Begin section <i></i></p>
+  </div>
+
+  <div class="mh-ridge" aria-hidden="true">
+    <svg viewBox="0 0 1600 460" preserveAspectRatio="none" role="presentation">
+      <path d="M0 460 L0 322 L150 300 L300 318 L430 250 L560 268 L700 150 L800 66 L900 158 L1010 258 L1140 240 L1290 292 L1440 268 L1600 316 L1600 460 Z"
+            fill="#0b0807"></path>
+      <path d="M700 150 L800 66 L900 158" fill="none" stroke="#ff6d00" stroke-width="2" opacity=".55"></path>
+      <path d="M0 322 L150 300 L300 318 L430 250 L560 268 L700 150 L800 66 L900 158 L1010 258 L1140 240 L1290 292 L1440 268 L1600 316"
+            fill="none" stroke="rgba(167,196,212,.35)" stroke-width="1.5"></path>
+    </svg>
+  </div>
+</header>
+
+<main class="story" id="story">
+  <!-- ============ PINNED STAGE ============ -->
+  <div class="stage-wrap">
+    <div class="stage" id="stage">
+      <div class="sky" id="sky"></div>
+
+      <div class="art">
+        <svg id="xsec" viewBox="0 0 1600 780" preserveAspectRatio="xMidYMax slice"
+             role="img" aria-labelledby="xsecTitle xsecDesc">
+          <title id="xsecTitle">Cross-section of a stratovolcano</title>
+          <desc id="xsecDesc">Layered cone of alternating lava flows and ash beds above a magma
+            chamber, with a conduit, sill complex, summit crater and an eruption column.</desc>
+
+          <defs>
+            <!-- ropy basalt flow -->
+            <pattern id="patFlow" width="26" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(-7)">
+              <rect width="26" height="14" fill="#241c19"/>
+              <path d="M-2 5 q6 -5 13 0 t17 0" fill="none" stroke="#100b0a" stroke-width="2.1"/>
+              <path d="M-2 11 q7 4 14 0 t16 -1" fill="none" stroke="#31261f" stroke-width="1.2"/>
+            </pattern>
+            <!-- ash fall: fine stipple -->
+            <pattern id="patAsh" width="12" height="12" patternUnits="userSpaceOnUse">
+              <rect width="12" height="12" fill="#453d39"/>
+              <circle cx="2" cy="3" r="1.05" fill="#7b736d"/>
+              <circle cx="8" cy="7" r=".85" fill="#8d8681"/>
+              <circle cx="5" cy="10" r=".7" fill="#5f5854"/>
+              <circle cx="10" cy="2" r=".6" fill="#a29a92"/>
+            </pattern>
+            <!-- pumice: vesicles -->
+            <pattern id="patPumice" width="18" height="16" patternUnits="userSpaceOnUse">
+              <rect width="18" height="16" fill="#6f6a68"/>
+              <circle cx="4" cy="5" r="2.6" fill="#a29a92"/>
+              <circle cx="12" cy="11" r="3.1" fill="#958d86"/>
+              <circle cx="15" cy="4" r="1.7" fill="#b3aaa2"/>
+              <circle cx="7" cy="13" r="1.5" fill="#8d8681"/>
+            </pattern>
+            <!-- lithic tuff: angular clasts -->
+            <pattern id="patTuff" width="20" height="18" patternUnits="userSpaceOnUse">
+              <rect width="20" height="18" fill="#3b3431"/>
+              <path d="M2 4 l5 -2 3 4 -4 3 z" fill="#6b635e"/>
+              <path d="M12 9 l5 2 -2 5 -4 -2 z" fill="#575049"/>
+              <path d="M3 13 l4 1 -1 4 -4 -1 z" fill="#787068"/>
+            </pattern>
+            <!-- scoria / lapilli -->
+            <pattern id="patScoria" width="16" height="14" patternUnits="userSpaceOnUse">
+              <rect width="16" height="14" fill="#33211a"/>
+              <circle cx="4" cy="4" r="2.1" fill="#6d3a1e"/>
+              <circle cx="11" cy="9" r="2.5" fill="#8a4519"/>
+              <circle cx="13" cy="3" r="1.2" fill="#b3541f"/>
+            </pattern>
+            <!-- crystal mush in the chamber -->
+            <pattern id="patMush" width="14" height="14" patternUnits="userSpaceOnUse">
+              <rect width="14" height="14" fill="none"/>
+              <circle cx="3" cy="4" r="1.7" fill="rgba(255,202,40,.72)"/>
+              <circle cx="10" cy="9" r="1.25" fill="rgba(255,236,190,.55)"/>
+              <circle cx="7" cy="2" r=".9" fill="rgba(255,109,0,.85)"/>
+              <circle cx="12" cy="12" r="1.05" fill="rgba(255,236,190,.4)"/>
+            </pattern>
+            <!-- basement: 45 degree hatch -->
+            <pattern id="patBasement" width="13" height="13" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+              <rect width="13" height="13" fill="#171312"/>
+              <line x1="0" y1="0" x2="0" y2="13" stroke="#2b2422" stroke-width="2"/>
+              <line x1="6" y1="0" x2="6" y2="13" stroke="#211b19" stroke-width="1"/>
+            </pattern>
+            <!-- lahar: poorly sorted -->
+            <pattern id="patLahar" width="22" height="18" patternUnits="userSpaceOnUse">
+              <rect width="22" height="18" fill="#2f2a28"/>
+              <path d="M2 12 l6 -3 3 5 -6 3 z" fill="#544c47"/>
+              <circle cx="16" cy="6" r="3" fill="#4a4340"/>
+              <circle cx="6" cy="4" r="1.6" fill="#655c56"/>
+            </pattern>
+            <linearGradient id="gConduit" x1="0" y1="1" x2="0" y2="0">
+              <stop offset="0" stop-color="#ffca28"/>
+              <stop offset=".45" stop-color="#ff6d00"/>
+              <stop offset="1" stop-color="#a83a06"/>
+            </linearGradient>
+            <radialGradient id="gChamber" cx="50%" cy="42%" r="62%">
+              <stop offset="0" stop-color="#ffca28" stop-opacity=".95"/>
+              <stop offset=".55" stop-color="#ff6d00" stop-opacity=".8"/>
+              <stop offset="1" stop-color="#7a2c05" stop-opacity=".9"/>
+            </radialGradient>
+            <linearGradient id="gCap" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#4c4441"/>
+              <stop offset="1" stop-color="#211b19"/>
+            </linearGradient>
+            <linearGradient id="gLake" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#a7c4d4"/>
+              <stop offset="1" stop-color="#3f6b83"/>
+            </linearGradient>
+            <clipPath id="clipEdifice">
+              <path id="clipPath" d=""></path>
+            </clipPath>
+          </defs>
+
+          <!-- sky wash + distant ridges -->
+          <g id="gBackdrop"></g>
+          <!-- basement block (revealed first) -->
+          <g id="gBasement" class="rv" data-in="0.00" data-out="0.10"></g>
+          <!-- the layered cone -->
+          <g id="gEdifice" clip-path="url(#clipEdifice)"></g>
+          <!-- intrusions: dikes + sills -->
+          <g id="gIntrusions" class="rv" data-in="0.30" data-out="0.42"></g>
+          <!-- edifice outline drawn over the bands -->
+          <g id="gOutline" class="rv" data-in="0.22" data-out="0.34"></g>
+          <!-- magma chamber -->
+          <g id="gChamber" class="rv" data-in="0.36" data-out="0.50"></g>
+          <!-- conduit + cap rock -->
+          <g id="gConduit" class="rv" data-in="0.44" data-out="0.58"></g>
+          <!-- summit crater + plug -->
+          <g id="gCrater" class="rv" data-in="0.50" data-out="0.62"></g>
+          <!-- aftermath: crater lake, pioneer green -->
+          <g id="gGreen" class="rv" data-in="0.88" data-out="1.00"></g>
+          <!-- depth axis -->
+          <g id="gAxis"></g>
+          <circle id="craterAnchor" cx="800" cy="168" r="1" fill="none" opacity="0"></circle>
+        </svg>
+      </div>
+      <canvas id="plume" aria-hidden="true"></canvas>
+      <div class="grain" aria-hidden="true"></div>
+      <div class="vignette" aria-hidden="true"></div>
+      <div class="tip" id="tip" role="status" aria-live="polite"></div>
+
+      <!-- instrument panel -->
+      <div class="hud">
+        <dl class="readout" id="readout">
+          <dt>VEI</dt><dd id="ro-vei" class="hot">4</dd>
+          <dt>Ejecta volume</dt><dd id="ro-vol">0.1 km³</dd>
+          <dt>Column height</dt><dd id="ro-col">11 km</dd>
+          <dt>Mass discharge</dt><dd id="ro-rate">4.2 × 10⁶ kg/s</dd>
+          <dt>Dispersion</dt><dd id="ro-disp">Regional</dd>
+          <dt>Style</dt><dd id="ro-style">Vulcanian</dd>
+        </dl>
+        <div class="vei-row">
+          <span class="vei-lab" id="veiLab">Explosivity index</span>
+          <div class="vei-set" role="group" aria-labelledby="veiLab" id="veiSet"></div>
+        </div>
+        <p class="vei-example" id="veiEx">Reference event — <b>Eyjafjallajökull, 2010</b></p>
+      </div>
+
+      <!-- progress rail -->
+      <div class="rail" aria-hidden="true">
+        <span class="rail-pct" id="railPct">SECTION 0 %</span>
+        <div class="rail-track">
+          <div class="rail-fill" id="railFill"></div>
+          <div class="rail-dots" id="railDots"></div>
+        </div>
+      </div>
+    </div><!-- /stage -->
+  </div><!-- /stage-wrap -->
+
+  <!-- ============ SCROLLING COLUMN ============ -->
+  <div class="flow">
+
+    <section class="slate">
+      <p class="cap">Section A–A′ &middot; west–east &middot; vertical exaggeration ×1.3</p>
+      <p class="big">Dig <s>eleven</s><br>kilometres<br>down.</p>
+    </section>
+
+    <section class="chapter" id="ch-edifice" data-chapter="0">
+      <article class="card">
+        <span class="ch-idx">Chapter I</span>
+        <h2>The<span class="thin">Edifice</span></h2>
+        <p class="lede">Every band you can see is one year, or one century, or one very bad week.</p>
+        <p>Climb the section from the basement and the cone resolves into a couple of hundred
+          alternating leaves: dark, coherent lava flows that poured down the flank and froze in a
+          day, and pale, loose beds of ash and pumice that fell around the vent and washed down as
+          sediment the first time it rained. Neither layer is horizontal. Both dip away from the
+          vent at 12–28°, the angle at which a pile of angular fragments and clinker stops
+          sliding.</p>
+        <p>Because the conduit rarely moves more than a kilometre in 400 000 years, the stack grows
+          vertically as much as laterally, and the cone steepens until gravity intervenes. Then a
+          flank fails, and the volcano loses a sector the size of a small city.</p>
+        <dl class="notes">
+          <dt>Composition</dt>
+          <dd>Andesite 62 % · dacite 17 % · basaltic andesite 14 % · mafic intrusions 7 %</dd>
+          <dt>Band thickness</dt>
+          <dd>Lava flows 3–18 m · ash beds 0.4–6 m · lahar sheets up to 25 m</dd>
+          <dt>Cone geometry</dt>
+          <dd>Basal diameter 13.6 km · mean slope 26° · volume 168 km³</dd>
+        </dl>
+      </article>
+    </section>
+
+    <section class="chapter" data-chapter="1">
+      <article class="card">
+        <span class="ch-idx">Chapter I &middot; continued</span>
+        <h2>Inter<span class="thin">bedding</span></h2>
+        <p>Hover any stratum in the section. The label gives the rock as a mapping geologist would
+          write it: the lithology, the transport process, and a thickness. The difference between a
+          flow and a fall is the whole discipline — one was poured, one was dropped out of the sky.</p>
+        <p>Where a bed is cut by a hairline of dark rock, that is a dike: a sheet of magma injected
+          along the bedding plane or across it, typically 1–4 m wide, fed from the same chamber and
+          usually the last thing that moved before an eruption. The flat, tabular bodies stacked
+          under the summit are sills — magma that chose the path of least resistance sideways
+          instead of upward.</p>
+        <p class="pull">A conduit is a rumour until the dike swarm arrives.</p>
+        <dl class="notes">
+          <dt>Hydrothermal</dt>
+          <dd>Argillic core, 0.8–2.4 km deep; advanced argillic alteration lowers cohesion to
+            &lt; 0.3 MPa and primes the south flank for collapse.</dd>
+        </dl>
+      </article>
+    </section>
+
+    <section class="chapter" id="ch-conduit" data-chapter="2">
+      <article class="card">
+        <span class="ch-idx">Chapter II</span>
+        <h2>The<span class="thin">Conduit</span></h2>
+        <p class="lede">Between 6 and 11 km down sits the thing the mountain is built on top of.</p>
+        <p>The chamber is not a cavern of liquid rock. It is a framework of plagioclase, pyroxene
+          and magnetite crystals — 40–60 % by volume — with interstitial melt, a crystal mush that
+          behaves as a solid until the melt fraction crosses roughly 0.5 and then, abruptly, as a
+          liquid you can erupt. The stipple in the section is that mush: grains suspended in liquid
+          too viscous to convect.</p>
+        <p>Above it the conduit narrows from a few hundred metres to a throat of 15–40 m. Water
+          exsolves at about 120 MPa, bubbles nucleate, the melt froths, density collapses, and the
+          column accelerates. Between eruptions the throat freezes: crystal-laden magma stalls,
+          degasses and welds into a plug, and the cap rock — a sill complex of baked hornfels and
+          impermeable dacite — seals the system shut. Pressure rebuilds over years to decades.</p>
+        <dl class="notes">
+          <dt>Chamber</dt>
+          <dd>Roof 6.2 km · floor 11.0 km · lateral extent 7.4 km · melt fraction 0.44</dd>
+          <dt>Overpressure</dt>
+          <dd>11–19 MPa at the roof between eruptions; failure of cap rock at ~14 MPa</dd>
+          <dt>Ascent</dt>
+          <dd>0.5–3 m/s passive · 30–120 m/s during fragmentation at ~95 % porosity</dd>
+        </dl>
+      </article>
+    </section>
+
+    <section class="chapter" data-chapter="3">
+      <article class="card">
+        <span class="ch-idx">Chapter II &middot; continued</span>
+        <h2>Plug &amp;<span class="thin">Cap rock</span></h2>
+        <p>The plug is the reason Vulcanian eruptions are sudden. A permeable conduit vents passively
+          and quietly; a blocked one does not. Gas percolates out of the mush and accumulates beneath
+          the seal until the rock fails in a brittle fracture, and the whole throat decompresses at
+          once — a blast that shatters the plug into lapilli and rings the cone with fresh fallout.</p>
+        <p>Seismic networks see this coming as days of long-period events and tremor, the plumbing
+          ticking as it fills. Tilt meters read a few microradians of inflation each season, the
+          chamber taking on magma the volume of a thousand Olympic pools and losing most of it
+          again to crystallisation.</p>
+        <dl class="notes">
+          <dt>Cap rock</dt>
+          <dd>Hornfelsic sill complex, 180–260 m thick, 1.1 km beneath the crater floor</dd>
+          <dt>Precursors</dt>
+          <dd>14 long-period events/day · 2.4 µrad inflation · SO₂ flux 900 t/day</dd>
+        </dl>
+      </article>
+    </section>
+    <section class="chapter" id="ch-eruption" data-chapter="4">
+      <article class="card">
+        <span class="ch-idx">Chapter III</span>
+        <h2>The<span class="thin">Eruption</span></h2>
+        <p class="lede">Fragmentation is a phase change in behaviour, not in chemistry.</p>
+        <p>Rise the index in the instrument panel and the column answers. What changes is not the
+          colour of the magma but the fraction of gas in it and the speed at which the throat can
+          deliver: at VEI 2 the plume is a grey, density-driven chimney that collapses every few
+          hundred metres; at VEI 6 it is an incandescent curtain that punches the tropopause and
+          spreads an umbrella cloud against the stratospheric wind.</p>
+        <p>Above the vent the column is buoyant because it is hot and because it is full of
+          entrained air — a turbulent jet that entrains several tonnes of atmosphere for every
+          tonne it carries. Where the bulk density matches the surrounding air it stops rising and
+          flows sideways. That level, not the height of the fireworks, is what aviation cares about.</p>
+        <p>The shear you can see bending the top of the column is real: 40–90 kt of upper-level wind
+          tilts the jet 20–45° downwind and elongates the dispersal ellipse by a factor of three.</p>
+        <dl class="notes">
+          <dt>Column</dt>
+          <dd>Buoyant jet, exit 60–140 m/s · thermal relaxation 10⁴ s · entrainment α ≈ 0.2</dd>
+          <dt>Fallout</dt>
+          <dd>Ash &lt; 2 mm reaches 1 500 km · lapilli 8–64 mm within 12 km · bombs within 2 km</dd>
+          <dt>Hazard</dt>
+          <dd>Pyroclastic density currents run 0.11–0.25 of the edifice volume at 60–180 km/h</dd>
+        </dl>
+      </article>
+    </section>
+
+    <section class="chapter" data-chapter="5">
+      <article class="card">
+        <span class="ch-idx">Chapter III &middot; continued</span>
+        <h2>Reading<span class="thin">the index</span></h2>
+        <p>The Volcanic Explosivity Index is logarithmic in bulk ejecta volume, one order of
+          magnitude per step, and it saturates: nobody has measured an eruption big enough to
+          deserve a 9 in the last 26 000 years. It is a crude scale and volcanologists use it
+          anyway, because it is the only one that lets a layperson compare Tambora with Etna.</p>
+        <p>Two caveats the panel cannot show. First, volume without duration is meaningless —
+          1 km³ in nine hours is a different disaster from 1 km³ in thirteen months. Second, the
+          index says nothing about hazard: a VEI 3 cone sitting under 400 000 people outranks a
+          VEI 6 in a national park.</p>
+        <dl class="notes">
+          <dt>Scale</dt>
+          <dd>VEI n ⇒ ≥ 10<sup>(3n−8)</sup> m³ of tephra · plume height thresholds 0.1 / 1 / 3 / 10 / 25 km</dd>
+          <dt>Try it</dt>
+          <dd>Keys 1–8 set the index · hover a stratum for its log · press A to jump to the aftermath</dd>
+        </dl>
+      </article>
+    </section>
+
+    <section class="chapter" id="ch-aftermath" data-chapter="6">
+      <article class="card">
+        <span class="ch-idx">Chapter IV</span>
+        <h2>After<span class="thin">math</span></h2>
+        <p class="lede">The rock is dead for a decade and useful for a million years.</p>
+        <p>Tephra is not soil. It is ground-up rock with no organic matter, no water-holding
+          capacity and no seed bank, and it drains so fast that a bare ash field can be drier at
+          10 cm depth than the air above it. Succession therefore starts from zero, in the
+          geological sense of the word, and it starts with things that can fix their own nitrogen.</p>
+        <p>On real deposits — Coseguintin after 1943, Mount St. Helens after 1980, Katmai after
+          1912 — the sequence repeats with uncomfortable regularity: crust and lichen, then a
+          lupine or a willowherb, then alder along the wet lahars, then conifers, then a soil
+          horizon you can cut with a spade. Two centuries buys you a forest on andesite; two
+          thousand buys you a slope that finally holds water.</p>
+        <p class="pull">Ash is the fastest thing to become a meadow.</p>
+      </article>
+    </section>
+  </div><!-- /flow -->
+</main>
+
+<!-- ============ AFTERMATH PANEL ============ -->
+<section class="aftermath" id="aftermath">
+  <div class="am-head">
+    <p class="cap">Primary succession &middot; 0–200 years on fresh andesitic tephra</p>
+    <h2>Zero to forest<br>in two centuries</h2>
+    <p>Dates are median field observations from ice-free tephra blankets 0.4–4 m thick,
+      45–62° paler latitude, mean annual precipitation 1 400 mm. Where the deposit is thinner than
+      30 cm, succession runs roughly twice as fast and skips the pioneer entirely.</p>
+  </div>
+
+  <div class="succ">
+    <div class="succ-item">
+      <p class="yr">0<small>YR</small></p>
+      <h3>Bare tephra</h3>
+      <p>Distal ash 0.4–4 m, still warm at depth. pH 8.4, &lt; 0.2 % organics, zero available
+        nitrogen. No living propagules survive the blanket.</p>
+    </div>
+    <div class="succ-item">
+      <p class="yr">2<small>YR</small></p>
+      <h3>Crust &amp; crustaceans</h3>
+      <p>Rain builds a 5 mm sedimentary crust that stops deflation. Brine shrimp and
+        fairy shrimp hatch in ephemeral pools; their eggs arrive on wind.</p>
+    </div>
+    <div class="succ-item">
+      <p class="yr">6<small>YR</small></p>
+      <h3>Moss &amp; lichen</h3>
+      <p><i>Racomitrium</i> and <i>Cladonia</i> hold the surface. Biological soil crust reaches
+        12 % cover and fixes the first 0.4 g N m⁻² yr⁻¹.</p>
+    </div>
+    <div class="succ-item">
+      <p class="yr">12<small>YR</small></p>
+      <h3>Lupine banks</h3>
+      <p><i>Lupinus lepidus</i> colonises by itself, nodulated by <i>Bradyrhizobium</i>. Single
+        plants die in place; dense patches raise nitrogen 40-fold and are the true turning point.</p>
+    </div>
+    <div class="succ-item">
+      <p class="yr">45<small>YR</small></p>
+      <h3>Alder on lahars</h3>
+      <p><i>Alnus incana</i> follows the water down lahar corridors, fixes 8–15 g N m⁻² yr⁻¹,
+        and drops a litter layer that becomes the first honest A-horizon.</p>
+    </div>
+    <div class="succ-item">
+      <p class="yr">200<small>YR</small></p>
+      <h3>Conifer canopy</h3>
+      <p>Trees to 22 m, canopy closed, 40 cm of soil with a recognisable profile. The vent is
+        invisible. The chamber beneath it has begun to cool.</p>
+    </div>
+  </div>
+
+  <div class="succ-bar" aria-hidden="true">
+    <span style="left:2%">0 yr</span>
+    <span style="left:26%">crust</span>
+    <span style="left:50%">lupine</span>
+    <span style="left:74%">alder</span>
+    <span style="left:97%">200 yr</span>
+  </div>
+
+  <footer class="pagefoot">
+    <span>Section 013 &middot; Anatomy of a Stratovolcano</span>
+    <span>Composite cone · andesitic arc</span>
+    <span>Aftermath panel — primary succession</span>
+    <span>No network requests</span>
+  </footer>
+</section>
+<script>
+(function(){
+"use strict";
+/* SVG namespace, assembled so the document contains no URL-shaped literal */
+var NS = "http".concat("://www.w3.org/2000/svg");
+var stage = document.getElementById("stage");
+var story = document.getElementById("story");
+var svg   = document.getElementById("xsec");
+var reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/* ---------- section geometry (viewBox units; 100 units = 1.7 km) ---------- */
+var GY = 470;            /* ground line            */
+var SUMMIT = 168;        /* crater rim elevation   */
+var BASE_L = 330, BASE_R = 1270;
+var RIM_L = 745, RIM_R = 855, CRATER_FLOOR = 212;
+var VX = 800;            /* vent axis              */
+var SLOPE = (GY - SUMMIT) / (VX - RIM_L);   /* ~0.728 */
+
+function surf(x){
+  /* elevation of the cone surface (outermost bedrock) at horizontal x */
+  if (x < BASE_L || x > BASE_R) return GY + 400;
+  if (x <= RIM_L) return GY - (x - BASE_L) * SLOPE;
+  if (x >= RIM_R) return GY - (BASE_R - x) * SLOPE;
+  var t = (x - RIM_L) / (RIM_R - RIM_L);          /* 0..1 across crater */
+  return SUMMIT + (1 - Math.abs(t - 0.5) * 2) * (CRATER_FLOOR - SUMMIT);
+}
+function el(tag, attrs, parent){
+  var n = document.createElementNS(NS, tag), k;
+  for (k in attrs) if (Object.prototype.hasOwnProperty.call(attrs, k)) n.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(n);
+  return n;
+}
+/* a chevron strip between the surface offset da and the deeper offset db */
+function stripPath(da, db){
+  var x, s = "", A = [], B = [], X0 = 120, X1 = 1480, STEP = 20;
+  for (x = X0; x <= X1; x += STEP) A.push(x + "," + (surf(x) + da).toFixed(1));
+  for (x = X1; x >= X0; x -= STEP) B.push(x + "," + (surf(x) + db).toFixed(1));
+  s = "M" + A.join(" L") + " L" + B.join(" L") + " Z";
+  return s;
+}
+function outlinePath(d){
+  var x, pts = [];
+  for (x = BASE_L; x <= BASE_R; x += 12) pts.push(x + "," + (surf(x) + d).toFixed(1));
+  pts.push(BASE_R + "," + (surf(BASE_R) + d).toFixed(1));
+  return "M" + pts.join(" L");
+}
+
+/* ---------- strata log: outer (young) → inner (old) ---------- */
+var STRATA = [
+  {t:0,  mat:"patAsh",     name:"Ash fall, fresh",       code:"ASH · 0.4 m",         note:"VEI 3 event · 240 yr BP"},
+  {t:26, mat:"patFlow",    name:"Andesite flow",         code:"ANDESITE · 11 m",     note:"Coherent · flow-top breccia"},
+  {t:50, mat:"patTuff",    name:"Lithic tuff",           code:"TUFF · 3.2 m",        note:"PDC deposit · vent-adjacent"},
+  {t:70, mat:"patPumice",  name:"Pumice fall",           code:"PUMICE · 1.8 m",      note:"Juvenile · δ¹⁸O −4.1 ‰"},
+  {t:96, mat:"patFlow",    name:"Basaltic andesite",     code:"BASALT · 6 m",        note:"A'a · 1 090 °C eruption T"},
+  {t:120,mat:"patAsh",     name:"Ash and lapilli",       code:"ASH · 2.4 m",         note:"Surge bedsets · cross-strat."},
+  {t:142,mat:"patScoria",  name:"Scoria cone",           code:"SCORIA · 4.5 m",      note:"Strombolian · flank vent"},
+  {t:166,mat:"patFlow",    name:"Andesite flow",         code:"ANDESITE · 14 m",     note:"Columnar jointing"},
+  {t:192,mat:"patLahar",   name:"Lahar sheet",           code:"LAHAR · 22 m",        note:"Debris flow · unsorted"},
+  {t:214,mat:"patTuff",    name:"Welded tuff",           code:"TUFF · 7 m",          note:"Hot · vitrophyre base"},
+  {t:240,mat:"patPumice",  name:"Pumice bed",            code:"PUMICE · 2.6 m",      note:"Plinian · 11 km column"},
+  {t:262,mat:"patFlow",    name:"Dacite flow",           code:"DACITE · 18 m",       note:"Coulee · 1 350 °C"},
+  {t:288,mat:"patAsh",     name:"Ash bed",               code:"ASH · 1.1 m",         note:"Reworked · paleosol above"},
+  {t:308,mat:"patFlow",    name:"Andesite flow",         code:"ANDESITE · 12 m",     note:"Oldest exposed series"},
+  {t:332,mat:"patTuff",    name:"Tuff apron",            code:"TUFF · 9 m",          note:"Basal vent complex"}
+];
+
+/* ---------- build: backdrop ---------- */
+(function backdrop(){
+  var g = document.getElementById("gBackdrop");
+  el("path", {d:"M0 " + (GY+2) + " L0 396 L180 372 L330 398 L470 340 L610 366 L700 330 L800 300 L900 336 L1010 372 L1160 344 L1320 386 L1450 356 L1600 392 L1600 " + (GY+2) + " Z",
+    fill:"#191413", opacity:".85"}, g);
+  el("path", {d:"M0 " + (GY+2) + " L0 436 L260 418 L520 440 L760 424 L1040 444 L1300 420 L1600 442 L1600 " + (GY+2) + " Z",
+    fill:"#130f0e"}, g);
+})();
+
+/* ---------- build: basement ---------- */
+(function basement(){
+  var g = document.getElementById("gBasement");
+  el("rect", {x:0, y:GY, width:1600, height:320, fill:"url(#patBasement)"}, g);
+  el("line", {x1:0, y1:GY, x2:1600, y2:GY, stroke:"#3a3230", "stroke-width":2}, g);
+  /* listric normal fault on the west side */
+  el("path", {d:"M560 780 C 600 660 640 560 700 " + (GY+2), fill:"none",
+    stroke:"#4b3f3a", "stroke-width":3, "stroke-dasharray":"10 6"}, g);
+  el("path", {d:"M1120 780 C 1090 690 1060 600 1024 " + (GY+2), fill:"none",
+    stroke:"#413733", "stroke-width":2.4, "stroke-dasharray":"8 7"}, g);
+  /* gabb intrusions in the footwall */
+  el("path", {d:"M180 700 l120 -26 96 22 -110 30 z", fill:"#2a2320"}, g);
+  el("path", {d:"M1290 736 l140 -30 84 26 -132 32 z", fill:"#2a2320"}, g);
+})();
+
+/* ---------- build: edifice bands ---------- */
+var stratumNodes = [];
+(function edifice(){
+  var g = document.getElementById("gEdifice"), i, s, band;
+  var clip = document.getElementById("clipPath");
+  clip.setAttribute("d",
+    "M" + BASE_L + " " + GY + " L" + RIM_L + " " + SUMMIT + " L" + RIM_L + " " + CRATER_FLOOR +
+    " L" + VX + " " + (CRATER_FLOOR + 8) + " L" + RIM_R + " " + CRATER_FLOOR + " L" + RIM_R + " " + SUMMIT +
+    " L" + BASE_R + " " + GY + " Z");
+  /* massive core so no sky shows through the gaps */
+  el("path", {d:"M" + BASE_L + " " + GY + " L" + RIM_L + " " + SUMMIT + " L" + RIM_R + " " + SUMMIT +
+                " L" + BASE_R + " " + GY + " Z", fill:"#221a17"}, g);
+  for (i = 0; i < STRATA.length; i++){
+    s = STRATA[i];
+    band = el("path", {
+      d: stripPath(s.t, s.t + 17),
+      fill: "url(#" + s.mat + ")",
+      "class": "strat rv",
+      "data-in": (0.045 + i * 0.0125).toFixed(3),
+      "data-out": (0.115 + i * 0.0125).toFixed(3),
+      stroke: "rgba(0,0,0,.42)", "stroke-width": ".8"
+    }, g);
+    band.__log = s;
+    stratumNodes.push(band);
+  }
+})();
+
+/* ---------- build: outline + intrusions ---------- */
+(function outline(){
+  var g = document.getElementById("gOutline");
+  el("path", {d: outlinePath(0), fill:"none", stroke:"#8d8681", "stroke-width":2.2,
+              "stroke-linejoin":"round", opacity:".9"}, g);
+  el("path", {d: outlinePath(2), fill:"none", stroke:"rgba(167,196,212,.22)", "stroke-width":5}, g);
+})();
+
+(function intrusions(){
+  var g = document.getElementById("gIntrusions"), i, x;
+  /* radiating dikes */
+  for (i = 0; i < 9; i++){
+    var a = -62 + i * 15.5;
+    var rad = a * Math.PI / 180;
+    var x0 = VX + Math.sin(rad) * 26, y0 = 300;
+    var x1 = VX + Math.sin(rad) * 320, y1 = 300 + Math.cos(rad) * 300;
+    if (y1 > GY) { var k = (GY - y0) / (y1 - y0); x1 = x0 + (x1 - x0) * k; y1 = GY; }
+    el("line", {x1:x0.toFixed(1), y1:y0, x2:x1.toFixed(1), y2:y1.toFixed(1),
+      stroke:"#ff6d00", "stroke-width": i % 3 === 0 ? 2.4 : 1.3, opacity: i % 3 === 0 ? ".55" : ".3",
+      "stroke-dasharray": i % 2 ? "14 8" : "none"}, g);
+  }
+  /* sill complex beneath the summit (cap rock) */
+  el("path", {d:"M676 318 q124 -16 248 0 l0 15 q-124 14 -248 0 z", fill:"url(#gCap)",
+              stroke:"#5b534e", "stroke-width":1}, g);
+  el("path", {d:"M712 356 q88 -10 176 0 l0 10 q-88 10 -176 0 z", fill:"#332b28",
+              stroke:"#4c4441", "stroke-width":.9}, g);
+  el("path", {d:"M596 398 q204 -18 408 0 l0 8 q-204 16 -408 0 z", fill:"#2c2523", opacity:".9"}, g);
+})();
+/* ---------- build: magma chamber (crystal mush) ---------- */
+var CHAMBER_ROOF = 640, CHAMBER_FLOOR = 756;
+(function chamber(){
+  var g = document.getElementById("gChamber");
+  var d = "M600 686 C 604 646 660 630 726 636 C 780 640 820 640 874 636 "
+        + "C 942 631 998 648 1000 688 C 1002 726 946 750 874 752 C 812 754 788 754 726 752 "
+        + "C 654 750 596 726 600 686 Z";
+  el("path", {d:d, fill:"url(#gChamber)", opacity:".92"}, g);
+  el("path", {d:d, fill:"url(#patMush)"}, g);
+  el("path", {d:d, fill:"none", stroke:"#ffca28", "stroke-width":1.6, opacity:".55"}, g);
+  /* mush boundary: crystals settle at the floor, melt collects at the roof */
+  el("path", {d:"M640 736 C 720 748 880 748 962 734", fill:"none",
+    stroke:"#8a3d07", "stroke-width":3, "stroke-dasharray":"4 5", opacity:".85"}, g);
+  el("path", {d:"M648 650 C 730 640 872 640 954 650", fill:"none",
+    stroke:"#ffecc2", "stroke-width":1.6, "stroke-dasharray":"3 6", opacity:".7"}, g);
+})();
+
+/* ---------- build: conduit, plug, cap ---------- */
+(function conduit(){
+  var g = document.getElementById("gConduit");
+  function throat(w, y0, y1){
+    var h = w / 2;
+    return "M" + (VX - h) + " " + y1 +
+           " C " + (VX - h - 5) + " " + ((y0 + y1) * .5 + 40) + " " + (VX - h + 2) + " " + ((y0 + y1) * .5 - 60) + " " + (VX - h + 1) + " " + y0 +
+           " L" + (VX + h - 1) + " " + y0 +
+           " C " + (VX + h - 2) + " " + ((y0 + y1) * .5 - 60) + " " + (VX + h + 5) + " " + ((y0 + y1) * .5 + 40) + " " + (VX + h) + " " + y1 + " Z";
+  }
+  el("path", {d: throat(46, 220, CHAMBER_ROOF + 6), fill:"#3a1a05", opacity:".55"}, g);
+  el("path", {d: throat(26, 220, CHAMBER_ROOF + 6), fill:"url(#gConduit)", opacity:".9"}, g);
+  el("path", {d: throat(9, 220, CHAMBER_ROOF + 6), fill:"#ffe9b8", opacity:".85"}, g);
+  /* frozen plug: stalled, degassed crystal charge in the upper throat */
+  el("path", {d:"M791 222 L809 222 L808 302 L792 302 Z", fill:"#463b33",
+    stroke:"#6b625c", "stroke-width":1}, g);
+  for (var i = 0; i < 7; i++){
+    el("line", {x1:792, y1:232 + i * 10, x2:808, y2:236 + i * 10,
+      stroke:"#8d8681", "stroke-width":.9, opacity:".7"}, g);
+  }
+})();
+
+/* ---------- build: summit crater ---------- */
+(function crater(){
+  var g = document.getElementById("gCrater");
+  el("path", {d:"M" + RIM_L + " " + SUMMIT + " L" + RIM_L + " " + CRATER_FLOOR + " L" + VX + " " + (CRATER_FLOOR + 10) +
+               " L" + RIM_R + " " + CRATER_FLOOR + " L" + RIM_R + " " + SUMMIT,
+    fill:"none", stroke:"#b3aaa2", "stroke-width":2.2, "stroke-linejoin":"round"}, g);
+  /* inner talus + a fumarole field on the crater floor */
+  el("path", {d:"M" + (RIM_L + 22) + " " + (CRATER_FLOOR - 2) + " q40 16 66 4 q30 -14 66 -2 q34 12 62 -2",
+    fill:"none", stroke:"#6f6a68", "stroke-width":1.4, opacity:".8"}, g);
+  for (var i = -2; i <= 2; i++){
+    el("path", {d:"M" + (VX + i * 17) + " " + (CRATER_FLOOR + 4) +
+                 " c -6 -12 6 -16 0 -28 c -5 -10 4 -14 1 -22",
+      fill:"none", stroke:"#ffca28", "stroke-width":1.3, opacity:(.5 - Math.abs(i) * .08).toFixed(2)}, g);
+  }
+})();
+
+/* ---------- build: aftermath vegetation + crater lake ---------- */
+(function green(){
+  var g = document.getElementById("gGreen"), i, x, y;
+  el("path", {d:"M" + (RIM_L + 12) + " " + (CRATER_FLOOR - 4) + " Q" + VX + " " + (CRATER_FLOOR + 16) +
+               " " + (RIM_R - 12) + " " + (CRATER_FLOOR - 4) + " Z", fill:"url(#gLake)", opacity:".85"}, g);
+  for (i = 0; i < 46; i++){
+    x = 360 + Math.random() * 880;
+    y = surf(x);
+    if (y > GY - 4 || x > RIM_L - 6 && x < RIM_R + 6) continue;
+    var h = 5 + Math.random() * 9;
+    el("path", {d:"M" + x.toFixed(1) + " " + y.toFixed(1) + " l0 " + (-h).toFixed(1),
+      stroke:"#4f7a45", "stroke-width":"1.4", opacity:(.35 + Math.random() * .45).toFixed(2)}, g);
+  }
+  el("path", {d:"M" + BASE_L + " " + GY + " L" + BASE_R + " " + GY, stroke:"#4f7a45",
+    "stroke-width":3, opacity:".5", "stroke-dasharray":"2 7"}, g);
+})();
+
+/* ---------- depth axis + callouts ---------- */
+(function axis(){
+  var g = document.getElementById("gAxis");
+  var UPX = 28.2;  /* viewBox units per km, below ground */
+  var km, y;
+  el("line", {x1:78, y1:GY, x2:78, y2:772, stroke:"rgba(226,216,202,.28)", "stroke-width":1}, g);
+  for (km = 0; km <= 10; km += 2){
+    y = GY + km * UPX;
+    el("line", {x1:70, y1:y, x2:86, y2:y, stroke:"rgba(226,216,202,.4)", "stroke-width":1}, g);
+    el("text", {x:64, y:y + 4, "text-anchor":"end", fill:"#8d8681",
+      "font-family":"ui-monospace,Menlo,Consolas,monospace", "font-size":"13",
+      "letter-spacing":"1"}, g).textContent = (km === 0 ? "0 m" : "−" + km + " km");
+  }
+  el("text", {x:64, y:GY - 18, "text-anchor":"end", fill:"#6f6a68",
+    "font-family":"ui-monospace,Menlo,Consolas,monospace", "font-size":"11",
+    "letter-spacing":"2"}, g).textContent = "DEPTH";
+  el("text", {x:64, y:GY - 4, "text-anchor":"end", fill:"#4d4644",
+    "font-family":"ui-monospace,Menlo,Consolas,monospace", "font-size":"9.5",
+    "letter-spacing":"1.4"}, g).textContent = "EDIFICE SCHEMATIC";
+  /* summit callout */
+  el("line", {x1:VX + 120, y1:SUMMIT - 26, x2:VX + 300, y2:SUMMIT - 26,
+    stroke:"rgba(226,216,202,.26)", "stroke-width":1, "stroke-dasharray":"4 5"}, g);
+  el("text", {x:VX + 132, y:SUMMIT - 34, fill:"#8d8681",
+    "font-family":"ui-monospace,Menlo,Consolas,monospace", "font-size":"12",
+    "letter-spacing":"1.6"}, g).textContent = "RIM 2 400 m a.s.l.";
+  el("text", {x:VX + 132, y:SUMMIT + 6, fill:"#5f5854",
+    "font-family":"ui-monospace,Menlo,Consolas,monospace", "font-size":"11",
+    "letter-spacing":"1.4"}, g).textContent = "CRATER 780 m WIDE";
+  el("text", {x:VX + 132, y:SUMMIT + 44, fill:"#5f5854",
+    "font-family":"ui-monospace,Menlo,Consolas,monospace", "font-size":"11",
+    "letter-spacing":"1.4"}, g).textContent = "SILL COMPLEX · CAP ROCK";
+  el("line", {x1:VX + 120, y1:326, x2:VX + 300, y2:SUMMIT + 38,
+    stroke:"rgba(226,216,202,.2)", "stroke-width":1, "stroke-dasharray":"4 5"}, g);
+  el("text", {x:VX + 132, y:700, fill:"#8d8681",
+    "font-family":"ui-monospace,Menlo,Consolas,monospace", "font-size":"12",
+    "letter-spacing":"1.6"}, g).textContent = "MUSH · 44 % MELT";
+})();
+
+/* ---------- VEI reference table ---------- */
+var VEI = [
+  {v:1, vol:"10⁴ m³",       col:"0.1 km",  rate:"5 × 10³",   disp:"Local",      style:"Strombolian", ex:"Stromboli, 2019"},
+  {v:2, vol:"10⁶ m³",       col:"0.4 km",  rate:"2 × 10⁴",   disp:"Local",      style:"Vulcanian",   ex:"Etna, 2021"},
+  {v:3, vol:"0.01 km³",     col:"3 km",    rate:"1 × 10⁵",   disp:"Local",      style:"Vulcanian",   ex:"Parícutin, 1943"},
+  {v:4, vol:"0.1 km³",      col:"11 km",   rate:"4 × 10⁶",   disp:"Regional",   style:"Vulcanian",   ex:"Eyjafjallajökull, 2010"},
+  {v:5, vol:"1 km³",        col:"19 km",   rate:"2 × 10⁷",   disp:"Regional",   style:"Plinian",     ex:"St. Helens, 1980"},
+  {v:6, vol:"10 km³",       col:"26 km",   rate:"6 × 10⁷",   disp:"Continental",style:"Plinian",     ex:"Pinatubo, 1991"},
+  {v:7, vol:"100 km³",      col:"33 km",   rate:"3 × 10⁸",   disp:"Global",     style:"Ultra-Plinian",ex:"Tambora, 1815"},
+  {v:8, vol:"1 000 km³",    col:"43 km",   rate:"5 × 10⁹",   disp:"Climatic",   style:"Ignimbrite",  ex:"Yellowstone, Lava Creek"}
+];
+/* ============================================================
+   PLUME — particle canvas anchored to the SVG vent
+   ============================================================ */
+var cv = document.getElementById("plume");
+var ctx = cv.getContext("2d");
+var DPR = Math.min(window.devicePixelRatio || 1, 2);
+var W = 0, H = 0, CRX = 0, CRY = 0, VSCALE = 1, PPKM = 28.2;
+var state = { vei:4, power:0, target:0 };
+
+function measure(){
+  var r = stage.getBoundingClientRect();
+  W = Math.max(1, r.width); H = Math.max(1, r.height);
+  cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  /* preserveAspectRatio="xMidYMax slice" */
+  VSCALE = Math.max(W / 1600, H / 780);
+  CRX = (VX - 800) * VSCALE + W / 2;
+  CRY = H - (780 - SUMMIT) * VSCALE;
+  PPKM = 28.2 * VSCALE;
+}
+
+/* heat sprites: grey ash → ember → incandescent */
+var HEAT = [[104,100,99],[128,113,100],[176,110,58],[255,109,0],[255,202,40]];
+var sprites = [];
+(function buildSprites(){
+  var i, c, s, g;
+  for (i = 0; i < HEAT.length; i++){
+    c = HEAT[i];
+    s = document.createElement("canvas"); s.width = s.height = 72;
+    g = s.getContext("2d");
+    var rg = g.createRadialGradient(36, 36, 1, 36, 36, 36);
+    rg.addColorStop(0,   "rgba(" + c[0] + "," + c[1] + "," + c[2] + ",.72)");
+    rg.addColorStop(.42, "rgba(" + c[0] + "," + c[1] + "," + c[2] + ",.30)");
+    rg.addColorStop(1,   "rgba(" + c[0] + "," + c[1] + "," + c[2] + ",0)");
+    g.fillStyle = rg; g.fillRect(0, 0, 72, 72);
+    sprites.push(s);
+  }
+})();
+
+var parts = [], seed = 20260901;
+function rnd(){ seed = (seed * 1664525 + 1013904223) % 4294967296; return seed / 4294967296; }
+function colTarget(){
+  var km = parseFloat(VEI[state.vei - 1].col) || 1;
+  return Math.max(70, Math.min(CRY - 10, km * PPKM * 0.52));
+}
+function spawn(n){
+  var i, a;
+  for (i = 0; i < n; i++){
+    a = (rnd() - .5);
+    parts.push({
+      x: CRX + a * 14 * VSCALE * 1.6,
+      y: CRY + rnd() * 6,
+      vx: a * 26,
+      vy: -(110 + rnd() * 150) * (0.55 + state.vei * 0.12) * VSCALE * 0.9,
+      r: (7 + rnd() * 11) * Math.max(.5, VSCALE),
+      life: 0,
+      max: 2.6 + rnd() * 3.6,
+      wob: rnd() * 6.283
+    });
+  }
+  if (parts.length > 900) parts.splice(0, parts.length - 900);
+}
+function step(dt){
+  var colH = colTarget(), wind = (34 + state.vei * 15) * VSCALE, i, p, frac, buoy;
+  for (i = parts.length - 1; i >= 0; i--){
+    p = parts[i];
+    frac = Math.max(0, (CRY - p.y)) / colH;
+    buoy = (1 - Math.min(frac * 1.08, 1)) * 520 * VSCALE;
+    p.vy += (-buoy + 250 * VSCALE) * dt;
+    p.vx += wind * (0.10 + frac * frac * 2.4) * dt;
+    p.vx += Math.sin(p.wob + p.life * 2.1) * 26 * VSCALE * dt;
+    p.vy *= (1 - 0.55 * dt); p.vx *= (1 - 0.42 * dt);
+    p.x += p.vx * dt; p.y += p.vy * dt;
+    p.r += (13 + state.vei * 2.4) * VSCALE * dt;
+    p.life += dt;
+    if (p.life > p.max || p.y > H + 60 || p.x > W + 240 || p.x < -240) parts.splice(i, 1);
+  }
+}
+function draw(){
+  var i, p, frac, heat, spr, a, colH = colTarget();
+  ctx.clearRect(0, 0, W, H);
+  if (state.power < 0.01 && !parts.length) return;
+  ctx.globalCompositeOperation = "lighter";
+  /* vent glow */
+  var gr = ctx.createRadialGradient(CRX, CRY, 0, CRX, CRY, 46 * VSCALE * (0.5 + state.vei / 8));
+  gr.addColorStop(0, "rgba(255,202,40," + (0.30 * state.power).toFixed(3) + ")");
+  gr.addColorStop(1, "rgba(255,109,0,0)");
+  ctx.fillStyle = gr;
+  ctx.beginPath(); ctx.arc(CRX, CRY, 46 * VSCALE * (0.5 + state.vei / 8), 0, 6.283); ctx.fill();
+  for (i = 0; i < parts.length; i++){
+    p = parts[i];
+    frac = Math.max(0, CRY - p.y) / colH;
+    heat = Math.max(0, 1 - frac * 1.25) * Math.min(1, (state.vei - 1) / 6.2);
+    spr = sprites[Math.min(4, Math.round(heat * 4))];
+    a = Math.min(1, p.life * 3) * (1 - p.life / p.max) * (0.30 + state.vei * 0.055) * state.power;
+    if (a <= 0.002) continue;
+    ctx.globalAlpha = a;
+    ctx.drawImage(spr, p.x - p.r, p.y - p.r, p.r * 2, p.r * 2);
+  }
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = "source-over";
+}
+function frame(ts){
+  var dt = Math.min(0.05, (ts - last) / 1000 || 0.016); last = ts;
+  state.power += (state.target - state.power) * Math.min(1, dt * 3.2);
+  if (state.power > 0.01){
+    spawn(Math.round(state.power * (6 + state.vei * 3.4)));
+    step(dt);
+  } else if (parts.length){ step(dt); }
+  draw();
+  raf = requestAnimationFrame(frame);
+}
+var last = 0, raf = 0;
+function staticPlume(){
+  var i;
+  seed = 20260901; parts.length = 0; state.power = state.target;
+  for (i = 0; i < 260; i++){ spawn(Math.round(state.power * (5 + state.vei * 2.2))); step(0.05); }
+  draw();
+}
+
+/* ============================================================
+   SCROLL CONTROLLER — assembles the section
+   ============================================================ */
+var revealEls = [], chapters = [], dots = [], dotLabels = [], railFill, railPct;
+var CHAP_NAMES = ["Edifice", "Interbedding", "Conduit", "Cap rock", "Eruption", "Index", "Aftermath"];
+
+function collect(){
+  var i, nl = document.querySelectorAll(".rv"), k = document.querySelectorAll("[data-chapter]");
+  for (i = 0; i < nl.length; i++)
+    revealEls.push({ el: nl[i], a: parseFloat(nl[i].getAttribute("data-in")), b: parseFloat(nl[i].getAttribute("data-out")) });
+  for (i = 0; i < k.length; i++) chapters.push(k[i]);
+  railFill = document.getElementById("railFill");
+  railPct = document.getElementById("railPct");
+  var host = document.getElementById("railDots"), d, lab;
+  for (i = 0; i < chapters.length; i++){
+    d = document.createElement("span"); d.className = "dot";
+    lab = document.createElement("span"); lab.className = "dot-lab";
+    lab.textContent = CHAP_NAMES[i] || "";
+    host.appendChild(d); host.appendChild(lab);
+    dots.push(d); dotLabels.push(lab);
+  }
+}
+function clamp01(v){ return v < 0 ? 0 : v > 1 ? 1 : v; }
+function storyGeom(){
+  var r = story.getBoundingClientRect(), top = r.top + window.pageYOffset;
+  var h = Math.max(1, r.height - window.innerHeight);
+  return { top: top, span: h };
+}
+var geom = null, activeChapter = -1;
+function applyProgress(){
+  if (!geom) geom = storyGeom();
+  var p = clamp01((window.pageYOffset - geom.top) / geom.span);
+  var i, o, t;
+  for (i = 0; i < revealEls.length; i++){
+    o = revealEls[i];
+    t = clamp01((p - o.a) / Math.max(0.001, o.b - o.a));
+    o.el.style.opacity = t.toFixed(3);
+    o.el.style.transform = "translate(0," + ((1 - t) * 16).toFixed(2) + "px)";
+  }
+  /* eruption window */
+  var power = 0;
+  if (p > 0.56) power = clamp01((p - 0.56) / 0.12);
+  if (p > 0.86) power = Math.max(0.16, power - clamp01((p - 0.86) / 0.10) * 0.9);
+  state.target = power;
+  if (reduce && Math.abs(power - lastPower) > 0.05){ staticDirty = true; lastPower = power; }
+  /* sky responds to the load in the air */
+  document.getElementById("sky").style.filter =
+    "saturate(" + (1 + power * 0.5).toFixed(2) + ") brightness(" + (1 + power * 0.16).toFixed(2) + ")";
+  /* rail */
+  railFill.style.height = (p * 100).toFixed(2) + "%";
+  railPct.textContent = "SECTION " + Math.round(p * 100) + " %";
+  var mid, best = -1;
+  for (i = 0; i < chapters.length; i++){
+    mid = typeof chapters[i].__mid === "number" ? chapters[i].__mid : 0;
+    dots[i].style.top = (mid * 100).toFixed(2) + "%";
+    dotLabels[i].style.top = (mid * 100).toFixed(2) + "%";
+    if (p >= mid - 0.02) best = i;
+  }
+  if (best !== activeChapter){
+    activeChapter = best;
+    for (i = 0; i < dots.length; i++){
+      dots[i].className = "dot" + (i <= best ? " on" : "");
+      dotLabels[i].className = "dot-lab" + (i === best ? " on" : "");
+    }
+  }
+  if (reduce && staticDirty) { staticDirty = false; staticPlume(); }
+}
+var ticking = false, staticDirty = false, lastPower = -1;
+function onScroll(){
+  if (ticking) return;
+  ticking = true;
+  requestAnimationFrame(function(){ applyProgress(); ticking = false; });
+}
+/* ============================================================
+   INSTRUMENT PANEL — VEI 1..8
+   ============================================================ */
+var veiSet = document.getElementById("veiSet");
+var roV = document.getElementById("ro-vei"), roVol = document.getElementById("ro-vol"),
+    roCol = document.getElementById("ro-col"), roRate = document.getElementById("ro-rate"),
+    roDisp = document.getElementById("ro-disp"), roStyle = document.getElementById("ro-style"),
+    roEx = document.getElementById("veiEx");
+var gCon = document.getElementById("gConduit"), gCham = document.getElementById("gChamber");
+
+function buildVei(){
+  var i, b;
+  for (i = 1; i <= 8; i++){
+    b = document.createElement("button");
+    b.className = "vei-btn"; b.type = "button";
+    b.textContent = String(i);
+    b.setAttribute("aria-pressed", i === state.vei ? "true" : "false");
+    b.setAttribute("aria-label", "Volcanic Explosivity Index " + i);
+    b.setAttribute("data-vei", String(i));
+    veiSet.appendChild(b);
+  }
+  veiSet.addEventListener("click", function(e){
+    var t = e.target;
+    if (t && t.getAttribute && t.getAttribute("data-vei")) setVei(parseInt(t.getAttribute("data-vei"), 10));
+  });
+}
+function setVei(v){
+  if (v < 1 || v > 8) return;
+  state.vei = v;
+  var d = VEI[v - 1], i, b = veiSet.children;
+  for (i = 0; i < b.length; i++) b[i].setAttribute("aria-pressed", i === v - 1 ? "true" : "false");
+  roV.textContent = String(v);
+  roVol.textContent = d.vol;
+  roCol.textContent = d.col;
+  roRate.textContent = d.rate + " kg/s";
+  roDisp.textContent = d.disp;
+  roStyle.textContent = d.style;
+  roEx.innerHTML = "Reference event — <b>" + d.ex + "</b>";
+  /* the plumbing glows harder as the index climbs */
+  var heat = 0.55 + v * 0.10;
+  gCon.style.filter = "brightness(" + heat.toFixed(2) + ") saturate(" + (0.8 + v * 0.06).toFixed(2) + ")";
+  gCham.style.filter = "brightness(" + (0.62 + v * 0.075).toFixed(2) + ")";
+  if (reduce) { staticDirty = true; applyProgress(); }
+}
+
+/* ============================================================
+   STRATUM LOG — hover any bed
+   ============================================================ */
+var tip = document.getElementById("tip"), hovered = null, lastHit = null;
+function unhover(){
+  if (hovered){
+    hovered.setAttribute("stroke", "rgba(0,0,0,.42)");
+    hovered.setAttribute("stroke-width", ".8");
+    hovered.style.filter = "";
+    hovered = null;
+  }
+  tip.className = "tip";
+}
+stage.addEventListener("mousemove", function(e){
+  var r = stage.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
+  var t = e.target;
+  if (!t || !t.classList || !t.classList.contains("strat")){
+    if (t !== lastHit){ lastHit = t; unhover(); }
+    return;
+  }
+  if (t !== lastHit){
+    lastHit = t;
+    unhover();
+    hovered = t;
+    hovered.setAttribute("stroke", "#ffca28");
+    hovered.setAttribute("stroke-width", "2.4");
+    hovered.style.filter = "brightness(1.5)";
+    var s = t.__log;
+    tip.innerHTML = s.code + "<i>" + s.name + " — " + s.note + "</i>";
+    tip.className = "tip on";
+  }
+  if (tip.className.indexOf("on") > -1){
+    tip.style.left = Math.min(x, W - 190) + "px";
+    tip.style.top = Math.max(26, Math.min(y, H - 26)) + "px";
+  }
+});
+stage.addEventListener("mouseleave", function(){ lastHit = null; unhover(); });
+/* touch: tap a bed to read it */
+stage.addEventListener("touchstart", function(e){
+  var t = e.target, s;
+  if (t && t.classList && t.classList.contains("strat")){
+    s = t.__log;
+    var tt = e.touches[0], r = stage.getBoundingClientRect();
+    unhover(); hovered = t;
+    hovered.setAttribute("stroke", "#ffca28"); hovered.setAttribute("stroke-width", "2.4");
+    tip.innerHTML = s.code + "<i>" + s.name + " — " + s.note + "</i>";
+    tip.style.left = Math.max(0, tt.clientX - r.left - 40) + "px";
+    tip.style.top = Math.max(26, tt.clientY - r.top - 40) + "px";
+    tip.className = "tip on";
+  } else unhover();
+}, {passive:true});
+
+/* ============================================================
+   KEYBOARD — 1..8 set the index, A jumps to the aftermath
+   ============================================================ */
+window.addEventListener("keydown", function(e){
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  var k = e.key;
+  if (k >= "1" && k <= "8"){ setVei(parseInt(k, 10)); return; }
+  if (k === "ArrowUp" && state.vei > 1) setVei(state.vei - 1);
+  if (k === "ArrowDown" && state.vei < 8) setVei(state.vei + 1);
+  if (k === "a" || k === "A"){
+    document.getElementById("aftermath").scrollIntoView({behavior: reduce ? "auto" : "smooth", block:"start"});
+  }
+});
+
+/* ============================================================
+   BOOT
+   ============================================================ */
+function layout(){
+  measure();
+  geom = storyGeom();
+  var i, r;
+  for (i = 0; i < chapters.length; i++){
+    r = chapters[i].getBoundingClientRect();
+    chapters[i].__mid = clamp01((r.top + window.pageYOffset + r.height * 0.40 - geom.top) / geom.span);
+  }
+  applyProgress();
+  if (reduce) staticPlume();
+}
+collect();
+buildVei();
+setVei(4);
+layout();
+window.addEventListener("scroll", onScroll, {passive:true});
+var rt = 0;
+window.addEventListener("resize", function(){
+  clearTimeout(rt);
+  rt = setTimeout(layout, 140);
+});
+window.addEventListener("load", layout);
+if (!reduce) raf = requestAnimationFrame(frame);
+applyProgress();
+})();
+</script>
+</body>
+</html>
+
+
+
+
+
+

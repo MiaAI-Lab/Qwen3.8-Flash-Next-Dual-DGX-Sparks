@@ -1,0 +1,103 @@
+TITLE:  Halide — A Cyanotype Archive of Marine Micro-organisms
+
+PROMPT: Build a single self-contained page, "Halide: A Cyanotype Archive" — a six-plate
+cyanotype (blueprint) archive of marine organisms, each plate carrying its plate number,
+exposure log and chemical bath notes. Art direction: a Prussian-blue photogram; the paper
+texture must be drawn in CSS/SVG (no images), the specimens are white line-art exposures
+lying in the blue, and the plate edges carry a faint fog/bleed. Palette: #08213a #0d3a63
+#1d5c92 #7fa8c9 #e7ecef (paper) #b53a2b (archive stamp red). Type: headlines
+"Iowan Old Style", Palatino, Georgia, serif in small-caps; body Optima, "Avenir Next",
+"Helvetica Neue", system-ui; all data ui-monospace, Menlo, Consolas. Layout: an archive
+drawer — a sticky left index of plate numbers, and on the right a stack of plates, each one
+an SVG organism drawn in white strokes over a blue wash, with a caption rail under it.
+Motion: plates "develop" as they scroll into view — a radial exposure wipe reveals the line
+art while opacity rises from 0.25 to 1 — plus a slow grain drift. Interaction: clicking an
+index entry smooth-scrolls to its plate, lifts it and opens its exposure log; a "bath /
+wash time" slider re-renders the wash density of the sheets; hovering a plate shows a
+magnifier ring that follows the cursor and reveals the fine hatch strokes. Six organisms,
+all six genuinely different and recognisable: a centric diatom (valve view), a spumellarian
+radiolarian, a crown medusa, a calanoid copepod, a stipitate alga, a rotaliid foraminifer.
+Write the specimen data as a real bench ledger: sheet size and maker, sensitiser strengths,
+contact method, exposure time with a Wedgwood actinometer number, bath times and acid
+baths, drying, condition faults, and the clerk who entered it with an accession number.
+No external anything; honour prefers-reduced-motion with the settled developed state.
+
+DESIGN: The page is a flat-file drawer photographed on the bench, so the composition is
+deliberately unfancy: a masthead that reads like a folder cover (title, deck, and a
+definition list of accession facts), a rule strip of graduated tick marks, then a two-column
+drawer — sticky index of six plate numbers on the left, the sheets stacked on the right.
+Each sheet is a dark plate frame with a short stamp-red rule bleeding in from the top-left
+(the archive's access mark), the specimen centred in a blue wash, and a caption rail with the
+plate number, binomial, station line and an "Exposure log" control. The palette is the
+process: every hue is either iron blue at some depth (#08213a ground, #0d3a63 wash, #1d5c92
+rules), paper white (#e7ecef) for the line work, faded caption blue (#7fa8c9), or the one
+non-photographic colour in the building — the stamp red #b53a2b, used only on the plate rule,
+the foxing stains and the Bath/Condition log cells. Small-caps serif does the naming, humanist
+sans carries the prose, monospace carries anything that could be read off a label, so the
+viewer can tell transcription from commentary at a glance. The whole page is one light source:
+the wash, the vignette and the exposure wipe are all centred radial gradients, so a plate
+reads as one sheet of sensitised paper rather than a card with a picture on it.
+
+TECHNIQUES: Zero canvas and zero external assets; the probe counts 6 inline <svg> in the
+live DOM (one per plate) and 239 <path> elements inside them, all created with
+document.createElementNS in buildArt() from pure path-data builders (ellipse/circle as two
+arcs, polyline, wave = sine-displaced polyline, arcLine, arcTick, stripes = parallel
+hairlines) — never string markup. Each of the six DRAW functions is real morphology, not
+scribble: diatom = concentric valve, 26 fasciculated rib wedges, 34 areolae on a ring,
+rostrum crown, 148-tooth hatch comb; radiolarian = 6 forking hexactine primary rays, 18
+barbed secondary spines, three girdle circles, dashed collapsed pellicle at r190; medusa =
+cubic bell outline, 8 lappets built off a quadratic margin function, 32 marginal tentacles
+and 8 doubled-wave oral arms over 22 radial hatch lines, 24 ocelli dots; copepod = cephalothorax path plus a spine()
+generator that grows setae along a curving axis (22-segment antennule, 5 swimming legs,
+2 plumose caudal rami, 5 ova); alga = one cubic centre line offset to both edges by a band()
+width function, 43 cross-ribs, 26 receptacle blisters, 10-arc holdfast disc; foraminiferan =
+logarithmic spiral R(t)=5.2*1.9^(t/2pi) over 5.25 turns with a second inner lamella, sutures,
+aperture tooth plate, and porose rows stepped along every whorl. Geometry is deterministic:
+mulberry32 seeded per organism (SEED table), memoised, so the sheets are identical on every
+reload. The sheet itself is stacked absolutely-positioned layers inside .plate-inner: .paper
+(repeating-linear fibre), .wash (four stacked radial/repeating-radial gradients written in
+hsl(var(--wash-h) var(--wash-s) var(--wash-l))), .halftone (5px radial dot grid,
+mix-blend-mode: soft-light), .fox (two stamp-red radial stains, soft-light), .grain (a single feTurbulence fractalNoise tile, baseFrequency .86, numOctaves 3, seed 19,
+baked once into a data: URI by grainURI(), mix-blend-mode: overlay, drifted by a 7.2s
+steps(6) keyframe),
+.vignette and .exposure (both mix-blend-mode: multiply). .bleed is a blurred radial halo
+behind the drawing for the fog at the plate edge. Development is a real wipe: the exposure
+layer is a radial gradient whose stop positions are calc(var(--ex) * 128%), while
+--dev: calc(.25 + .75 * var(--ex)) drives the opacity of the paper, wash and art together.
+Strokes are classed (.w1/.w13/.w18/.w26 widths, .a1/.a2/.a3 opacities bound to the wash
+variables, .h1/.h2 hatch, .spec/.spec3 solid marks, .halo a 22px low-opacity underlay,
+.tick scale bars, .label 9px monospace) and use vector-effect: non-scaling-stroke. Scale bars
+("P 001 · 40 µm") are drawn into each 400x400 viewBox, so the loupe magnifies them too.
+
+INTERACTION: One control panel and three affordances. (1) Drawer index — six buttons built
+from PLATES, each showing the plate number, binomial and "plate i · diatom"; click (or Tab +
+Enter/Space, they are real buttons) runs goTo(): it marks aria-current on the button, opens
+that plate's log, forces development, smooth-scrolls the plate to block:center (behaviour
+'auto' under reduced motion) and plays a 1s lift keyframe on the plate and its shadow. The
+sticky index is also a scroll spy: a second IntersectionObserver with rootMargin
+'-45% 0px -45% 0px' marks whichever plate crosses the middle of the viewport as current and
+rewrites the "#idx-count" roman readout ("iii / vi"). (2) Exposure log — every plate caption
+has an "Exposure log" button with aria-expanded and a CSS ::after that swaps + for −; it
+toggles .open and sets the box's max-height to its own scrollHeight (recomputed on a 180 ms
+debounced resize), so the 8–9 ledger rows (Sheet, Sensitiser, Contact, Exposure, Bath,
+Drying, Condition, Entered) unroll rather than pop. (3) Bath / wash time — a range input,
+0–20 min in 0.5 steps, whose verdict line reads from seven thresholds ("Under-washed · steel
+grey" to "Over-washed · the line is going"). washModel(t) turns minutes into chemistry: a
+gaussian of un-washed free iron centred at u=0.3, a slate term pow((u-0.68)/0.32, 1.7), and
+from them lightness 16.5-6.4*grey+9.4*slate, saturation 29-15.5u, hue 206-9u, halftone,
+grain, foxing, bleed and a line-contrast factor; applyWash() writes those as custom
+properties on every sheet, so the ground greys, then goes slate, and the white strokes lose
+edge past ~16 min — the failure the colophon describes. `input` restyles cheaply; `change`
+additionally re-prints the loupe. (4) Magnifier — mousemove anywhere on a plate (ignored when
+(hover: none)) positions a 150px ring with crosshairs and a "loupe × 3.1 · hatch layer" tag,
+and clips two background layers to circle(74px at x y): one is the plate as it currently
+prints, the other is the hatch layer alone at ×3.1, both serialized to data: URIs by
+loupeURI()/bake() with presentation attributes baked in because page CSS cannot reach a data
+URI, and both recoloured by CSS filters so the fine hatch reads as white on blue. Leaving the
+plate fades the ring out. A skip link ("Skip to plates") and :focus-visible outlines carry
+keyboard users; prefers-reduced-motion disables the develop animation (--ex jumps to 1), the
+grain drift, the lift, smooth scrolling and the logbox transition, leaving the fully developed
+sheet. A `#plate-…` fragment in the URL is replayed after the sheets are built — the plates are
+created by script, so the browser's own fragment navigation finds nothing on first load — landing
+on that plate immediately rather than smooth-scrolling down from the masthead, and marking it
+active in the index rail.

@@ -1,0 +1,43 @@
+--- files/overlay/hyperconnection.py.orig	2026-09-02 15:27:42.744234870 +0300
++++ files/overlay/hyperconnection.py	2026-09-02 15:27:42.762166241 +0300
+@@ -67,9 +67,13 @@
+         config: HyperConnectionConfig,
+         use_combine: bool = True,
+         prefix: str = "",
++        quant_config=None,
+     ) -> None:
+         super().__init__()
+         self.config = config
++        # [fp8dense overlay] quant_config is resolved per layer prefix by the
++        # ModelOpt MIXED_PRECISION config; unquantized checkpoints resolve to
++        # UnquantizedLinearMethod, so passing it through is a no-op for them.
+         self.lora_rank = config.hc_lowrank
+         self.hc_count = config.hc_count
+         self.hidden_size = config.hidden_size
+@@ -99,7 +103,7 @@
+                 + ([self.pad_size] if self.pad_size else []),
+                 bias=False,
+                 params_dtype=config.params_dtype,
+-                quant_config=None,
++                quant_config=quant_config,
+                 prefix=maybe_prefix(prefix, "input_mix_weight_down_block_inject"),
+                 return_bias=False,
+                 disable_tp=True,
+@@ -110,7 +114,7 @@
+                 self.lora_rank,
+                 bias=False,
+                 params_dtype=config.params_dtype,
+-                quant_config=None,
++                quant_config=quant_config,
+                 prefix=maybe_prefix(prefix, "input_mix_weight_down"),
+                 return_bias=False,
+             )
+@@ -119,7 +123,7 @@
+             self.hyper_hidden_size,
+             bias=False,
+             params_dtype=config.params_dtype,
+-            quant_config=None,
++            quant_config=quant_config,
+             prefix=maybe_prefix(prefix, "input_mix_weight_up"),
+             return_bias=False,
+         )

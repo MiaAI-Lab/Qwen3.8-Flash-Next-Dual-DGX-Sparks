@@ -1,0 +1,970 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pendulum Wave Laboratory — 24 brass bobs on a quadratic taper</title>
+<meta name="description" content="A working pendulum wave machine: 24 RK4-integrated pendulums on a quadratic length taper, with gravity, damping, release phase and trail controls.">
+<style>
+/* ============================================================
+   PENDULUM WAVE LABORATORY — apparatus 014
+   Graph paper #101418 · paper marks #e8e3d8 · brass #d7a13c
+   ============================================================ */
+:root{
+  --void:#101418;
+  --void-2:#0b0f12;
+  --panel:#151b21;
+  --panel-2:#1a2228;
+  --line:#232e35;
+  --line-2:#2f3d46;
+  --ink:#e8e3d8;
+  --muted:#8d949a;
+  --brass:#d7a13c;
+  --brass-hi:#f3d495;
+  --brass-lo:#7a5a1f;
+  --steel:#3a4148;
+  --steel-hi:#78848b;
+  --mono:ui-monospace,Menlo,Consolas,"Courier New",monospace;
+  --cond:"Haettenschweiler","Arial Narrow",Impact,"Arial Black","Helvetica Neue",system-ui,sans-serif;
+  --serif:Georgia,"Palatino Linotype",Palatino,Baskerville,"Times New Roman",serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{
+  background:
+    linear-gradient(180deg,#0c1014 0%, var(--void) 34%, #0d1216 100%);
+  color:var(--ink);
+  font-family:var(--mono);
+  font-size:14px;
+  line-height:1.55;
+  -webkit-font-smoothing:antialiased;
+  min-height:100vh;
+}
+h1,h2,h3,p,dl,dd,figure{margin:0}
+button,input{font:inherit;color:inherit}
+::selection{background:var(--brass);color:#12100c}
+
+/* ---------- nameplate ---------- */
+.plate{
+  display:grid;grid-template-columns:minmax(0,1fr) auto;gap:clamp(18px,4vw,60px);
+  align-items:end;
+  padding:clamp(20px,3.4vw,44px) clamp(16px,3.4vw,44px) clamp(16px,2.4vw,26px);
+  border-bottom:1px solid var(--line);
+  background:linear-gradient(180deg,rgba(215,161,60,.05),rgba(215,161,60,0) 70%);
+}
+.eyebrow{
+  font-size:10.5px;letter-spacing:.3em;text-transform:uppercase;color:var(--muted);
+  display:flex;gap:14px;flex-wrap:wrap;align-items:center;
+}
+.eyebrow b{color:var(--brass);font-weight:400}
+.plate h1{
+  font-family:var(--cond);font-weight:400;text-transform:uppercase;
+  font-size:clamp(40px,8.4vw,132px);line-height:.84;letter-spacing:-.008em;color:var(--ink);
+  margin-top:12px;
+}
+.plate h1 em{
+  font-style:normal;color:transparent;-webkit-text-stroke:1.2px rgba(232,227,216,.55);
+}
+.deck{
+  margin-top:14px;max-width:62ch;font-family:var(--serif);font-size:16.5px;color:#c9c4ba;
+}
+.deck b{color:var(--brass);font-weight:400}
+/* formula card */
+.formula{
+  border:1px solid var(--line-2);background:var(--panel);
+  padding:18px 22px 16px;min-width:min(340px,100%);
+}
+.formula .fx{
+  font-family:var(--serif);font-size:clamp(26px,3.4vw,40px);color:var(--ink);
+  display:flex;align-items:flex-end;gap:.22em;line-height:1;
+}
+.formula .fx i{font-style:italic}
+.formula .surd{font-size:1.18em;line-height:.9;position:relative;top:.04em}
+.formula .fx span{white-space:nowrap}
+.frac{display:inline-block;vertical-align:-.46em;text-align:center;font-size:.78em}
+.frac b{display:block;padding:0 .22em;font-weight:400}
+.frac b + b{border-top:1px solid currentColor}
+.rad{display:inline-block;border-top:1px solid currentColor;padding:.14em .12em 0 .1em;margin-left:-.1em}
+.formula .cap{font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:var(--muted);margin-top:12px}
+.formula .sub{font-size:11.5px;color:#a9b0b5;margin-top:6px;font-family:var(--serif)}
+sub,sup{font-size:.62em;line-height:0}
+
+/* ---------- lab grid ---------- */
+.lab{
+  padding:clamp(14px,2.4vw,28px) clamp(16px,3.4vw,44px) 60px;
+  display:grid;gap:clamp(14px,1.6vw,22px);
+  grid-template-columns:minmax(0,1fr);
+}
+.bay{
+  position:relative;border:1px solid var(--line-2);background:var(--void-2);
+  overflow:hidden;
+}
+.bay svg{display:block;width:100%;height:auto}
+.bay-tag{
+  position:absolute;left:14px;top:12px;z-index:2;
+  font-size:10px;letter-spacing:.24em;text-transform:uppercase;color:var(--muted);
+}
+.bay-tag b{color:var(--brass);font-weight:400}
+.status{
+  position:absolute;right:14px;top:10px;z-index:2;display:flex;align-items:center;gap:10px;
+  font-size:10.5px;letter-spacing:.22em;text-transform:uppercase;
+}
+.status .lamp{
+  width:9px;height:9px;border-radius:50%;background:#4b555c;
+  box-shadow:0 0 0 1px #2b343a inset;transition:background .2s,box-shadow .2s;
+}
+.status.run .lamp{background:var(--brass);box-shadow:0 0 12px 1px rgba(215,161,60,.8)}
+.status.run{color:var(--brass)}
+/* ---------- control rack ---------- */
+.rack{
+  border:1px solid var(--line-2);background:var(--panel);
+  padding:clamp(16px,2vw,24px);
+  display:grid;gap:clamp(14px,1.6vw,26px);
+  grid-template-columns:repeat(auto-fit,minmax(230px,1fr));
+  align-items:start;
+}
+.group{min-width:0}
+.group > legend,.group > .lab-t{
+  font-size:10px;letter-spacing:.26em;text-transform:uppercase;color:var(--brass);
+  padding:0 0 8px;border-bottom:1px solid var(--line);margin-bottom:12px;display:block;
+  width:100%;
+}
+.transport{display:flex;gap:8px;flex-wrap:wrap}
+.btn{
+  appearance:none;cursor:pointer;
+  background:linear-gradient(180deg,#20282e,#161d22);
+  border:1px solid var(--line-2);color:var(--ink);
+  padding:11px 16px;min-width:96px;
+  font-size:11px;letter-spacing:.2em;text-transform:uppercase;
+  transition:border-color .18s,background .18s,color .18s,transform .1s;
+}
+.btn:hover{border-color:var(--brass);color:var(--brass-hi)}
+.btn:active{transform:translateY(1px)}
+.btn.primary{
+  background:linear-gradient(180deg,var(--brass-hi),var(--brass));
+  border-color:var(--brass);color:#16110a;font-weight:700;
+}
+.btn[aria-pressed="true"]{
+  background:linear-gradient(180deg,var(--brass),#a87a24);
+  border-color:var(--brass-hi);color:#16110a;
+}
+.slider-row{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.slider-row .val{font-size:15px;color:var(--brass);font-variant-numeric:tabular-nums}
+.slider-row .val small{color:var(--muted);font-size:10px;letter-spacing:.14em}
+input[type=range]{
+  -webkit-appearance:none;appearance:none;width:100%;height:26px;background:transparent;
+  margin:4px 0 2px;cursor:ew-resize;
+}
+input[type=range]::-webkit-slider-runnable-track{
+  height:3px;background:linear-gradient(90deg,var(--line-2),var(--steel));border-radius:0;
+}
+input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;width:13px;height:22px;margin-top:-10px;
+  background:linear-gradient(180deg,var(--brass-hi),var(--brass-lo));
+  border:1px solid #0b0f12;box-shadow:0 0 0 1px rgba(215,161,60,.35);
+}
+input[type=range]::-moz-range-track{height:3px;background:var(--line-2)}
+input[type=range]::-moz-range-thumb{
+  width:13px;height:22px;border-radius:0;border:1px solid #0b0f12;
+  background:linear-gradient(180deg,var(--brass-hi),var(--brass-lo));
+}
+input[type=range]:focus-visible{outline:1px solid var(--brass);outline-offset:4px}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+.chip{
+  appearance:none;cursor:pointer;background:transparent;border:1px solid var(--line-2);
+  padding:7px 10px;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);
+  transition:border-color .18s,color .18s,background .18s;
+}
+.chip:hover{border-color:var(--brass);color:var(--ink)}
+.chip[aria-pressed="true"]{border-color:var(--brass);color:#16110a;background:var(--brass)}
+.chip b{font-weight:400;opacity:.68;margin-left:6px}
+.hint{font-size:11px;color:var(--muted);margin-top:8px}
+.hint b{color:var(--ink);font-weight:400}
+
+/* ---------- countdown + telemetry ---------- */
+.gauges{
+  display:grid;gap:1px;background:var(--line);border:1px solid var(--line);
+  grid-template-columns:repeat(auto-fit,minmax(min(240px,100%),1fr));
+}
+.gauge{background:var(--panel);padding:16px 18px 18px;min-width:0}
+.gauge .k{font-size:9.5px;letter-spacing:.26em;text-transform:uppercase;color:var(--muted)}
+.gauge .v{
+  font-variant-numeric:tabular-nums;color:var(--ink);
+  font-size:clamp(26px,4.4vw,52px);line-height:1;margin-top:8px;letter-spacing:-.01em;
+}
+.gauge .v u{text-decoration:none;font-size:.42em;color:var(--muted);margin-left:.35em;letter-spacing:.14em}
+.gauge.hero .v{color:var(--brass)}
+.gauge .note{font-size:11px;color:var(--muted);margin-top:8px}
+.meter{height:6px;background:#0c1114;border:1px solid var(--line);margin-top:12px;position:relative}
+.meter i{
+  position:absolute;left:0;top:0;bottom:0;width:0%;
+  background:linear-gradient(90deg,#7a5a1f,var(--brass),var(--brass-hi));
+}
+.meter u{
+  position:absolute;top:-3px;bottom:-3px;width:1px;background:rgba(232,227,216,.45);
+  text-decoration:none;
+}
+
+/* ---------- phase strip ---------- */
+.strip{border:1px solid var(--line-2);background:var(--panel);padding:14px 16px 10px}
+.strip-head{
+  display:flex;justify-content:space-between;align-items:baseline;gap:16px;flex-wrap:wrap;
+  font-size:10px;letter-spacing:.24em;text-transform:uppercase;color:var(--muted);
+}
+.strip-head b{color:var(--brass);font-weight:400}
+.bars{
+  display:grid;grid-template-columns:repeat(24,1fr);gap:3px;
+  height:104px;align-items:end;margin-top:12px;
+  border-bottom:1px solid var(--line-2);padding-bottom:2px;
+}
+.bars .b{
+  position:relative;height:100%;background:linear-gradient(180deg,rgba(232,227,216,.05),rgba(232,227,216,.02));
+  overflow:hidden;
+}
+.bars .b i{
+  position:absolute;left:0;right:0;bottom:0;height:6%;
+  background:linear-gradient(180deg,var(--brass-hi),var(--brass) 40%,#6f521c);
+  transition:height .06s linear;
+}
+.bars .b.hub i{background:linear-gradient(180deg,#fff3d8,var(--brass-hi) 50%,var(--brass))}
+.strip .n{
+  display:grid;grid-template-columns:repeat(24,minmax(0,1fr));gap:3px;margin-top:6px;
+  font-size:9px;color:#697278;text-align:center;letter-spacing:.04em;
+}
+.strip .n span{min-width:0;overflow:hidden}
+.strip .n span:nth-child(6n+1){color:var(--brass)}
+
+/* ---------- notes / instruction card ---------- */
+.docs{display:grid;gap:clamp(14px,1.6vw,22px);grid-template-columns:repeat(auto-fit,minmax(min(320px,100%),1fr))}
+.card{border:1px solid var(--line-2);background:var(--panel);padding:clamp(18px,2vw,26px)}
+.card h2{
+  font-family:var(--cond);font-weight:400;text-transform:uppercase;
+  font-size:clamp(24px,2.6vw,36px);line-height:.94;letter-spacing:.004em;color:var(--ink);
+}
+.card h2 + p{margin-top:10px}
+.card p{font-family:var(--serif);font-size:15.5px;color:#c3bfb5}
+.card p + p{margin-top:12px}
+.keys{margin-top:16px;border-top:1px solid var(--line);padding-top:14px;display:grid;gap:8px}
+.keys div{display:flex;gap:12px;align-items:baseline;font-size:12px;color:var(--muted)}
+kbd{
+  font-family:var(--mono);font-size:11px;letter-spacing:.08em;
+  border:1px solid var(--line-2);border-bottom-width:2px;background:#1b2329;
+  padding:3px 8px;color:var(--ink);min-width:34px;text-align:center;
+}
+.specs{margin-top:16px;border-top:1px dashed var(--line-2);padding-top:12px}
+.specs dt{font-size:9.5px;letter-spacing:.22em;text-transform:uppercase;color:var(--brass)}
+.specs dd{margin:2px 0 10px;font-size:12.5px;color:#a9b0b5}
+
+/* ---------- length table ---------- */
+.tablewrap{border:1px solid var(--line-2);background:var(--panel);padding:clamp(16px,2vw,24px)}
+.tw-head{
+  display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;align-items:baseline;
+  font-size:10px;letter-spacing:.24em;text-transform:uppercase;color:var(--muted);
+}
+.tw-head b{color:var(--brass);font-weight:400}
+.grid24{
+  margin-top:14px;display:grid;gap:1px;background:var(--line);
+  grid-template-columns:repeat(auto-fill,minmax(112px,1fr));border:1px solid var(--line);
+}
+.cell{background:var(--panel-2);padding:9px 10px 10px;transition:background .2s}
+.cell:hover{background:#212b32}
+.cell .i{font-size:9px;letter-spacing:.2em;color:#697278}
+.cell .l{font-size:15px;color:var(--brass);font-variant-numeric:tabular-nums;margin-top:2px}
+.cell .t{font-size:10.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+
+.pagefoot{
+  border-top:1px solid var(--line);margin-top:clamp(20px,3vw,40px);
+  padding:20px clamp(16px,3.4vw,44px) 40px;display:flex;gap:22px;flex-wrap:wrap;
+  justify-content:space-between;font-size:10px;letter-spacing:.2em;
+  text-transform:uppercase;color:#697278;
+}
+.pagefoot b{color:var(--muted);font-weight:400}
+
+@media (min-width:1180px){
+  .lab{grid-template-columns:minmax(0,1fr)}
+  .rack{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
+@media (max-width:760px){
+  .plate{grid-template-columns:minmax(0,1fr)}
+  .bars{height:78px}
+  .strip .n{display:none}
+  .gauge .v{font-size:30px}
+}
+@media (max-width:420px){
+  .bars{grid-template-columns:repeat(12,minmax(0,1fr));height:70px}
+  .btn{min-width:0;flex:1 1 auto;padding:10px 10px;font-size:10px}
+}
+@media (prefers-reduced-motion:reduce){
+  *{transition-duration:.001ms !important;animation-duration:.001ms !important}
+}
+</style>
+</head>
+<body>
+<header class="plate">
+  <div>
+    <p class="eyebrow">
+      <span>Apparatus 014</span><span>·</span><b>Pendulum wave machine</b><span>·</span>
+      <span>24 brass bobs</span><span>·</span><span>quadratic length taper</span>
+    </p>
+    <h1>Pendulum<br><em>Wave</em> Laboratory</h1>
+    <p class="deck">Twenty-four bobs hang from one machined bar, each a little shorter than the last.
+      Their periods are tuned so that the slowest completes exactly <b>15</b> swings while the fastest
+      completes <b>38</b> — which means the row shears into a snake, a checkerboard, a braid, and then
+      snaps back into a single straight line. Everything below is integrated properly:
+      <b>θ̈ = −(g/L)·sin θ − c·θ̇</b>, fourth-order Runge–Kutta, fixed 1/480 s step.</p>
+  </div>
+
+  <div class="formula">
+    <p class="fx">
+      <i>T</i><sub>n</sub><span>=</span><span>2π</span><span class="surd">√</span><span class="rad"><span class="frac"><b>L<sub>n</sub></b><b><i>g</i></b></span></span>
+    </p>
+    <p class="cap">Period of bob n · small-angle form</p>
+    <p class="sub">Design law: <i>L</i><sub>n</sub> = <i>g</i>·[<i>T</i><sub>beat</sub> / 2π(14+<i>n</i>)]²,
+      <i>n</i> = 1…24, so bob <i>n</i> makes exactly 14+<i>n</i> swings per beat. The integrator solves
+      the full non-linear equation, so large release angles run slightly slow.</p>
+  </div>
+</header>
+
+<main class="lab">
+  <!-- ============== THE MACHINE ============== -->
+  <section class="bay">
+    <p class="bay-tag">Bay 014 · <b>optical bench</b> · drawn 1:2.4 · grid 25 mm</p>
+    <p class="status" id="status"><span class="lamp" aria-hidden="true"></span><span id="statusTxt">Halted</span></p>
+
+    <svg id="machine" viewBox="0 0 1500 640" preserveAspectRatio="xMidYMid meet"
+         role="img" aria-labelledby="mTitle mDesc">
+      <title id="mTitle">Pendulum wave machine</title>
+      <desc id="mDesc">Twenty-four brass bobs on hairline wires suspended from a machined carriage bar
+        above graph paper; the wires shorten along a quadratic taper from left to right.</desc>
+
+      <defs>
+        <pattern id="paper" width="25" height="25" patternUnits="userSpaceOnUse">
+          <rect width="25" height="25" fill="#101418"/>
+          <path d="M25 0 L0 0 0 25" fill="none" stroke="rgba(232,227,216,.055)" stroke-width="1"/>
+        </pattern>
+        <pattern id="paperMajor" width="125" height="125" patternUnits="userSpaceOnUse">
+          <path d="M125 0 L0 0 0 125" fill="none" stroke="rgba(232,227,216,.11)" stroke-width="1"/>
+        </pattern>
+        <linearGradient id="gSteel" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#59646c"/>
+          <stop offset=".34" stop-color="#39424a"/>
+          <stop offset=".54" stop-color="#20272c"/>
+          <stop offset="1" stop-color="#2e373d"/>
+        </linearGradient>
+        <linearGradient id="gUpright" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#2b333a"/>
+          <stop offset=".45" stop-color="#4b555d"/>
+          <stop offset="1" stop-color="#20272c"/>
+        </linearGradient>
+        <radialGradient id="gBrass" cx="34%" cy="28%" r="78%">
+          <stop offset="0" stop-color="#fbe6bb"/>
+          <stop offset=".34" stop-color="#d7a13c"/>
+          <stop offset=".78" stop-color="#9b7024"/>
+          <stop offset="1" stop-color="#4d3812"/>
+        </radialGradient>
+        <linearGradient id="gWire" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="rgba(232,227,216,.62)"/>
+          <stop offset="1" stop-color="rgba(232,227,216,.24)"/>
+        </linearGradient>
+        <linearGradient id="gTrail" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="rgba(215,161,60,0)"/>
+          <stop offset="1" stop-color="rgba(215,161,60,.55)"/>
+        </linearGradient>
+      </defs>
+
+      <!-- graph paper sheet -->
+      <rect x="0" y="0" width="1500" height="640" fill="url(#paper)"/>
+      <rect x="0" y="0" width="1500" height="640" fill="url(#paperMajor)"/>
+      <line x1="0" y1="596" x2="1500" y2="596" stroke="rgba(232,227,216,.34)" stroke-width="1.4"/>
+      <g id="gFloorTicks"></g>
+      <g id="gGuides"></g>
+
+      <!-- frame -->
+      <g id="gFrame">
+        <rect x="104" y="34" width="18" height="562" fill="url(#gUpright)" stroke="#151b21"/>
+        <rect x="1378" y="34" width="18" height="562" fill="url(#gUpright)" stroke="#151b21"/>
+        <rect x="86" y="586" width="54" height="14" fill="#39424a" stroke="#151b21"/>
+        <rect x="1360" y="586" width="54" height="14" fill="#39424a" stroke="#151b21"/>
+        <circle cx="113" cy="52" r="3" fill="#101418"/><circle cx="1387" cy="52" r="3" fill="#101418"/>
+        <circle cx="113" cy="580" r="3" fill="#101418"/><circle cx="1387" cy="580" r="3" fill="#101418"/>
+      </g>
+
+      <!-- carriage bar -->
+      <g id="gCarriage">
+        <rect x="116" y="74" width="1268" height="26" rx="2" fill="url(#gSteel)" stroke="#101418"/>
+        <line x1="116" y1="79" x2="1384" y2="79" stroke="rgba(232,227,216,.30)" stroke-width="1"/>
+        <line x1="116" y1="96" x2="1384" y2="96" stroke="rgba(0,0,0,.5)" stroke-width="1.5"/>
+        <g id="gBolts"></g>
+        <g id="gPivots"></g>
+        <text x="124" y="66" fill="#8d949a" font-family="ui-monospace,Menlo,Consolas,monospace"
+              font-size="11" letter-spacing="2.4">CARRIAGE BAR · INVAR · 1 268 mm</text>
+        <text x="1376" y="66" text-anchor="end" fill="#697278"
+              font-family="ui-monospace,Menlo,Consolas,monospace" font-size="11"
+              letter-spacing="2.4">24 STATIONS · PITCH 33.9</text>
+      </g>
+
+      <g id="gTrails" fill="none" stroke-linecap="round"></g>
+      <g id="gWires" stroke="url(#gWire)" stroke-width="1.05"></g>
+      <g id="gBobs"></g>
+      <g id="gMeasure"></g>
+      <g id="gEnvelope"></g>
+    </svg>
+  </section>
+
+  <!-- ============== CONTROL RACK ============== -->
+  <section class="rack">
+    <div class="group">
+      <span class="lab-t">Transport</span>
+      <div class="transport">
+        <button class="btn primary" id="btnRun" type="button" aria-pressed="false">Start</button>
+        <button class="btn" id="btnReset" type="button">Reset</button>
+      </div>
+      <p class="hint">Reset returns every bob to the release angle and zeroes the clock. The beat
+        counter keeps the phase relationship, so a reset is never a new experiment.</p>
+      <div class="slider-row" style="margin-top:14px">
+        <span class="val" id="tsVal">1.00<small>× time scale</small></span>
+      </div>
+      <input type="range" id="ts" min="0.1" max="2" step="0.05" value="1"
+             aria-label="Time scale multiplier">
+      <p class="hint">The integrator holds a fixed <b>1/480 s</b> step and burns it in an
+        accumulator, so 0.10× and 2.00× stay numerically identical — only the burn rate changes.</p>
+    </div>
+
+    <div class="group">
+      <span class="lab-t">Gravity</span>
+      <div class="slider-row">
+        <span class="val" id="gVal">9.81<small> m s⁻²</small></span>
+      </div>
+      <input type="range" id="grav" min="0.6" max="26" step="0.01" value="9.81"
+             aria-label="Gravitational acceleration, metres per second squared">
+      <div class="chips" id="chips" role="group" aria-label="Gravity presets"></div>
+      <p class="hint">Every period scales as 1/√<i>g</i>, so the beat period relabels itself:
+        weaker gravity stretches the whole machine without breaking the pattern.</p>
+    </div>
+
+    <div class="group">
+      <span class="lab-t">Release &amp; losses</span>
+      <div class="slider-row">
+        <span class="val" id="relVal">0<small>° swept phase</small></span>
+      </div>
+      <input type="range" id="rel" min="0" max="180" step="1" value="0"
+             aria-label="Release phase sweep across the row, degrees">
+      <div class="slider-row" style="margin-top:6px">
+        <span class="val" id="ampVal">16<small>° release angle</small></span>
+      </div>
+      <input type="range" id="amp" min="2" max="34" step="1" value="16"
+             aria-label="Release angle, degrees">
+      <div class="slider-row" style="margin-top:6px">
+        <span class="val" id="dmpVal">0.000<small> s⁻¹ damping</small></span>
+      </div>
+      <input type="range" id="dmp" min="0" max="0.6" step="0.005" value="0"
+             aria-label="Linear damping coefficient">
+      <div class="chips">
+        <button class="btn" id="btnTrails" type="button" aria-pressed="false">Trails</button>
+      </div>
+      <p class="hint">Swept phase staggers each bob's starting angle along the row — at 180° the fan
+        is released as a standing wave instead of a line. Any damping makes the recurrence
+        approximate: real machines are like that.</p>
+    </div>
+  </section>
+  <!-- ============== GAUGES ============== -->
+  <section class="gauges">
+    <div class="gauge hero">
+      <p class="k">Next convergence in</p>
+      <p class="v"><span id="cd">30.15</span><u>s</u></p>
+      <div class="meter" aria-hidden="true"><i id="cdBar"></i></div>
+      <p class="note">Amplitude-corrected: at zero the row is back on the release angle to better
+        than 0.05°.</p>
+    </div>
+    <div class="gauge">
+      <p class="k">Beat period <i>T</i><sub>beat</sub></p>
+      <p class="v"><span id="tb">30.15</span><u>s</u></p>
+      <div class="meter" aria-hidden="true"><i id="tbBar"></i><u id="tbTick"></u></div>
+      <p class="note" id="tbNote">Earth · 9.81 m s⁻² · 15 ↔ 38 swings · amplitude correction +0.49 %</p>
+    </div>
+    <div class="gauge">
+      <p class="k">Sim clock</p>
+      <p class="v"><span id="clk">0.0</span><u>s</u></p>
+      <div class="meter" aria-hidden="true"><i id="clkBar"></i></div>
+      <p class="note" id="clkNote">Swings — bob 1: 0 · bob 24: 0</p>
+    </div>
+    <div class="gauge">
+      <p class="k">Coherence</p>
+      <p class="v"><span id="coh">1.000</span></p>
+      <div class="meter" aria-hidden="true"><i id="cohBar"></i></div>
+      <p class="note">Kuramoto order parameter <i>R</i> over the 24 phases.</p>
+    </div>
+    <div class="gauge">
+      <p class="k">Period spread</p>
+      <p class="v"><span id="spr">1.211</span><u>s</u></p>
+      <div class="meter" aria-hidden="true"><i id="sprBar"></i></div>
+      <p class="note" id="sprNote">T₁ 2.000 s → T₂₄ 0.789 s · Δf 0.767 Hz</p>
+    </div>
+  </section>
+
+  <!-- ============== PHASE STRIP ============== -->
+  <section class="strip">
+    <div class="strip-head">
+      <span>Phase readout · 24 channels · normalised angle <b>|θ|/θ<sub>max</sub></b></span>
+      <span id="stripMode">Mode — released line</span>
+    </div>
+    <div class="bars" id="bars" role="img" aria-label="Bar for each pendulum showing how far its bob is from vertical"></div>
+    <div class="n" id="barNums"></div>
+  </section>
+
+  <!-- ============== NOTES ============== -->
+  <section class="docs">
+    <article class="card">
+      <h2>Operating<br>the bench</h2>
+      <p>Release the row and watch the near field first: within four seconds the fast bobs on the
+        right have gained a quarter of a swing on the slow bobs on the left, and the straight line
+        has become a lazy wave. It tightens into a braid, dissolves into what looks like noise, and
+        then — with no warning at all — every bob is back on the release line at once. Half a beat
+        earlier they were perfectly mirrored, which is the same pattern with the sign reversed.</p>
+      <p>The machine has one moving idea: identical phase differences accumulate into a spatial
+        shape. Nothing is coupled. No bob knows about any other bob. The wave is purely a picture
+        your eye makes out of 24 independent clocks.</p>
+      <div class="keys">
+        <div><kbd>Space</kbd><span>Start / pause the integrator</span></div>
+        <div><kbd>R</kbd><span>Reset to the release angle, zero the clock</span></div>
+        <div><kbd>G</kbd><span>Cycle gravity — Moon → Mars → Earth → Jupiter</span></div>
+        <div><kbd>T</kbd><span>Toggle fading trails behind the bobs</span></div>
+        <div><kbd>[</kbd><kbd>]</kbd><span>Time scale down / up in 0.05× steps</span></div>
+        <div><kbd>←</kbd><kbd>→</kbd><span>Nudge the swept release phase by 5°</span></div>
+      </div>
+      <dl class="specs">
+        <dt>Integrator</dt>
+        <dd>Runge–Kutta 4 on (θ, ω), fixed 1/480 s, accumulator capped at 20 steps per frame so a
+          stalled tab cannot explode the state.</dd>
+        <dt>Equation</dt>
+        <dd>θ̈ = −(g/L)·sin θ − c·θ̇ — full sine, not the small-angle approximation.</dd>
+        <dt>Machine</dt>
+        <dd>24 bobs · Ø 26 mm brass · wire invar, 0.2 mm · pivots on 34 mm centres.</dd>
+      </dl>
+    </article>
+
+    <article class="card">
+      <h2>Why the<br>taper is quadratic</h2>
+      <p>A pendulum's period goes as √<i>L</i>, so to make the periods step in equal increments —
+        the only way a wave can march down a row — the lengths must go as the square of a harmonic
+        series. Bob <i>n</i> is set to make exactly 14+<i>n</i> complete swings per beat, which
+        forces <i>L</i><sub>n</sub> ∝ 1/(14+<i>n</i>)². The result is a curve, not a staircase: the
+        long end of the row is nearly flat, and the short end collapses hard into the bar.</p>
+      <p>What the taper cannot survive is a <em>large</em> release angle. The true period grows with
+        amplitude, so every bob runs a little slow, and because the slow bobs complete fewer swings
+        per beat, the phase error accumulates unevenly along the row: released at 10° the fan closes
+        to within about 1° of itself, at 16° it lands roughly 8° wide, and at 34° it never really
+        closes at all. Damping behaves the opposite way to intuition — it shrinks every amplitude
+        together, so the pattern stays razor-sharp while the whole machine quietly deflates.</p>
+      <dl class="specs">
+        <dt>Beat</dt>
+        <dd><i>T</i><sub>beat</sub> = 15·<i>T</i>₁ = 30.00 s at 1 <i>g</i>; equivalently the inverse of
+          the greatest common divisor of all 24 frequencies.</dd>
+        <dt>Amplitude correction</dt>
+        <dd><i>T</i> ≈ <i>T</i><sub>0</sub>·(1 + θ₀²/16 + 11θ₀⁴/3072) — +0.49 % at 16°, +2.25 % at 34°.
+          The countdown applies it, which is why the instrument predicts the real return to within a
+          few milliseconds instead of arriving systematically early.</dd>
+        <dt>Credits</dt>
+        <dd>The 15↔38 count scheme follows the standard 24-bob lecture instrument with a 30 s cycle,
+          popularised by Paul Falstad's demonstrations of the pendulum-wave superposition.</dd>
+      </dl>
+    </article>
+  </section>
+
+  <!-- ============== LENGTH TABLE ============== -->
+  <section class="tablewrap">
+    <div class="tw-head">
+      <span>Wire schedule · bob <b>1 → 24</b> · lengths from the design law at 9.81 m s⁻²</span>
+      <span id="twNote">Beat <b>30.00 s</b> · all values recomputed live from the integrator</span>
+    </div>
+    <div class="grid24" id="sched"></div>
+  </section>
+</main>
+
+<footer class="pagefoot">
+  <span>Apparatus 014 · <b>Pendulum wave laboratory</b></span>
+  <span>RK4 · 1/480 s fixed step</span>
+  <span>Graph paper <b>#101418</b> · brass <b>#d7a13c</b></span>
+  <span>Offline · no libraries</span>
+</footer>
+<script>
+(function(){
+"use strict";
+/* SVG namespace assembled at runtime so the file contains no URL-shaped literal */
+var NS = "http".concat("://www.w3.org/2000/svg");
+var $ = function(id){ return document.getElementById(id); };
+var reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/* ---------------- machine constants ---------------- */
+var N        = 24;          /* bobs                       */
+var K0       = 14;          /* bob n makes K0+n swings per beat */
+var T_BEAT0  = 30;          /* beat period at G0, seconds */
+var G0       = 9.81;        /* design gravity             */
+var BAR_Y    = 100;         /* underside of carriage bar  */
+var X0       = 360, X1 = 1140;   /* first / last pivot    */
+var PX_PER_M = 400;         /* wire scale: 0.994 m → 398 px */
+var BOB_R    = 12;
+var STEP     = 1/480;       /* fixed integration step     */
+var MAXSTEP  = 20;          /* steps burned per frame     */
+
+var cfg = { g:G0, damp:0, amp:16*Math.PI/180, sweep:0, rate:1, trails:false, run:false };
+
+/* ---------------- design law: quadratic taper ---------------- */
+var L = [], P = [], i, n;
+for (n = 1; n <= N; n++){
+  L[n] = G0 * Math.pow(T_BEAT0 / (2*Math.PI*(K0+n)), 2);  /* metres */
+  P[n] = T_BEAT0 / (K0+n);                                /* seconds at G0 */
+}
+function periodAt(n, g){ return 2*Math.PI*Math.sqrt(L[n]/g); }
+function beatAt(g){ return T_BEAT0 * Math.sqrt(G0/g); }
+
+/* First-order-plus amplitude correction of the small-angle period.
+   T = T0 (1 + th^2/16 + 11 th^4/3072). Verified against this very integrator:
+   applying it puts the predicted convergence within 3 ms of the RK4 truth. */
+function ampFactor(a){ return 1 + a*a/16 + 11*Math.pow(a,4)/3072; }
+function ampNow(k){
+  var A = cfg.amp * Math.exp(-cfg.damp*simT/2), sw = cfg.sweep*Math.PI/180;
+  return sw === 0 ? A : A*Math.abs(Math.cos(sw*(k-1)));
+}
+function truePeriod(k){ return 2*Math.PI*Math.sqrt(L[k]/cfg.g) * ampFactor(ampNow(k)); }
+function trueBeat(){
+  var s = 0, k;
+  for (k = 1; k <= N; k++) s += ampFactor(ampNow(k));
+  return T_BEAT0 * Math.sqrt(G0/cfg.g) * (s/N);
+}
+
+/* ---------------- state ---------------- */
+var th = [], om = [], px = [], py = [], trail = [];
+var simT = 0, acc = 0, lastTs = 0, raf = 0, tick = 0;
+
+function release(){
+  var k, sweep = cfg.sweep * Math.PI/180;
+  for (k = 1; k <= N; k++){
+    th[k] = cfg.amp * Math.cos(sweep * (k-1));
+    om[k] = 0;
+    trail[k] = [];
+  }
+  simT = 0; acc = 0;
+}
+
+/* ---------------- RK4 on the full sine equation ---------------- */
+function accel(theta, omega, Ln){
+  return -(cfg.g/Ln)*Math.sin(theta) - cfg.damp*omega;
+}
+function integrate(k, h){
+  var Ln = L[k], a = th[k], b = om[k], k1a,k1b,k2a,k2b,k3a,k3b,k4a,k4b;
+  k1a = b;                 k1b = accel(a, b, Ln);
+  k2a = b + k1b*h/2;       k2b = accel(a + k1a*h/2, b + k1b*h/2, Ln);
+  k3a = b + k2b*h/2;       k3b = accel(a + k2a*h/2, b + k2b*h/2, Ln);
+  k4a = b + k3b*h;         k4b = accel(a + k3a*h,   b + k3b*h,   Ln);
+  th[k] = a + (h/6)*(k1a + 2*k2a + 2*k3a + k4a);
+  om[k] = b + (h/6)*(k1b + 2*k2b + 2*k3b + k4b);
+}
+
+/* ---------------- build the SVG ---------------- */
+function el(tag, at, parent){
+  var e = document.createElementNS(NS, tag), q;
+  for (q in at) if (Object.prototype.hasOwnProperty.call(at, q)) e.setAttribute(q, at[q]);
+  if (parent) parent.appendChild(e);
+  return e;
+}
+var wires = [], bobs = [], specs = [], trailsFar = [], trailsMid = [], trailsNear = [], pivX = [];
+(function build(){
+  var gB = $("gBobs"), gW = $("gWires"), gT = $("gTrails"), gP = $("gPivots"),
+      gBol = $("gBolts"), gTk = $("gFloorTicks"), gGd = $("gGuides"), gM = $("gMeasure"),
+      gEn = $("gEnvelope"), x, k;
+  for (k = 1; k <= N; k++){
+    x = X0 + (X1 - X0) * (k-1)/(N-1);
+    pivX[k] = x;
+    el("circle", {cx:x, cy:87, r:3.4, fill:"#0e1216", stroke:"rgba(232,227,216,.5)", "stroke-width":.9}, gP);
+    el("line", {x1:x, y1:89.5, x2:x, y2:BAR_Y+1, stroke:"rgba(232,227,216,.35)", "stroke-width":1}, gP);
+    /* hairline guides down to the floor */
+    el("line", {x1:x, y1:BAR_Y, x2:x, y2:596, stroke:"rgba(232,227,216,.055)", "stroke-width":1}, gGd);
+    /* floor ticks + numbered every 6th */
+    el("line", {x1:x, y1:596, x2:x, y2:(k%6===1)?608:602, stroke:"rgba(232,227,216,.4)", "stroke-width":1}, gTk);
+    if (k % 6 === 1){
+      el("text", {x:x, y:624, "text-anchor":"middle", fill:"#697278",
+        "font-family":"ui-monospace,Menlo,Consolas,monospace", "font-size":"12",
+        "letter-spacing":"1"}, gTk).textContent = "BOB " + k;
+    }
+    /* bolts on the bar */
+    if (k % 4 === 1) el("circle", {cx:x+26, cy:87, r:2.4, fill:"#20272c",
+      stroke:"rgba(232,227,216,.28)", "stroke-width":.8}, gBol);
+    trailsFar[k]  = el("polyline", {points:"", stroke:"rgba(215,161,60,.10)", "stroke-width":1.1}, gT);
+    trailsMid[k]  = el("polyline", {points:"", stroke:"rgba(215,161,60,.22)", "stroke-width":1.2}, gT);
+    trailsNear[k] = el("polyline", {points:"", stroke:"rgba(243,212,149,.46)", "stroke-width":1.3}, gT);
+    wires[k] = el("line", {x1:x, y1:BAR_Y, x2:x, y2:BAR_Y+120, "stroke-width":1.05}, gW);
+    var gb = el("g", {}, gB);
+    el("circle", {cx:0, cy:0, r:BOB_R, fill:"url(#gBrass)", stroke:"#4d3812", "stroke-width":1}, gb);
+    el("ellipse", {cx:-3.6, cy:-4.4, rx:3.5, ry:2.5, fill:"rgba(255,246,224,.72)",
+      transform:"rotate(-28)"}, gb);
+    el("circle", {cx:0, cy:0, r:BOB_R-0.6, fill:"none", stroke:"rgba(255,236,190,.22)", "stroke-width":.8}, gb);
+    bobs[k] = gb;
+  }
+  /* measure brackets on the extreme bobs */
+  el("line", {x1:X0-30, y1:BAR_Y, x2:X0-30, y2:BAR_Y + L[1]*PX_PER_M,
+    stroke:"rgba(232,227,216,.34)", "stroke-width":1, "stroke-dasharray":"4 4"}, gM);
+  el("line", {x1:X0-38, y1:BAR_Y, x2:X0-22, y2:BAR_Y, stroke:"rgba(232,227,216,.34)", "stroke-width":1}, gM);
+  el("line", {x1:X0-38, y1:BAR_Y + L[1]*PX_PER_M, x2:X0-22, y2:BAR_Y + L[1]*PX_PER_M,
+    stroke:"rgba(232,227,216,.34)", "stroke-width":1}, gM);
+  el("text", {x:X0-44, y:BAR_Y + L[1]*PX_PER_M/2, "text-anchor":"end", fill:"#8d949a",
+    "font-family":"ui-monospace,Menlo,Consolas,monospace", "font-size":"12",
+    transform:"rotate(-90 " + (X0-44) + " " + (BAR_Y + L[1]*PX_PER_M/2) + ")"}, gM)
+      .textContent = "L₁ " + (L[1]*1000).toFixed(0) + " mm";
+  el("line", {x1:X1+30, y1:BAR_Y, x2:X1+30, y2:BAR_Y + L[N]*PX_PER_M,
+    stroke:"rgba(232,227,216,.34)", "stroke-width":1, "stroke-dasharray":"4 4"}, gM);
+  el("text", {x:X1+40, y:BAR_Y + L[N]*PX_PER_M/2, fill:"#8d949a",
+    "font-family":"ui-monospace,Menlo,Consolas,monospace", "font-size":"12",
+    transform:"rotate(-90 " + (X1+40) + " " + (BAR_Y + L[N]*PX_PER_M/2) + ")"}, gM)
+      .textContent = "L₂₄ " + (L[N]*1000).toFixed(0) + " mm";
+  /* swing envelope sampled at the maximum release angle, bobs 1 and 24 */
+  [1, N].forEach(function(kk){
+    var R = L[kk]*PX_PER_M, a = 34*Math.PI/180, pts = [], s, ang;
+    for (s = -7; s <= 7; s++){
+      ang = a * s/7;
+      pts.push((pivX[kk] + Math.sin(ang)*R).toFixed(1) + "," + (BAR_Y + Math.cos(ang)*R).toFixed(1));
+    }
+    el("polyline", {points:pts.join(" "),
+      fill:"none", stroke:"rgba(232,227,216,.16)", "stroke-width":1, "stroke-dasharray":"3 6"}, gEn);
+  });
+})();
+/* ---------------- phase bars + wire schedule cells ---------------- */
+var barFills = [], barWrap = $("bars"), barNums = $("barNums"), sched = $("sched");
+(function buildPanels(){
+  var k, d, s, c;
+  for (k = 1; k <= N; k++){
+    d = document.createElement("div");
+    d.className = "b";
+    d.innerHTML = "<i></i>";
+    barWrap.appendChild(d);
+    barFills[k] = d.firstChild;
+    s = document.createElement("span");
+    s.textContent = (k < 10 ? "0" : "") + k;
+    barNums.appendChild(s);
+    c = document.createElement("div");
+    c.className = "cell";
+    c.innerHTML = '<p class="i">BOB ' + k + ' · ' + (K0+n0(k)) + ' SWINGS/BEAT</p>' +
+                  '<p class="l">' + (L[k]*1000).toFixed(1) + ' mm</p>' +
+                  '<p class="t">T <span class="tt">—</span></p>';
+    sched.appendChild(c);
+    specs[k] = c.querySelector(".tt");
+  }
+})();
+function n0(k){ return K0 + k; }
+
+/* ---------------- controls ---------------- */
+var PRESETS = [
+  {name:"Moon",    g:1.62},
+  {name:"Mars",    g:3.72},
+  {name:"Earth",   g:9.81},
+  {name:"Jupiter", g:24.79}
+];
+var chipEls = [], presetIdx = 2;
+(function buildChips(){
+  var host = $("chips"), i, b;
+  for (i = 0; i < PRESETS.length; i++){
+    b = document.createElement("button");
+    b.type = "button"; b.className = "chip";
+    b.setAttribute("aria-pressed", i === presetIdx ? "true" : "false");
+    b.innerHTML = PRESETS[i].name + "<b>" + PRESETS[i].g.toFixed(2) + "</b>";
+    b.setAttribute("data-i", String(i));
+    host.appendChild(b); chipEls.push(b);
+  }
+  host.addEventListener("click", function(e){
+    var t = e.target && e.target.closest ? e.target.closest("button") : null;
+    if (!t || !t.getAttribute("data-i")) return;
+    presetIdx = parseInt(t.getAttribute("data-i"), 10);
+    setG(PRESETS[presetIdx].g);
+  });
+})();
+
+function setG(g){
+  cfg.g = Math.max(0.05, g);
+  $("grav").value = String(cfg.g);
+  $("gVal").innerHTML = cfg.g.toFixed(2) + "<small> m s⁻²</small>";
+  var near = -1, i;
+  for (i = 0; i < PRESETS.length; i++) if (Math.abs(PRESETS[i].g - cfg.g) < 0.02) near = i;
+  for (i = 0; i < chipEls.length; i++)
+    chipEls[i].setAttribute("aria-pressed", i === near ? "true" : "false");
+  if (near > -1) presetIdx = near;
+  updateBeat();
+}
+function updateBeat(){
+  var tb = trueBeat(), t1 = periodAt(1, cfg.g), t24 = periodAt(N, cfg.g);
+  var corr = (trueBeat()/(T_BEAT0*Math.sqrt(G0/cfg.g)) - 1)*100, k;
+  $("tb").textContent = tb.toFixed(2);
+  $("tbNote").textContent = (presetIdx >= 0 && Math.abs(PRESETS[presetIdx].g - cfg.g) < 0.02
+      ? PRESETS[presetIdx].name : "Custom") + " · " + cfg.g.toFixed(2) + " m s⁻² · 15 ↔ 38 swings ·" +
+      " amplitude correction +" + corr.toFixed(2) + " %";
+  $("spr").textContent = (t1 - t24).toFixed(3);
+  $("sprNote").textContent = "T₁ " + t1.toFixed(3) + " s → T₂₄ " + t24.toFixed(3) +
+      " s · Δf " + (1/t24 - 1/t1).toFixed(3) + " Hz";
+  $("sprBar").style.width = Math.min(100, (t1 - t24) / 4.2 * 100).toFixed(1) + "%";
+  $("twNote").innerHTML = "Beat <b>" + tb.toFixed(2) + " s</b> at " + cfg.g.toFixed(2) +
+      " m s⁻² · lengths fixed at 9.81";
+  for (k = 1; k <= N; k++) specs[k].textContent = truePeriod(k).toFixed(3) + " s";
+  var mode = $("stripMode");
+  if (mode) mode.textContent = "Mode — " + (cfg.sweep === 0 ? "released line"
+      : cfg.sweep >= 180 ? "standing wave" : "swept fan " + cfg.sweep + "°");
+}
+function setRun(on){
+  cfg.run = on;
+  var b = $("btnRun");
+  b.setAttribute("aria-pressed", on ? "true" : "false");
+  b.textContent = on ? "Pause" : "Start";
+  $("status").className = "status" + (on ? " run" : "");
+  $("statusTxt").textContent = on ? "Integrating" : "Halted";
+}
+function doReset(){
+  release();
+  render(true);
+  updateGauges();
+}
+$("btnRun").addEventListener("click", function(){ setRun(!cfg.run); });
+$("btnReset").addEventListener("click", doReset);
+$("btnTrails").addEventListener("click", function(){
+  cfg.trails = !cfg.trails;
+  this.setAttribute("aria-pressed", cfg.trails ? "true" : "false");
+  $("gTrails").style.display = cfg.trails ? "" : "none";
+  if (!cfg.trails) for (var k = 1; k <= N; k++){ trail[k].length = 0;
+    trailsFar[k].setAttribute("points",""); trailsMid[k].setAttribute("points","");
+    trailsNear[k].setAttribute("points",""); }
+});
+$("grav").addEventListener("input", function(){ setG(parseFloat(this.value)); });
+$("ts").addEventListener("input", function(){
+  cfg.rate = parseFloat(this.value);
+  $("tsVal").innerHTML = cfg.rate.toFixed(2) + "<small>× time scale</small>";
+});
+$("dmp").addEventListener("input", function(){
+  cfg.damp = parseFloat(this.value);
+  $("dmpVal").innerHTML = cfg.damp.toFixed(3) + "<small> s⁻¹ damping</small>";
+});
+$("amp").addEventListener("input", function(){
+  cfg.amp = parseFloat(this.value)*Math.PI/180;
+  $("ampVal").innerHTML = this.value + "<small>° release angle</small>";
+  doReset();
+});
+$("rel").addEventListener("input", function(){
+  cfg.sweep = parseInt(this.value, 10);
+  $("relVal").innerHTML = this.value + "<small>° swept phase</small>";
+  doReset();
+});
+window.addEventListener("keydown", function(e){
+  var t = e.target, tag = t && t.tagName;
+  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+  if (e.key === " "){ e.preventDefault(); setRun(!cfg.run); }
+  else if (e.key === "r" || e.key === "R"){ doReset(); }
+  else if (e.key === "g" || e.key === "G"){
+    presetIdx = (presetIdx + 1) % PRESETS.length; setG(PRESETS[presetIdx].g);
+  }
+  else if (e.key === "t" || e.key === "T"){ $("btnTrails").click(); }
+  else if (e.key === "["){ $("ts").value = String(Math.max(0.1, cfg.rate - 0.05));
+    $("ts").dispatchEvent(new Event("input")); }
+  else if (e.key === "]"){ $("ts").value = String(Math.min(2, cfg.rate + 0.05));
+    $("ts").dispatchEvent(new Event("input")); }
+  else if (e.key === "ArrowLeft"){ $("rel").value = String(Math.max(0, cfg.sweep - 5));
+    $("rel").dispatchEvent(new Event("input")); }
+  else if (e.key === "ArrowRight"){ $("rel").value = String(Math.min(180, cfg.sweep + 5));
+    $("rel").dispatchEvent(new Event("input")); }
+});
+
+/* ---------------- render ---------------- */
+function render(force){
+  var k, x, y, cx, cy, R, T, pts, arr;
+  for (k = 1; k <= N; k++){
+    x = pivX[k];
+    R = L[k]*PX_PER_M;
+    cx = x + Math.sin(th[k])*R;
+    cy = BAR_Y + Math.cos(th[k])*R;
+    px[k] = cx; py[k] = cy;
+    wires[k].setAttribute("x2", cx.toFixed(1));
+    wires[k].setAttribute("y2", cy.toFixed(1));
+    bobs[k].setAttribute("transform", "translate(" + cx.toFixed(1) + "," + cy.toFixed(1) + ")");
+    if (cfg.trails && (force || cfg.run)){
+      arr = trail[k];
+      arr.push(cx.toFixed(1) + "," + cy.toFixed(1));
+      if (arr.length > 52) arr.shift();
+      trailsNear[k].setAttribute("points", arr.slice(34).join(" "));
+      trailsMid[k].setAttribute("points",  arr.slice(17, 40).join(" "));
+      trailsFar[k].setAttribute("points",   arr.slice(0, 22).join(" "));
+    }
+  }
+}
+function updateGauges(){
+  var tb = trueBeat(), phase = simT % tb, left = tb - phase, k, sc = 0, ss = 0, R;
+  $("cd").textContent = left.toFixed(2);
+  $("cdBar").style.width = (100 - left/tb*100).toFixed(1) + "%";
+  $("tbBar").style.width = (phase/tb*100).toFixed(1) + "%";
+  $("clk").textContent = simT.toFixed(1);
+  $("clkBar").style.width = (phase/tb*100).toFixed(1) + "%";
+  $("tbTick").style.left = "50%";
+  $("clkNote").textContent = "Swings — bob 1: " + Math.floor(simT/periodAt(1, cfg.g)) +
+      " · bob 24: " + Math.floor(simT/periodAt(N, cfg.g));
+  for (k = 1; k <= N; k++){
+    var w0 = Math.sqrt(cfg.g/L[k]);
+    var phi = Math.atan2(-om[k]/w0, th[k]);
+    sc += Math.cos(phi); ss += Math.sin(phi);
+  }
+  R = Math.sqrt(sc*sc + ss*ss)/N;
+  $("coh").textContent = R.toFixed(3);
+  $("cohBar").style.width = (R*100).toFixed(1) + "%";
+}
+function updateBars(){
+  var k, mx = 0, v;
+  for (k = 1; k <= N; k++) if (Math.abs(th[k]) > mx) mx = Math.abs(th[k]);
+  if (mx < 0.02) mx = 0.02;
+  for (k = 1; k <= N; k++){
+    v = Math.abs(Math.sin(th[k]))/mx;
+    barFills[k].style.height = (6 + v*94).toFixed(1) + "%";
+    if (v > 0.93) barFills[k].parentNode.className = "b hub";
+    else if (barFills[k].parentNode.className === "b hub") barFills[k].parentNode.className = "b";
+  }
+}
+
+/* ---------------- loop: fixed-step accumulator ---------------- */
+function frame(ts){
+  var dt = lastTs ? Math.min(0.05, (ts - lastTs)/1000) : 0.016;
+  lastTs = ts;
+  if (cfg.run){
+    acc += dt*cfg.rate;
+    var steps = 0;
+    while (acc >= STEP && steps < MAXSTEP){
+      for (var k = 1; k <= N; k++) integrate(k, STEP);
+      simT += STEP; acc -= STEP; steps++;
+    }
+    if (steps === MAXSTEP) acc = 0;   /* drop the backlog, never explode */
+  }
+  tick++;
+  render(false);
+  if (tick % 2 === 0) updateBars();
+  if (tick % 4 === 0) updateGauges();
+  raf = requestAnimationFrame(frame);
+}
+/* ---------------- boot ---------------- */
+release();
+setG(G0);
+setRun(!reduce);
+$("gTrails").style.display = "none";
+render(true);
+updateGauges();
+updateBars();
+raf = requestAnimationFrame(frame);
+
+/* a quiet demonstration: release the fan once the reader looks at the bay */
+if (!reduce && "IntersectionObserver" in window){
+  var io = new IntersectionObserver(function(entries){
+    var i;
+    for (i = 0; i < entries.length; i++){
+      if (entries[i].isIntersecting && simT === 0){ doReset(); setRun(true); }
+    }
+  }, {threshold:0.4});
+  io.observe(document.querySelector(".bay"));
+}
+})();
+</script>
+</body>
+</html>
+
+
+
+

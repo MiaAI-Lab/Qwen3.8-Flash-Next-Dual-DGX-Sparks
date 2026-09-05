@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<meta name="description" content="Maison Nocturne N-14 — a single watch, presented impeccably. Calibre N-14, 72-hour reserve, hand-guilloché dial, blued steel hands.">
+<title>Nocturne N-14 — Maison Nocturne, Genève</title>
+<style>
+/* ============================================================
+   NOCTURNE N-14 — tokens
+   ============================================================ */
+:root{
+  --ink:#0b0b0c;
+  --ink-2:#101012;
+  --ink-3:#161618;
+  --paper:#f5f2ec;
+  --paper-dim:rgba(245,242,236,.62);
+  --paper-faint:rgba(245,242,236,.38);
+  --champagne:#c9a97a;
+  --champagne-lo:rgba(201,169,122,.44);
+  --hairline:rgba(201,169,122,.16);
+  --hairline-strong:rgba(201,169,122,.34);
+  --blued:#3a5bbf;
+  --blued-hi:#7d9aee;
+  --steel-hi:#e8e9ee;
+  --steel:#9aa0ab;
+  --steel-lo:#3d4148;
+  --serif:"Didot","Bodoni MT","Hoefler Text",Baskerville,Georgia,"Times New Roman",serif;
+  --sans:"Avenir Next",Futura,"Century Gothic","Helvetica Neue","Segoe UI",system-ui,sans-serif;
+  --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,"Liberation Mono","Courier New",monospace;
+  --ease:cubic-bezier(.22,.61,.36,1);
+  --ease-slow:cubic-bezier(.33,.1,.2,1);
+}
+
+/* ============================================================ base */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
+body{
+  background:var(--ink);
+  color:var(--paper);
+  font-family:var(--sans);
+  font-weight:400;
+  line-height:1.7;
+  letter-spacing:.01em;
+  overflow-x:hidden;
+  text-rendering:optimizeLegibility;
+  -webkit-font-smoothing:antialiased;
+}
+::selection{background:rgba(201,169,122,.28);color:var(--paper)}
+a{color:inherit}
+:focus-visible{outline:1px solid var(--champagne);outline-offset:4px}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+
+/* ============================================================ loader */
+#loader{
+  position:fixed;inset:0;z-index:80;background:var(--ink);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;
+  transition:opacity .9s var(--ease),visibility .9s;
+}
+#loader.gone{opacity:0;visibility:hidden;pointer-events:none}
+#loader .lmark{font-family:var(--serif);font-size:clamp(30px,5vw,44px);letter-spacing:.34em;text-indent:.34em;color:var(--paper)}
+#loader .lsub{font-size:10px;letter-spacing:.44em;text-transform:uppercase;color:var(--paper-faint);text-indent:.44em}
+#loader .lbar{width:min(220px,46vw);height:1px;background:var(--hairline);position:relative;overflow:hidden}
+#loader .lbar i{position:absolute;left:0;top:0;bottom:0;width:34%;background:var(--champagne);animation:lslide 1.25s var(--ease-slow) infinite}
+@keyframes lslide{0%{transform:translateX(-110%)}100%{transform:translateX(330%)}}
+
+/* ============================================================ scroll progress */
+#progress{position:fixed;top:0;left:0;right:0;height:1px;z-index:60;background:rgba(201,169,122,.1)}
+#progress i{display:block;height:100%;width:100%;background:linear-gradient(90deg,var(--champagne),rgba(201,169,122,.25));transform:scaleX(0);transform-origin:0 50%}
+
+/* ============================================================ top bar */
+.top{
+  position:fixed;top:0;left:0;right:0;z-index:50;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:20px clamp(18px,3.4vw,44px);
+  background:linear-gradient(to bottom,rgba(11,11,12,.9),rgba(11,11,12,0));
+  pointer-events:none;
+}
+.top a{pointer-events:auto;text-decoration:none}
+.brand{font-family:var(--serif);letter-spacing:.42em;font-size:14px;text-indent:.42em;color:var(--paper);text-transform:uppercase}
+.brand em{font-style:normal;color:var(--champagne)}
+.top .tref{font-family:var(--mono);font-size:10px;letter-spacing:.3em;color:var(--paper-faint);text-transform:uppercase}
+.top .tref b{font-weight:500;color:var(--champagne)}
+@media (max-width:640px){.top .tref{display:none}}
+
+/* ============================================================ fixed spec rail */
+.specrail{
+  position:fixed;top:0;right:0;bottom:0;width:196px;z-index:40;
+  border-left:1px solid var(--hairline);
+  padding:96px 26px 40px;
+  display:flex;flex-direction:column;gap:0;
+  font-size:9.5px;letter-spacing:.26em;text-transform:uppercase;
+  color:var(--paper-faint);
+  pointer-events:none;
+}
+.specrail dl{display:contents}
+.specrow{display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:9px 0;border-bottom:1px solid rgba(201,169,122,.09)}
+.specrow dt{flex:1 1 auto;font-weight:400}
+.specrow dd{font-family:var(--mono);font-size:10px;letter-spacing:.08em;color:var(--champagne);font-variant-numeric:tabular-nums;text-align:right}
+.specrail .railfoot{margin-top:auto;font-size:8.5px;letter-spacing:.3em;color:rgba(245,242,236,.22);line-height:2}
+@media (max-width:1279px){.specrail{display:none}}
+body.rail-on main,body.rail-on footer{margin-right:196px}
+@media (max-width:1279px){body.rail-on main,body.rail-on footer{margin-right:0}}
+
+/* ============================================================ hero / sticky stage */
+main{display:block}
+#watch{position:relative;display:grid;grid-template-columns:minmax(0,1.08fr) minmax(340px,.92fr);min-height:100vh}
+.stagewrap{position:sticky;top:0;height:100vh;display:grid;place-items:center;overflow:visible}
+.stage{
+  position:relative;
+  width:min(44vw,600px);height:min(78vh,600px);
+  min-width:280px;
+  display:flex;align-items:center;justify-content:center;
+  perspective:1700px;perspective-origin:50% 46%;
+  overflow:visible;
+}
+.watch-caption{
+  position:absolute;left:50%;bottom:2%;transform:translateX(-50%);
+  font-family:var(--mono);font-size:9.5px;letter-spacing:.34em;text-transform:uppercase;
+  color:rgba(245,242,236,.30);white-space:nowrap;
+}
+.watch-caption b{font-weight:400;color:var(--champagne)}
+@media (max-width:700px){
+  .watch-caption{
+    width:min(84vw,340px);white-space:normal;line-height:1.9;
+    font-size:8px;letter-spacing:.2em;text-align:center;
+  }
+}
+.scrollcue{
+  position:absolute;left:50%;bottom:calc(2% + 26px);transform:translateX(-50%);
+  font-size:9px;letter-spacing:.42em;text-indent:.42em;text-transform:uppercase;color:rgba(245,242,236,.34);
+  display:flex;flex-direction:column;align-items:center;gap:10px;
+  transition:opacity .6s var(--ease);
+}
+.scrollcue i{display:block;width:1px;height:44px;background:linear-gradient(to bottom,var(--champagne-lo),transparent);animation:cue 2.4s var(--ease-slow) infinite}
+@keyframes cue{0%{transform:scaleY(.2);opacity:.2;transform-origin:top}45%{transform:scaleY(1);opacity:1;transform-origin:top}55%{transform:scaleY(1);opacity:0;transform-origin:bottom}100%{transform:scaleY(.2);opacity:0;transform-origin:bottom}}
+.scrollcue.hide{opacity:0}
+@media (max-height:560px){.scrollcue,.watch-caption{display:none}}
+
+/* ============================================================ right rail copy */
+.rail-copy{padding:clamp(84px,13vh,150px) clamp(22px,3.6vw,64px) 12vh clamp(22px,3vw,48px);position:relative;z-index:5}
+.eyebrow{font-size:10px;letter-spacing:.5em;text-indent:.5em;text-transform:uppercase;color:var(--champagne);margin-bottom:26px}
+h1{
+  font-family:var(--serif);font-weight:400;
+  font-size:clamp(56px,8.4vw,116px);
+  line-height:.94;letter-spacing:.015em;margin-bottom:6px;
+}
+h1 .thin{color:var(--paper-faint)}
+.subline{font-family:var(--serif);font-size:clamp(17px,1.9vw,23px);font-style:italic;color:var(--champagne);letter-spacing:.05em;margin:14px 0 34px}
+.lede{max-width:38ch;color:var(--paper-dim);font-size:15.5px;margin-bottom:18px}
+.lede strong{font-weight:500;color:var(--paper)}
+.hairrule{height:1px;background:linear-gradient(90deg,var(--hairline-strong),transparent);margin:44px 0}
+.phase{padding:13vh 0;max-width:40ch}
+.phase .pno{font-family:var(--mono);font-size:10px;letter-spacing:.34em;color:var(--champagne-lo);display:block;margin-bottom:18px}
+.phase h2{font-family:var(--serif);font-weight:400;font-size:clamp(26px,3.1vw,40px);letter-spacing:.02em;margin-bottom:18px;color:var(--paper)}
+.phase p{color:var(--paper-dim);font-size:15px;margin-bottom:14px}
+.phase p em{font-style:italic;font-family:var(--serif);color:var(--champagne)}
+.phase .fine{font-family:var(--mono);font-size:10.5px;line-height:2.1;letter-spacing:.12em;color:var(--paper-faint);text-transform:uppercase;margin-top:20px}
+.mvmt-toggle{
+  appearance:none;background:none;border:1px solid var(--champagne-lo);color:var(--champagne);
+  font-family:var(--sans);font-size:10.5px;letter-spacing:.32em;text-transform:uppercase;text-indent:.32em;
+  padding:13px 24px;cursor:pointer;margin-top:22px;
+  transition:background .45s var(--ease),color .45s var(--ease),border-color .45s var(--ease);
+}
+.mvmt-toggle:hover,.mvmt-toggle[aria-pressed="true"]{background:var(--champagne);color:var(--ink);border-color:var(--champagne)}
+@media (max-width:949px){.mvmt-toggle{display:none}}
+
+/* ============================================================
+   THE WATCH — 500x500 design space, layers scale with --u
+   ============================================================ */
+.watch{
+  --u:min(calc(min(78vh,44vw,600px) / 500),1px);
+  position:relative;width:calc(500px * var(--u));height:calc(500px * var(--u));
+  transform-style:preserve-3d;
+  transform:rotateX(var(--rx,0deg)) rotateY(var(--ry,0deg)) scale(var(--wz,1));
+  will-change:transform;
+  cursor:crosshair;
+}
+.layer{
+  position:absolute;left:50%;top:50%;
+  transform:translate(-50%,-50%)
+    translateX(var(--ox,0px))
+    translateY(calc(var(--dy,0px) * var(--f,0)))
+    translateZ(calc(var(--dz,0px) * var(--f,0)));
+  will-change:transform;
+}
+
+/* ---- case: brushed steel, anisotropic streaks ---- */
+.case-plate{
+  width:calc(478px * var(--u));height:calc(478px * var(--u));border-radius:50%;
+  background:
+    repeating-conic-gradient(from 0deg at 50% 50%,
+      rgba(255,255,255,.055) 0deg 1.1deg, rgba(0,0,0,.07) 2.2deg 2.6deg, rgba(255,255,255,.02) 3.1deg 4.4deg, rgba(0,0,0,.03) 4.9deg 6deg),
+    conic-gradient(from 210deg at 50% 50%,
+      #f4f5f8 0deg,#a7adb8 34deg,#565b64 78deg,#c9cdd6 128deg,#eef0f4 168deg,
+      #8d939e 210deg,#484c54 256deg,#b9bec8 305deg,#eceef2 340deg,#f4f5f8 360deg);
+  box-shadow:
+    0 calc(40px * var(--u)) calc(80px * var(--u)) rgba(0,0,0,.62),
+    0 calc(6px * var(--u)) calc(18px * var(--u)) rgba(0,0,0,.5),
+    inset 0 0 calc(2px * var(--u)) rgba(255,255,255,.5);
+  --dy:-16px;--dz:20px;
+}
+.case-plate::after{ /* vertical hairline brush modulation */
+  content:"";position:absolute;inset:0;border-radius:50%;
+  background:repeating-linear-gradient(96deg,rgba(255,255,255,.034) 0 1px,rgba(0,0,0,.04) 1px 3px);
+  mix-blend-mode:overlay;
+}
+.bezel{
+  width:calc(444px * var(--u));height:calc(444px * var(--u));border-radius:50%;
+  background:
+    repeating-conic-gradient(from .4deg at 50% 50%,rgba(255,255,255,.07) 0deg .9deg,rgba(0,0,0,.08) 1.8deg 2.2deg,rgba(255,255,255,.015) 2.7deg 3.8deg),
+    conic-gradient(from 30deg at 50% 50%,#dfe2e8 0deg,#878d98 60deg,#f2f3f6 120deg,#6c7078 190deg,#cfd3da 250deg,#575c64 300deg,#e8eaef 340deg,#dfe2e8 360deg);
+  box-shadow:inset 0 0 calc(10px * var(--u)) rgba(0,0,0,.55);
+  --dy:-16px;--dz:26px;
+}
+.bezel::after{content:"";position:absolute;inset:calc(20px * var(--u));border-radius:50%;box-shadow:inset 0 calc(1.5px * var(--u)) 0 rgba(255,255,255,.65),inset 0 calc(-1px * var(--u)) 0 rgba(0,0,0,.5)}
+.midring{ /* brushed mid case edge visible when exploded */
+  width:calc(462px * var(--u));height:calc(462px * var(--u));border-radius:50%;
+  background:conic-gradient(from 150deg,#3c4046,#8a909b 90deg,#2c2f34 200deg,#6f747d 300deg,#3c4046 360deg);
+  box-shadow:inset 0 0 calc(16px * var(--u)) rgba(0,0,0,.8);
+  --dy:-8px;--dz:12px;
+}
+.crown{
+  width:calc(26px * var(--u));height:calc(52px * var(--u));
+  left:calc(100% - 12px * var(--u));top:50%;
+  transform:translate(0,-50%) translateY(calc(var(--dy,0px) * var(--f,0))) translateZ(calc(var(--dz,0px) * var(--f,0)));
+  border-radius:calc(5px * var(--u));
+  background:
+    repeating-linear-gradient(0deg,#e6e8ec 0 calc(2px*var(--u)),#5b6068 calc(2px*var(--u)) calc(4.5px*var(--u)),#9aa0aa calc(4.5px*var(--u)) calc(6px*var(--u))),
+    linear-gradient(90deg,#cfd3da,#787d86);
+  box-shadow:0 calc(4px * var(--u)) calc(10px * var(--u)) rgba(0,0,0,.6);
+  --dy:-16px;--dz:20px;
+}
+.crown::after{content:"";position:absolute;left:calc(26px * var(--u));top:50%;transform:translateY(-50%);width:calc(9px * var(--u));height:calc(22px * var(--u));border-radius:calc(4px*var(--u));background:linear-gradient(90deg,#b9bec7,#6a6f78)}
+
+/* ---- dial: guilloche over warm lacquer ---- */
+.dial{
+  width:calc(392px * var(--u));height:calc(392px * var(--u));border-radius:50%;
+  background:
+    repeating-radial-gradient(circle at 50% 50%,rgba(20,17,12,.30) 0 calc(.7px + .3px*var(--u)),rgba(255,252,245,.30) calc(1.4px + .3px*var(--u)) calc(2.1px + .6px*var(--u)),rgba(20,17,12,.16) calc(2.8px + .6px*var(--u)) calc(3.5px + var(--u))),
+    repeating-radial-gradient(circle at 23% 30%,rgba(30,25,18,.10) 0 calc(2px + 1px*var(--u)),rgba(255,255,255,.07) calc(3px + 1px*var(--u)) calc(5px + 1.5px*var(--u))),
+    radial-gradient(circle at 38% 30%,#f7f3ea 0%,#eee7d8 42%,#d9cfba 74%,#b3a68b 100%);
+  box-shadow:inset 0 0 calc(34px * var(--u)) rgba(74,60,38,.35),inset 0 calc(1px * var(--u)) 0 rgba(255,255,255,.7);
+  --dy:0px;--dz:0px;
+}
+.dial::after{ /* engine-turned ray moire */
+  content:"";position:absolute;inset:0;border-radius:50%;
+  background:repeating-conic-gradient(from 0deg at 50% 50%,rgba(90,74,48,.05) 0deg .7deg,rgba(255,250,240,.06) .7deg 1.6deg);
+  mask:radial-gradient(circle at 50% 50%,#000 55%,transparent 78%);
+  -webkit-mask:radial-gradient(circle at 50% 50%,#000 55%,transparent 78%);
+}
+
+/* ---- printed minute track ---- */
+.mtrack{position:absolute;inset:0;--dy:0px;--dz:1px}
+.mticks{position:absolute;inset:calc(9px * var(--u));border-radius:50%;
+  background:repeating-conic-gradient(from 0deg at 50% 50%,#23201a 0deg .6deg,transparent .6deg 6deg);
+  mask:radial-gradient(circle closest-side at 50% 50%,transparent 0 91.4%,#000 91.6% 94%,transparent 94.2%);
+  -webkit-mask:radial-gradient(circle closest-side at 50% 50%,transparent 0 91.4%,#000 91.6% 94%,transparent 94.2%);
+}
+.mticks5{position:absolute;inset:calc(4px * var(--u));border-radius:50%;
+  background:repeating-conic-gradient(from 0deg at 50% 50%,#1d1a14 0deg 1.1deg,transparent 1.1deg 30deg);
+  mask:radial-gradient(circle at 50% 50%,transparent 0 88.6%,#000 88.8% 95.4%,transparent 95.6%);
+  -webkit-mask:radial-gradient(circle at 50% 50%,transparent 0 88.6%,#000 88.8% 95.4%,transparent 95.6%);
+}
+.rtrack{position:absolute;inset:calc(20px * var(--u));border-radius:50%;
+  background:repeating-conic-gradient(from 0deg at 50% 50%,rgba(176,42,40,.85) 0deg .5deg,transparent .5deg 6deg);
+  mask:radial-gradient(circle at 50% 50%,transparent 0 90%,#000 90.4% 96%,transparent 96.4%);
+  -webkit-mask:radial-gradient(circle at 50% 50%,transparent 0 90%,#000 90.4% 96%,transparent 96.4%);
+}
+.trackline{position:absolute;inset:calc(26px * var(--u));border-radius:50%;box-shadow:inset 0 0 0 calc(1px + .3px*var(--u)) rgba(32,28,20,.8)}
+.trackline::after{content:"";position:absolute;inset:calc(10px * var(--u));border-radius:50%;box-shadow:inset 0 0 0 calc(1px + .2px*var(--u)) rgba(32,28,20,.55)}
+
+/* ---- printed dial text ---- */
+.dtext{position:absolute;left:50%;top:50%;font-family:var(--serif);color:#241f16;letter-spacing:calc(1.6px*var(--u));white-space:nowrap;transform:translate(-50%,-50%) translateY(calc(var(--oy,0px) + var(--dy,0px) * var(--f,0))) translateZ(calc(var(--dz,1.2px) * var(--f,0)))}
+.dtext small{display:block;text-align:center;font-family:var(--sans);font-size:calc(7.5px * var(--u));letter-spacing:calc(2.6px * var(--u));color:#4a4234;margin-top:calc(2px * var(--u));text-transform:uppercase}
+.dt-brand{--oy:calc(-96px * var(--u));font-size:calc(16.5px * var(--u));font-weight:600}
+.dt-auto{--oy:calc(-62px * var(--u));font-family:var(--sans);font-size:calc(7px * var(--u));letter-spacing:calc(2.4px * var(--u));color:#4a4234;text-transform:uppercase}
+.dt-swiss{--oy:calc(128px * var(--u));font-family:var(--sans);font-size:calc(6.4px * var(--u));letter-spacing:calc(2.8px * var(--u));color:#4a4234}
+.dt-line{width:calc(70px * var(--u));height:calc(1px * var(--u));background:rgba(36,31,22,.55);--oy:calc(-79px * var(--u))}
+
+/* ---- applied baton indices ---- */
+.idx{position:absolute;inset:0;--dy:0px;--dz:2px}
+.baton{
+  position:absolute;left:50%;top:50%;
+  width:calc(7px * var(--u));height:calc(40px * var(--u));
+  margin:calc(-20px * var(--u)) 0 0 calc(-3.5px * var(--u));
+  border-radius:calc(1.4px * var(--u));
+  background:
+    linear-gradient(90deg,#f7edd8 0%,#e7d3a8 26%,#a8875a 52%,#efe0bd 74%,#cdb182 100%);
+  box-shadow:0 calc(2.4px * var(--u)) calc(4px * var(--u)) rgba(46,36,18,.5),inset 0 0 calc(1px*var(--u)) rgba(255,255,255,.5);
+  transform:rotate(var(--a,0deg)) translateY(calc(-138px * var(--u)));
+}
+.baton.tw{box-shadow:0 calc(2.4px * var(--u)) calc(4px * var(--u)) rgba(46,36,18,.5),inset 0 0 calc(1px*var(--u)) rgba(255,255,255,.5),calc(9.5px * var(--u)) 0 0 -1px #0b0b0c,calc(9.5px * var(--u)) 0 calc(2px * var(--u)) rgba(46,36,18,.45),calc(13px * var(--u)) 0 0 -2.5px #efe0bd}
+.baton::after{content:"";position:absolute;left:34%;right:34%;top:8%;bottom:8%;background:linear-gradient(90deg,rgba(255,255,255,.85),rgba(255,255,255,.15));border-radius:calc(1px*var(--u))}
+
+/* ---- date window at 3 ---- */
+.dwindow{
+  width:calc(38px * var(--u));height:calc(26px * var(--u));
+  --dy:0px;--dz:2.2px;
+  border-radius:calc(2px * var(--u));
+  background:linear-gradient(180deg,#f8f6f0,#e9e4d8);
+  box-shadow:inset 0 0 calc(3px * var(--u)) rgba(70,58,34,.4),0 0 0 calc(1.6px * var(--u)) #d9c491,0 calc(2px * var(--u)) calc(5px * var(--u)) rgba(46,36,18,.4);
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--mono);font-weight:600;
+  font-size:calc(16px * var(--u));color:#211c12;font-variant-numeric:tabular-nums;
+  letter-spacing:calc(1px * var(--u));
+}
+
+/* ---- hands: blued steel ---- */
+.hands{position:absolute;inset:0;pointer-events:none;
+  transform:translateY(calc(var(--dy,0px) * var(--f,0))) translateZ(calc(var(--dz,0px) * var(--f,0)));
+  --dy:-4px;--dz:8px}
+.h{position:absolute;inset:0;transform:rotate(var(--r,0deg));will-change:transform}
+.h b{position:absolute;left:50%;bottom:50%;transform:translateX(-50%);transform-origin:bottom center;border-radius:calc(3px * var(--u)) calc(3px * var(--u)) calc(1.5px * var(--u)) calc(1.5px * var(--u));
+  background:linear-gradient(90deg,#101f5c 0%,#2c4bb0 30%,#89a4f2 50%,#2c4bb0 70%,#101f5c 100%);
+  box-shadow:0 calc(3px * var(--u)) calc(6px * var(--u)) rgba(6,10,34,.55);}
+.h i{position:absolute;left:50%;top:50%;transform:translateX(-50%);border-radius:calc(2px * var(--u));
+  background:linear-gradient(90deg,#16296e,#4f70d8 50%,#16296e);}
+.hh b{width:calc(11px * var(--u));height:calc(118px * var(--u))}
+.hh i{width:calc(7px * var(--u));height:calc(34px * var(--u))}
+.hm b{width:calc(7.5px * var(--u));height:calc(176px * var(--u))}
+.hm i{width:calc(5px * var(--u));height:calc(40px * var(--u))}
+.hs b{width:calc(2.6px * var(--u));height:calc(196px * var(--u));background:linear-gradient(90deg,#1d3590,#6f8ce8 50%,#1d3590);box-shadow:0 calc(2.5px * var(--u)) calc(5px * var(--u)) rgba(6,10,34,.5)}
+.hs s{position:absolute;left:50%;top:50%;transform:translateX(-50%);width:calc(7px * var(--u));height:calc(44px * var(--u));border-radius:calc(3px * var(--u));background:linear-gradient(90deg,#1d3590,#6f8ce8 50%,#1d3590)}
+.hs::after{content:"";position:absolute;left:50%;top:50%;width:calc(11px * var(--u));height:calc(11px * var(--u));transform:translate(-50%,-50%);border-radius:50%;background:radial-gradient(circle at 38% 32%,#9db4f5,#2c4bb0 60%,#101f5c)}
+.cap{width:calc(15px * var(--u));height:calc(15px * var(--u));border-radius:50%;--dy:-4.2px;--dz:9px;
+  background:radial-gradient(circle at 36% 30%,#f2e3c0,#c9a97a 55%,#8a6c42 100%);
+  box-shadow:0 calc(2px * var(--u)) calc(4px * var(--u)) rgba(0,0,0,.5),inset 0 0 0 calc(1.2px * var(--u)) #1a2f7d;}
+
+/* ---- crystal + light sweep ---- */
+.crystal{width:calc(428px * var(--u));height:calc(428px * var(--u));border-radius:50%;--dy:-34px;--dz:46px;pointer-events:none;
+  background:
+    radial-gradient(ellipse 130% 70% at 30% 8%,rgba(255,255,255,.16),rgba(255,255,255,0) 46%),
+    radial-gradient(ellipse 60% 40% at 74% 88%,rgba(160,190,255,.07),rgba(255,255,255,0) 60%),
+    radial-gradient(circle at 50% 50%,rgba(215,230,255,.02) 55%,rgba(190,210,255,.09) 96%,rgba(255,255,255,.2) 100%);
+  box-shadow:inset 0 0 calc(24px * var(--u)) rgba(190,215,255,.07),inset 0 0 0 calc(1.4px * var(--u)) rgba(255,255,255,.14);
+  overflow:hidden;
+}
+.crystal .sweep{position:absolute;top:-25%;bottom:-25%;left:0;width:26%;
+  background:linear-gradient(105deg,rgba(255,255,255,0),rgba(255,255,255,.32) 46%,rgba(255,255,255,.5) 52%,rgba(255,255,255,.28) 58%,rgba(255,255,255,0));
+  transform:translateX(calc(-260% )) rotate(8deg);
+  transition:transform 1.5s cubic-bezier(.25,.6,.2,1);
+  will-change:transform;
+}
+.watch:hover .crystal .sweep{transform:translateX(460%) rotate(8deg)}
+
+/* ---- movement plate (revealed when exploded) ---- */
+.plate{width:calc(388px * var(--u));height:calc(388px * var(--u));border-radius:50%;--dy:16px;--dz:-14px;
+  background:
+    repeating-radial-gradient(circle at 18% 22%,rgba(255,255,255,.05) 0 calc(.8px + .35px*var(--u)),rgba(0,0,0,.08) calc(1.6px + .5px*var(--u)) calc(2.6px + .7px*var(--u)),rgba(255,255,255,.02) calc(3.2px + .8px*var(--u)) calc(4.6px + 1.1px*var(--u))),
+    repeating-radial-gradient(circle at 74% 66%,rgba(255,255,255,.045) 0 calc(1px + .4px*var(--u)),rgba(0,0,0,.07) calc(2px + .6px*var(--u)) calc(3.4px + .9px*var(--u)),rgba(255,255,255,.015) calc(4px + 1px*var(--u)) calc(5.4px + 1.2px*var(--u))),
+    linear-gradient(148deg,#8d8f96 0%,#b7b9bf 24%,#7e8087 48%,#a9abb2 70%,#78797f 100%);
+  box-shadow:inset 0 calc(1px * var(--u)) 0 rgba(255,255,255,.5),inset 0 0 calc(40px * var(--u)) rgba(20,20,24,.45),0 calc(14px * var(--u)) calc(30px * var(--u)) rgba(0,0,0,.5);
+}
+.bridge{position:absolute;border-radius:calc(60px * var(--u));
+  background:linear-gradient(155deg,#a7a9b0 0%,#c6c8cd 22%,#84868d 55%,#b2b4ba 82%,#8b8d94 100%);
+  box-shadow:inset 0 0 0 calc(1.1px + .2px*var(--u)) rgba(40,40,46,.55),inset 0 calc(2px * var(--u)) calc(6px * var(--u)) rgba(255,255,255,.35),0 calc(3px * var(--u)) calc(7px * var(--u)) rgba(0,0,0,.35);}
+.bridge::after{content:"";position:absolute;inset:calc(6px * var(--u));border-radius:inherit;background:repeating-linear-gradient(112deg,rgba(255,255,255,.06) 0 calc(1.6px*var(--u)),rgba(0,0,0,.05) calc(1.6px*var(--u)) calc(3.4px*var(--u)))}
+.b-along{left:calc(46px * var(--u));top:calc(96px * var(--u));width:calc(262px * var(--u));height:calc(84px * var(--u));transform:rotate(-16deg)}
+.b-bal{left:calc(232px * var(--u));top:calc(216px * var(--u));width:calc(112px * var(--u));height:calc(96px * var(--u));transform:rotate(9deg);border-radius:50% 50% 50% 60%}
+.screw{position:absolute;width:calc(11px * var(--u));height:calc(11px * var(--u));border-radius:50%;
+  background:radial-gradient(circle at 35% 30%,#d9dbe0,#8e9198 55%,#5c5f66);
+  box-shadow:inset 0 0 0 calc(.8px + .2px*var(--u)) rgba(30,30,34,.6),0 calc(1px * var(--u)) calc(2px * var(--u)) rgba(0,0,0,.4);}
+.screw::after{content:"";position:absolute;left:16%;right:16%;top:44%;height:12%;background:#33353b;border-radius:calc(1px*var(--u));transform:rotate(var(--s,24deg))}
+.jewel{position:absolute;width:calc(10px * var(--u));height:calc(10px * var(--u));border-radius:50%;
+  background:radial-gradient(circle at 36% 30%,#ff9fb2 0%,#e04f6d 46%,#8e1f3b 100%);
+  box-shadow:0 0 calc(4px * var(--u)) rgba(224,79,109,.55),inset 0 calc(1px*var(--u)) 0 rgba(255,255,255,.75),0 0 0 calc(2px + .5px*var(--u)) #6f727a;}
+.balance{position:absolute;left:calc(252px * var(--u));top:calc(238px * var(--u));width:calc(78px * var(--u));height:calc(78px * var(--u));margin:calc(-39px * var(--u));border-radius:50%;
+  border:calc(4.5px * var(--u)) solid #b3392e;
+  box-shadow:0 0 0 calc(1.2px + .2px*var(--u)) rgba(20,20,24,.5),inset 0 0 calc(8px * var(--u)) rgba(0,0,0,.3);
+  transform-origin:50% 50%;}
+.balance::before{content:"";position:absolute;left:-4%;right:-4%;top:47%;height:6%;background:linear-gradient(90deg,#8f949c,#c9ccd2,#8f949c);border-radius:calc(2px*var(--u))}
+.balance::after{content:"";position:absolute;left:47%;top:-4%;bottom:-4%;width:6%;background:linear-gradient(180deg,#8f949c,#c9ccd2,#8f949c);border-radius:calc(2px*var(--u))}
+.balance.osc{animation:osc .4s ease-in-out infinite alternate}
+@keyframes osc{from{transform:rotate(-32deg)}to{transform:rotate(32deg)}}
+.mv-label{position:absolute;left:50%;top:calc(34px * var(--u));transform:translateX(-50%);font-family:var(--serif);font-size:calc(9px * var(--u));letter-spacing:calc(2.4px * var(--u));color:#3f4148;white-space:nowrap;text-transform:uppercase}
+
+/* ---- leader lines + callouts (positioned by JS in .stage space) ---- */
+.leader{position:absolute;height:0;visibility:hidden;transition:opacity .5s var(--ease)}
+.leader .ln{position:absolute;left:0;right:0;top:0;height:1px;background:linear-gradient(90deg,rgba(201,169,122,.15),rgba(201,169,122,.75));}
+.leader .dt{position:absolute;top:-2.5px;width:5px;height:5px;border-radius:50%;background:var(--champagne)}
+.leader.right .dt{left:-2px}
+.leader.left .dt{right:-2px}
+.leader p{position:absolute;top:-52px;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--paper-dim);line-height:1.65;margin:0;white-space:nowrap}
+.leader p b{display:block;font-weight:500;letter-spacing:.3em;color:var(--paper);font-size:10px}
+.leader p i{font-style:normal;font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;color:var(--champagne);text-transform:none}
+.leader.right p{left:0;text-align:left}
+.leader.left p{right:0;text-align:right}
+.leader.dim{opacity:0}
+
+/* ============================================================ escapement section */
+#escape{position:relative;padding:16vh clamp(22px,6vw,110px) 10vh;border-top:1px solid var(--hairline)}
+#escape .kicker{font-size:10px;letter-spacing:.5em;text-indent:.5em;text-transform:uppercase;color:var(--champagne);margin-bottom:48px}
+#escape h2{font-family:var(--serif);font-weight:400;font-size:clamp(30px,4.4vw,58px);line-height:1.08;max-width:22ch;margin-bottom:74px}
+#escape h2 em{font-style:italic;color:var(--champagne)}
+.escape-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:clamp(34px,5vw,84px)}
+.escape-grid h3{font-family:var(--serif);font-weight:400;font-size:21px;letter-spacing:.04em;margin-bottom:16px}
+.escape-grid p{color:var(--paper-dim);font-size:14.5px;margin-bottom:14px;max-width:46ch}
+.escape-grid .sig{margin-top:26px;font-size:10px;letter-spacing:.34em;text-transform:uppercase;color:var(--paper-faint)}
+.escape-grid .sig b{color:var(--champagne);font-weight:400}
+
+/* ============================================================ enquire / footer */
+#enquire{padding:20vh clamp(22px,6vw,110px) 12vh;text-align:center;border-top:1px solid var(--hairline)}
+#enquire .e-no{font-family:var(--mono);font-size:10px;letter-spacing:.4em;color:var(--champagne-lo);display:block;margin-bottom:30px}
+#enquire h2{font-family:var(--serif);font-weight:400;font-size:clamp(28px,3.8vw,48px);letter-spacing:.02em;margin-bottom:18px}
+#enquire p{color:var(--paper-dim);font-size:14.5px;max-width:52ch;margin:0 auto 52px}
+.enq-link{display:inline-block;text-decoration:none;font-size:12px;letter-spacing:.42em;text-indent:.42em;text-transform:uppercase;color:var(--paper);padding-bottom:12px;position:relative}
+.enq-link::after{content:"";position:absolute;left:0;right:0;bottom:0;height:1px;background:var(--champagne);transform:scaleX(0);transform-origin:50% 50%;transition:transform .5s var(--ease)}
+.enq-link:hover::after,.enq-link:focus-visible::after{transform:scaleX(1)}
+footer.site{padding:34px clamp(22px,6vw,110px);display:flex;justify-content:space-between;gap:18px;flex-wrap:wrap;border-top:1px solid rgba(201,169,122,.08)}
+footer.site span{font-family:var(--mono);font-size:9.5px;letter-spacing:.3em;text-transform:uppercase;color:rgba(245,242,236,.24)}
+
+/* ============================================================ reveal utility */
+.reveal{opacity:0;transform:translateY(26px);transition:opacity 1s var(--ease),transform 1s var(--ease)}
+.reveal.in{opacity:1;transform:none}
+
+/* ============================================================ responsive */
+@media (max-width:1180px){.leader,.callout{display:none}}
+@media (max-width:949px){
+  #watch{grid-template-columns:1fr;min-height:0}
+  .stagewrap{position:sticky;top:0;height:62vh;height:62svh;z-index:1;background:linear-gradient(to bottom,var(--ink) 78%,rgba(11,11,12,0))}
+  .stage{width:min(92vw,520px);height:min(56vh,520px)}
+  .watch{--u:min(calc(min(56vh,92vw,520px) / 500),1px)}
+  .rail-copy{padding-top:4vh;z-index:2;background:var(--ink);position:relative}
+  .phase{padding:8vh 0}
+}
+@media (min-width:1900px){.stage{width:min(40vw,660px);height:min(80vh,660px)}.watch{--u:min(calc(min(80vh,40vw,660px) / 500),1px)}}
+
+/* ============================================================ reduced motion */
+@media (prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  *,*::before,*::after{animation-duration:.01ms !important;animation-iteration-count:1 !important;transition-duration:.01ms !important}
+  .crystal .sweep{display:none}
+  .scrollcue i{animation:none}
+  .reveal{opacity:1;transform:none}
+  .balance.osc{animation:none}
+}
+</style>
+</head>
+<body>
+
+<div id="loader" aria-hidden="true">
+  <div class="lmark">Nocturne</div>
+  <div class="lsub">Genève</div>
+  <div class="lbar"><i></i></div>
+</div>
+
+<div id="progress" aria-hidden="true"><i id="progressBar"></i></div>
+
+<header class="top">
+  <a class="brand" href="#top">Nocturne <em>·</em> N-14</a>
+  <span class="tref">Ref <b>N-14/01</b> — Genève</span>
+</header>
+
+<aside class="specrail" aria-label="Specifications">
+  <dl>
+    <div class="specrow"><dt>Reference</dt><dd>N-14/01</dd></div>
+    <div class="specrow"><dt>Calibre</dt><dd>N-14</dd></div>
+    <div class="specrow"><dt>Reserve</dt><dd>72 h</dd></div>
+    <div class="specrow"><dt>Frequency</dt><dd>28 800 A/h</dd></div>
+    <div class="specrow"><dt>Jewels</dt><dd>31</dd></div>
+    <div class="specrow"><dt>Diameter</dt><dd>39.0 mm</dd></div>
+    <div class="specrow"><dt>Height</dt><dd>9.2 mm</dd></div>
+    <div class="specrow"><dt>Crystal</dt><dd>Sapphire</dd></div>
+    <div class="specrow"><dt>Water resist.</dt><dd>100 m</dd></div>
+  </dl>
+  <p class="railfoot">Fig. 1 — exploded view<br>Calibre N-14, 228 parts<br>Côte de Genève, anglage à la main</p>
+</aside>
+
+<main id="top">
+<section id="watch" aria-label="The Nocturne N-14, presented">
+  <div class="stagewrap">
+    <div class="stage" id="stage">
+      <div class="watch" id="watchEl" role="img" aria-label="Illustration of the Nocturne N-14 wristwatch: a brushed steel case around a champagne guilloché dial with applied gold indices and blued steel hands, drawn at the visitor's current time.">
+
+        <i class="layer case-plate" aria-hidden="true"></i>
+        <i class="layer midring" aria-hidden="true"></i>
+        <i class="crown layer" aria-hidden="true"></i>
+
+        <div class="layer plate" id="plateEl" aria-hidden="true">
+          <i class="bridge b-along"></i>
+          <i class="bridge b-bal"></i>
+          <i class="screw" style="left:calc(62px*var(--u));top:calc(74px*var(--u));--s:18deg"></i>
+          <i class="screw" style="left:calc(298px*var(--u));top:calc(84px*var(--u));--s:-41deg"></i>
+          <i class="screw" style="left:calc(72px*var(--u));top:calc(296px*var(--u));--s:63deg"></i>
+          <i class="screw" style="left:calc(322px*var(--u));top:calc(318px*var(--u));--s:8deg"></i>
+          <i class="screw" style="left:calc(188px*var(--u));top:calc(52px*var(--u));--s:-24deg"></i>
+          <i class="jewel" style="left:calc(120px*var(--u));top:calc(150px*var(--u))"></i>
+          <i class="jewel" style="left:calc(196px*var(--u));top:calc(120px*var(--u))"></i>
+          <i class="jewel" style="left:calc(150px*var(--u));top:calc(238px*var(--u))"></i>
+          <i class="jewel" style="left:calc(258px*var(--u));top:calc(178px*var(--u))"></i>
+          <i class="jewel" style="left:calc(288px*var(--u));top:calc(268px*var(--u))"></i>
+          <i class="jewel" style="left:calc(96px*var(--u));top:calc(210px*var(--u))"></i>
+          <i class="balance" id="balanceEl"></i>
+          <span class="mv-label">Calibre N-14 · 228 parts</span>
+        </div>
+
+        <div class="layer dial" id="dialEl" aria-hidden="true">
+          <i class="mtrack"><i class="mticks"></i><i class="mticks5"></i><i class="rtrack"></i><i class="trackline"></i></i>
+          <span class="dtext dt-brand">Nocturne<small>Genève</small></span>
+          <span class="dtext dt-line"></span>
+          <span class="dtext dt-auto">Automatic</span>
+          <span class="dtext dt-swiss">Swiss Made</span>
+          <div class="idx" id="idxEl"></div>
+          <div class="layer dwindow" style="--ox:calc(148px*var(--u))"><span id="dwinNum">01</span></div>
+        </div>
+
+        <div class="hands" id="handsEl">
+          <div class="h hh" id="hH"><i></i><b></b></div>
+          <div class="h hm" id="hM"><i></i><b></b></div>
+          <div class="h hs" id="hS"><s></s><b></b></div>
+          <i class="layer cap"></i>
+        </div>
+
+        <i class="layer crystal"><i class="sweep"></i></i>
+      </div>
+
+      <div class="leader left"  data-ax="137" data-ay="137"><i class="ln"></i><i class="dt"></i><p><b>Box sapphire</b>2.1 mm, double anti-reflective<i>crystal</i></p></div>
+      <div class="leader left"  data-ax="97"  data-ay="300"><i class="ln"></i><i class="dt"></i><p><b>Guilloché dial</b>hand-turned grain d’orge<i>dial</i></p></div>
+      <div class="leader left"  data-ax="150" data-ay="412"><i class="ln"></i><i class="dt"></i><p><b>Calibre N-14</b>72 h reserve · 31 jewels<i>movement</i></p></div>
+      <div class="leader right" data-ax="363" data-ay="128"><i class="ln"></i><i class="dt"></i><p><b>Applied batons</b>solid gold, mirror chamfer<i>indices</i></p></div>
+      <div class="leader right" data-ax="404" data-ay="250"><i class="ln"></i><i class="dt"></i><p><b>Date, quick-set</b>instant jump at midnight<i>date</i></p></div>
+      <div class="leader right" data-ax="382" data-ay="392"><i class="ln"></i><i class="dt"></i><p><b>Case, 39 mm</b>brushed 904L · 100 m<i>case</i></p></div>
+
+      <div class="scrollcue" id="cue"><span>Scroll — the watch opens</span><i></i></div>
+      <div class="watch-caption">Reference <b>N-14/01</b> · 39 mm brushed steel · indications set to your device time</div>
+    </div>
+  </div>
+
+  <div class="rail-copy">
+    <div class="intro">
+      <p class="eyebrow">Maison Nocturne — Genève</p>
+      <h1>N-14</h1>
+      <p class="subline">One watch. Made impeccably.</p>
+      <p class="lede">We make a single reference. <strong>Thirty-nine millimetres</strong> of brushed steel, a champagne guilloché dial turned on a rose engine that has been in Genève since 1874, and hands blued to a deep afternoon-sky blue by hand, over a bed of charcoal.</p>
+      <p class="lede">Everything you see on this page is drawn, not photographed. Scroll slowly — the watch will take itself apart.</p>
+      <div class="hairrule"></div>
+      <p class="fine" id="liveMeta">Live indications · 28 800 A/h simulated at 8 beats per second</p>
+    </div>
+
+    <div class="phase reveal">
+      <span class="pno">01 — Light</span>
+      <h2>A dial that holds a low lamp.</h2>
+      <p>The guilloché is cut by hand, one pass at a time: eight passes of a grain d’orge tool, each removing a tenth of a millimetre of gold-plated brass. Under a low lamp the pattern swallows the light at the edges and returns it at the centre — <em>like a field after rain</em>.</p>
+      <p>Over it sits a box sapphire, 2.1 millimetres, with two layers of anti-reflective coating on both faces. Move your cursor across it.</p>
+    </div>
+
+    <div class="phase reveal">
+      <span class="pno">02 — Readability</span>
+      <h2>Blued steel, applied gold.</h2>
+      <p>The hands are polished steel heated to 297 °C on a brass bed, then rinsed in alcohol — the oxide layer that reads as blue is thirty wavelengths thin. The indices are solid gold, applied by hand with two pins each, their chamfers burnished with a steel agate until they throw a single hard line of light.</p>
+      <p>The hour hand you are reading is drawn at this moment, from your own clock.</p>
+    </div>
+
+    <div class="phase reveal mvmt">
+      <span class="pno">03 — Under the dial</span>
+      <h2>Calibre N-14.</h2>
+      <p>Two hundred and twenty-eight parts. A free-sprung balance, 31 ruby jewels, a bidirectional rotor on ceramic ball bearings, and seventy-two hours of reserve from a single barrel — enough to carry Friday night to Monday morning without a winder.</p>
+      <p class="fine">28 800 A/h · 8 beats per second<br>Côte de Genève · perlage · anglage à la main</p>
+      <button class="mvmt-toggle" id="mvmtBtn" type="button" aria-pressed="false">Reveal calibre</button>
+    </div>
+  </div>
+</section>
+
+<section id="escape" class="reveal" aria-label="Notes on the escapement">
+  <p class="kicker">04 — Notes</p>
+  <h2>On the <em>escapement</em>, and other patient mechanisms.</h2>
+  <div class="escape-grid">
+    <article>
+      <h3>The anchor’s two meetings</h3>
+      <p>Sixty-four times a second, somewhere under the dial, a steel pallet fork changes its mind. The escape wheel advances one tooth, the fork rocks, and the balance receives the smallest possible push — a whisper of torque, timed to land a quarter-turn after the balance crosses the centre.</p>
+      <p>That is all a lever escapement is: a quarrel, finely negotiated, between a wheel that wants to unwind and a balance that wants to keep time. Everything else on the movement exists to keep the argument honest — the jewels to still friction, the regulator to shorten the hairspring’s working length by a few tenths of a millimetre, the shock springs to catch the watch when the world drops it.</p>
+      <p class="sig">Note I · Escapement — <b>calibre N-14</b></p>
+    </article>
+    <article>
+      <h3>The balance and the breath</h3>
+      <p>A free-sprung balance carries no index pins. Its rate is set by two gold poising screws and by nothing else, which is slower to adjust and far less likely to lie. The hairspring rises into a Breguet overcoil so that it breathes concentrically — centre in, centre out — rather than strangling itself at the stud.</p>
+      <p>Adjusted to five positions and two temperatures, the N-14 is delivered with a certificate that reads like a medical chart: dial up, dial down, crown left, crown right, crown down. We keep the trace. A watch is a small patient, and it is our job to know its moods.</p>
+      <p class="sig">Note II · Regulation — <b>Genève, September 2026</b></p>
+    </article>
+  </div>
+</section>
+
+<section id="enquire" class="reveal" aria-label="Enquire">
+  <span class="e-no">An edition of 74 pieces — 2026 / 2027</span>
+  <h2>By appointment, in Genève.</h2>
+  <p>The N-14 is sold from the workshop on Rue du Rhône, in one-hour appointments, from the bench it was regulated on. There is no list and no waitlist; there is a letter, and patience.</p>
+  <a class="enq-link" href="mailto:enquire@nocturne-geneve.example">Enquire</a>
+</section>
+</main>
+
+<footer class="site">
+  <span>Maison Nocturne SA · Rue du Rhône 42 · 1204 Genève</span>
+  <span>Drawn in your browser · no photography</span>
+</footer>
+
+<script>
+(function(){
+"use strict";
+var $=function(id){return document.getElementById(id);};
+var reduce=window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/* ---------- applied indices: 11 batons (3 o'clock yields to the date), twin at 12 ---------- */
+var idx=$("idxEl");
+for(var h=0;h<12;h++){
+  if(h===3)continue;
+  var b=document.createElement("i");
+  b.className="baton"+(h===0?" tw":"");
+  b.style.setProperty("--a",(h*30)+"deg");
+  idx.appendChild(b);
+}
+
+/* ---------- date window shows today ---------- */
+var now0=new Date();
+$("dwinNum").textContent=("0"+now0.getDate()).slice(-2);
+
+/* ---------- spec rail gut only on wide screens ---------- */
+function railGut(){document.body.classList.toggle("rail-on",window.innerWidth>=1280);}
+railGut();
+
+/* ---------- elements ---------- */
+var watch=$("watchEl"),stage=$("stage"),section=$("watch"),
+    hH=$("hH"),hM=$("hM"),hS=$("hS"),plate=$("plateEl"),dial=$("dialEl"),
+    handsEl=$("handsEl"),balance=$("balanceEl"),cue=$("cue"),
+    bar=$("progressBar"),loader=$("loader"),mvBtn=$("mvmtBtn");
+var leaders=Array.prototype.slice.call(document.querySelectorAll(".leader"));
+var LDATA=[
+ {el:leaders[0],dy:-34,keep:false}, /* sapphire -> crystal */
+ {el:leaders[1],dy:0,keep:false},   /* dial */
+ {el:leaders[2],dy:16,keep:true},   /* calibre -> plate */
+ {el:leaders[3],dy:0,keep:false},   /* indices */
+ {el:leaders[4],dy:0,keep:false},   /* date */
+ {el:leaders[5],dy:-16,keep:false}  /* case */
+];
+
+/* ---------- state ---------- */
+var fTarget=0,fNow=0,mvTarget=0,mvNow=0,tiltX=0,tiltY=0,txT=0,tyT=0,wz=1,wzT=1,started=false;
+
+/* ---------- scroll model ---------- */
+function scrollState(){
+  var top=section.offsetTop,hh=section.offsetHeight,vh=window.innerHeight;
+  var denom=Math.max(1,hh-vh);
+  fTarget=Math.min(1,Math.max(0,(window.scrollY-top)/denom));
+  var max=document.documentElement.scrollHeight-vh;
+  bar.style.transform="scaleX("+(max>0?window.scrollY/max:0)+")";
+  if(cue)cue.classList.toggle("hide",window.scrollY>90);
+}
+
+/* ---------- pointer tilt + gentle zoom ---------- */
+var stagewrap=document.querySelector(".stagewrap");
+if(!reduce){
+  stagewrap.addEventListener("pointermove",function(e){
+    var r=stage.getBoundingClientRect();
+    var px=(e.clientX-r.left)/r.width-0.5,py=(e.clientY-r.top)/r.height-0.5;
+    tyT=Math.max(-1,Math.min(1,px))*7;
+    txT=Math.max(-1,Math.min(1,-py))*6;
+  });
+  stagewrap.addEventListener("pointerleave",function(){tyT=0;txT=0;});
+  stage.addEventListener("wheel",function(e){
+    wzT=Math.min(1.16,Math.max(.92,wzT+ (e.deltaY>0?-0.02:0.02)));
+  },{passive:true});
+}
+
+/* ---------- movement reveal toggle ---------- */
+mvBtn.addEventListener("click",function(){
+  var on=mvTarget<0.5;mvTarget=on?1:0;
+  mvBtn.setAttribute("aria-pressed",on?"true":"false");
+  mvBtn.textContent=on?"Close the watch":"Reveal calibre";
+});
+
+/* ---------- leader layout: hairlines from anchor dots to stage margins ---------- */
+function layoutLeaders(){
+  var wide=window.innerWidth>1180;
+  var r=stage.getBoundingClientRect();
+  var u=watch.offsetWidth/500;
+  var cx=r.width/2,cy=r.height/2;
+  for(var i=0;i<LDATA.length;i++){
+    var L=LDATA[i],el=L.el;
+    if(!wide){el.style.visibility="hidden";continue;}
+    var ax=parseFloat(el.getAttribute("data-ax")),ay=parseFloat(el.getAttribute("data-ay"));
+    var x=cx+(ax-250)*u*wz;
+    var y=cy+(ay-250+L.dy*fNow)*u*wz;
+    el.style.visibility="visible";
+    if(el.classList.contains("left")){
+      el.style.left="16px";el.style.width=Math.max(30,x-16)+"px";
+    }else{
+      el.style.left=x+"px";el.style.width=Math.max(30,r.width-16-x)+"px";
+    }
+    el.style.top=y+"px";
+    var dim=(fNow>0.68&&!L.keep)||(mvNow>0.4&&!L.keep);
+    el.classList.toggle("dim",dim);
+  }
+}
+
+/* ---------- main loop ---------- */
+function ease(a,b,k){return a+(b-a)*k;}
+function frame(){
+  var now=new Date();
+  var s=now.getSeconds()+now.getMilliseconds()/1000;
+  var m=now.getMinutes()+s/60;
+  var hr=now.getHours()%12+m/60;
+  if(reduce)s=now.getSeconds();
+  hS.style.setProperty("--r",(s*6)+"deg");
+  hM.style.setProperty("--r",(m*6)+"deg");
+  hH.style.setProperty("--r",(hr*30)+"deg");
+
+  fNow=ease(fNow,mvTarget>0.5?Math.max(fTarget,mvTarget):fTarget,reduce?1:0.09);
+  mvNow=ease(mvNow,mvTarget,reduce?1:0.08);
+  tiltX=ease(tiltX,txT,reduce?1:0.08);
+  tiltY=ease(tiltY,tyT,reduce?1:0.08);
+  wz=ease(wz,wzT,reduce?1:0.1);
+
+  var f=fNow;
+  if(started||!reduce){watch.style.setProperty("--f",f.toFixed(3));}
+  watch.style.setProperty("--rx",tiltX.toFixed(2)+"deg");
+  watch.style.setProperty("--ry",tiltY.toFixed(2)+"deg");
+  watch.style.setProperty("--wz",wz.toFixed(3));
+
+  /* dial + hands drift away as the case lifts; plate stays */
+  var away=Math.max(0,(f-0.18)/0.82);
+  dial.style.opacity=(1-0.82*away).toFixed(3);
+  handsEl.style.opacity=(1-0.92*away).toFixed(3);
+  plate.style.opacity=(0.12+0.88*Math.min(1,Math.max(0,(f-0.08)/0.5))).toFixed(3);
+  if(!reduce){balance.classList.toggle("osc",f>0.5);}
+
+  if(started)layoutLeaders();
+  requestAnimationFrame(frame);
+}
+scrollState();
+requestAnimationFrame(frame);
+
+/* ---------- reveal-on-scroll ---------- */
+if("IntersectionObserver" in window){
+  var io=new IntersectionObserver(function(es){
+    es.forEach(function(en){if(en.isIntersecting){en.target.classList.add("in");io.unobserve(en.target);}});
+  },{threshold:0.16});
+  Array.prototype.forEach.call(document.querySelectorAll(".reveal"),function(el){io.observe(el);});
+}else{
+  Array.prototype.forEach.call(document.querySelectorAll(".reveal"),function(el){el.classList.add("in");});
+}
+
+/* ---------- resize + loader ---------- */
+window.addEventListener("resize",function(){railGut();scrollState();layoutLeaders();},{passive:true});
+window.addEventListener("scroll",scrollState,{passive:true});
+function go(){loader.classList.add("gone");started=true;layoutLeaders();}
+window.addEventListener("load",function(){setTimeout(go,reduce?0:650);});
+setTimeout(go,1800); /* safety: never trap the visitor behind the loader */
+})();
+</script>
+</body>
+</html>

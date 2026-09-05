@@ -1,0 +1,1393 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Clockwork Orrery — Brass &amp; Ebony, London MDCCCXCIII</title>
+<meta name="description" content="A geared delineation of the solar system in brass and ebony: true Keplerian orbits, a cut gear train, and an engraved schedule of the planets.">
+<style>
+/* ============ tokens ============ */
+:root{
+  --ground:#120d08;
+  --ebony:#1b1410;
+  --ebony-2:#171009;
+  --brass:#d9a441;
+  --brass-dk:#8a5a1f;
+  --brass-lt:#f3d39b;
+  --patina:#6f7d5f;
+  --ink:#e9ddc4;
+  --muted:#a48e72;
+  --faint:#6d5c48;
+  --hair:rgba(217,164,65,.26);
+  --hair-soft:rgba(217,164,65,.14);
+  --display:"Didot","Bodoni MT","Hoefler Text","Iowan Old Style",Palatino,Baskerville,Georgia,serif;
+  --body:"Iowan Old Style",Palatino,Baskerville,Georgia,"Times New Roman",serif;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Courier New",monospace;
+  --pad:clamp(16px,3.4vw,44px);
+}
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0;
+  background:var(--ground);
+  color:var(--ink);
+  font-family:var(--body);
+  font-size:clamp(15px,1.02vw + 12px,18px);
+  line-height:1.66;
+  letter-spacing:.006em;
+  text-rendering:optimizeLegibility;
+}
+/* warm radial vignette laid over the ground */
+body::before{
+  content:"";
+  position:fixed;
+  inset:0;
+  pointer-events:none;
+  z-index:1;
+  background:
+    radial-gradient(120% 92% at 50% 22%,rgba(74,50,22,.42) 0%,rgba(28,19,11,.16) 42%,rgba(6,4,2,.86) 100%),
+    radial-gradient(60% 40% at 50% 4%,rgba(217,164,65,.10),rgba(0,0,0,0) 70%);
+}
+/* ultra-fine grain, drawn as an inline turbulence filter (no external asset) */
+.grain{
+  position:fixed;
+  inset:0;
+  width:100%;
+  height:100%;
+  z-index:2;
+  opacity:.06;
+  pointer-events:none;
+  mix-blend-mode:overlay;
+}
+.wrap{
+  position:relative;
+  z-index:3;
+  max-width:1280px;
+  margin:0 auto;
+  padding:clamp(20px,4vw,56px) var(--pad) clamp(30px,6vw,80px);
+}
+/* ============ masthead ============ */
+.masthead{position:relative;padding-bottom:clamp(14px,2vw,26px)}
+.rule{
+  height:5px;
+  border-radius:2px;
+  background:
+    linear-gradient(90deg,rgba(0,0,0,0) 0%,rgba(138,90,31,.85) 6%,var(--brass) 26%,var(--brass-lt) 50%,var(--brass) 74%,rgba(138,90,31,.85) 94%,rgba(0,0,0,0) 100%);
+  box-shadow:0 1px 0 rgba(0,0,0,.75),0 -1px 0 rgba(243,211,155,.14);
+  position:relative;
+}
+.rule.thin{height:2px;margin-top:6px;opacity:.55}
+.rule::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  background:linear-gradient(90deg,rgba(255,240,205,0) 12%,rgba(255,240,205,.55) 50%,rgba(255,240,205,0) 88%);
+  opacity:.25;
+  animation:sheen 11s ease-in-out infinite;
+}
+@keyframes sheen{0%,100%{transform:translateX(-14%)}50%{transform:translateX(14%)}}
+.mast-top{
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px clamp(14px,3vw,34px);
+  align-items:baseline;
+  justify-content:space-between;
+  margin:14px 0 10px;
+  font-family:var(--display);
+  font-size:clamp(10px,.82vw + 8px,13px);
+  letter-spacing:.34em;
+  text-transform:uppercase;
+  color:var(--faint);
+}
+.mast-top b{font-weight:400;color:var(--patina)}
+.wordmark{
+  font-family:var(--display);
+  font-weight:400;
+  font-size:clamp(38px,8.2vw,104px);
+  line-height:.94;
+  letter-spacing:.012em;
+  margin:.12em 0 0;
+  color:#f0e2c6;
+  text-shadow:0 1px 0 #4a3418,0 2px 0 rgba(0,0,0,.6),0 0 42px rgba(217,164,65,.16);
+}
+.wordmark em{
+  display:block;
+  font-style:normal;
+  font-size:.36em;
+  letter-spacing:.24em;
+  text-transform:uppercase;
+  color:var(--brass);
+  margin-top:.7em;
+  text-shadow:0 1px 0 rgba(0,0,0,.8);
+}
+.lede{
+  max-width:64ch;
+  margin:clamp(14px,2vw,22px) 0 0;
+  color:#cdbca0;
+  font-size:1.02em;
+}
+.lede b{color:var(--brass-lt);font-weight:600}
+/* engraved maker's plate */
+.makers{
+  display:inline-flex;
+  align-items:center;
+  gap:12px;
+  margin-top:clamp(16px,2.4vw,26px);
+  padding:9px 20px 10px;
+  border-radius:3px;
+  background:
+    linear-gradient(180deg,#e3b765 0%,#c9932f 18%,#a97424 48%,#8a5a1f 82%,#6d4416 100%);
+  border:1px solid #5d3a12;
+  box-shadow:
+    inset 0 1px 0 rgba(255,236,196,.65),
+    inset 0 -1px 0 rgba(0,0,0,.45),
+    0 2px 0 #0c0805,
+    0 10px 22px -12px rgba(0,0,0,.9);
+  color:#2b1c08;
+  font-family:var(--display);
+  font-size:clamp(11px,.9vw + 8px,15px);
+  letter-spacing:.3em;
+  text-transform:uppercase;
+  text-shadow:0 1px 0 rgba(255,238,203,.55);
+}
+.makers .dot{width:5px;height:5px;border-radius:50%;background:#3a2609;box-shadow:inset 0 1px 0 rgba(255,235,190,.4)}
+.makers .anno{font-weight:600;letter-spacing:.34em}
+/* ============ the case ============ */
+.case{
+  margin-top:clamp(24px,4vw,48px);
+  position:relative;
+  border-radius:6px;
+  padding:clamp(10px,1.4vw,18px);
+  background:
+    linear-gradient(180deg,#241a12 0%,#1b1410 24%,#150e09 78%,#0e0906 100%);
+  border:1px solid #3a2a19;
+  box-shadow:
+    inset 0 1px 0 rgba(243,211,155,.16),
+    inset 0 0 90px rgba(0,0,0,.75),
+    0 3px 0 #080503,
+    0 34px 70px -40px rgba(0,0,0,.95);
+}
+.case::before{ /* ebony long-grain */
+  content:"";
+  position:absolute;
+  inset:0;
+  border-radius:6px;
+  pointer-events:none;
+  opacity:.5;
+  background:repeating-linear-gradient(96deg,rgba(255,225,180,.035) 0 1px,rgba(0,0,0,0) 1px 5px);
+}
+.lid{
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px 18px;
+  align-items:baseline;
+  justify-content:space-between;
+  padding:2px 8px clamp(10px,1.4vw,14px);
+  border-bottom:1px solid var(--hair-soft);
+  position:relative;
+  z-index:1;
+}
+.lid h2{
+  margin:0;
+  font-family:var(--display);
+  font-weight:400;
+  font-size:clamp(13px,1vw + 9px,17px);
+  letter-spacing:.26em;
+  text-transform:uppercase;
+  color:var(--brass);
+  text-shadow:0 1px 0 rgba(0,0,0,.8);
+}
+.lid .catno{
+  font-family:var(--mono);
+  font-size:clamp(10px,.7vw + 8px,12.5px);
+  letter-spacing:.16em;
+  color:var(--faint);
+  font-variant-numeric:tabular-nums;
+}
+.dial{position:relative;margin-top:clamp(8px,1.2vw,14px)}
+#orrery{display:block;width:100%;height:auto;touch-action:pan-y;cursor:ew-resize}
+/* engraving strokes */
+.groove{fill:none;stroke:rgba(0,0,0,.62);stroke-width:2}
+.ring{fill:none;stroke:rgba(217,164,65,.30);stroke-width:1}
+.ring.sel{stroke:rgba(243,211,155,.85);stroke-width:1.5}
+.hairline{stroke:rgba(217,164,65,.12);stroke-width:1}
+.tick{stroke:rgba(217,164,65,.34);stroke-width:1}
+.tick.five{stroke:rgba(217,164,65,.5);stroke-width:1}
+.tick.ten{stroke:rgba(243,211,155,.66);stroke-width:1.2}
+.tick.sign{stroke:rgba(243,211,155,.9);stroke-width:1.7}
+.zlab{fill:rgba(233,221,196,.46);font-family:var(--display);font-size:15px;letter-spacing:.08em;text-anchor:middle}
+.deglab{fill:rgba(217,164,65,.4);font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;text-anchor:middle}
+.plname{
+  fill:rgba(233,221,196,.62);
+  font-family:var(--display);
+  font-size:12.5px;
+  letter-spacing:.22em;
+  text-transform:uppercase;
+  text-anchor:middle;
+  pointer-events:none;
+}
+.plname.on{fill:var(--brass-lt)}
+.sunword{fill:rgba(255,229,175,.6);font-family:var(--display);font-size:11px;letter-spacing:.3em;text-anchor:middle}
+.body-hit{fill:rgba(0,0,0,0);cursor:pointer}
+.trail{fill:none;stroke:rgba(243,211,155,.5);stroke-width:2;stroke-linecap:round}
+/* brass corner mounts + slotted screws */
+.mount{fill:url(#gBrassPlate);stroke:#4a2f10;stroke-width:1}
+.screw{fill:url(#gScrew);stroke:#3c2609;stroke-width:.8}
+.screw-slot{stroke:rgba(45,28,8,.85);stroke-width:1.6;stroke-linecap:round}
+/* ============ reveal windows (gear train / escapement) ============ */
+.window{
+  position:absolute;
+  bottom:clamp(8px,1.3vw,20px);
+  width:clamp(112px,15.5vw,204px);
+  padding:7px;
+  border-radius:4px;
+  background:linear-gradient(180deg,#100b07,#1c140d 40%,#0c0805);
+  border:1px solid #4a3418;
+  box-shadow:
+    inset 0 0 0 1px rgba(0,0,0,.7),
+    inset 0 1px 0 rgba(243,211,155,.2),
+    0 10px 26px -14px #000;
+}
+.window.left{left:clamp(8px,1.3vw,20px)}
+.window.right{right:clamp(8px,1.3vw,20px);width:clamp(96px,11vw,152px)}
+.window svg{display:block;width:100%;height:auto}
+.window .cap{
+  display:block;
+  margin-top:4px;
+  font-family:var(--display);
+  font-size:clamp(8px,.6vw + 6px,10.5px);
+  letter-spacing:.22em;
+  text-transform:uppercase;
+  color:var(--faint);
+  text-align:center;
+}
+.beat{opacity:0}
+.running .beat{animation:beat 1s steps(1,end) infinite}
+@keyframes beat{0%,49%{opacity:1}50%,100%{opacity:0}}
+.state-word{fill:var(--brass-lt);font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-anchor:middle}
+.state-word.hold{fill:#c07a4e}
+/* ============ control rail ============ */
+.rail{
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  gap:clamp(8px,1.2vw,16px);
+  margin-top:clamp(10px,1.4vw,16px);
+  padding:clamp(9px,1.1vw,13px) clamp(10px,1.3vw,16px);
+  border-radius:4px;
+  background:linear-gradient(180deg,rgba(46,33,20,.9),rgba(18,12,8,.92));
+  border:1px solid #3b2a18;
+  box-shadow:inset 0 1px 0 rgba(243,211,155,.14),0 2px 0 #080503;
+}
+.rail .grp{display:flex;align-items:center;gap:6px}
+.rail .lbl{
+  font-family:var(--display);
+  font-size:clamp(9px,.68vw + 7px,11.5px);
+  letter-spacing:.26em;
+  text-transform:uppercase;
+  color:var(--faint);
+  white-space:nowrap;
+}
+kbd{
+  font-family:var(--mono);
+  font-size:.82em;
+  padding:1px 5px;
+  border-radius:3px;
+  border:1px solid rgba(217,164,65,.34);
+  background:rgba(217,164,65,.07);
+  color:var(--brass-lt);
+}
+button{
+  font-family:var(--display);
+  font-size:clamp(11px,.8vw + 8px,14px);
+  letter-spacing:.14em;
+  color:#2c1d08;
+  cursor:pointer;
+  padding:7px 13px 8px;
+  border-radius:3px;
+  border:1px solid #5d3a12;
+  background:linear-gradient(180deg,#e0b45f 0%,#c8922e 22%,#a87222 58%,#8a5a1f 100%);
+  box-shadow:inset 0 1px 0 rgba(255,238,203,.6),inset 0 -1px 0 rgba(0,0,0,.4),0 2px 0 #0b0704;
+  text-shadow:0 1px 0 rgba(255,238,203,.45);
+  font-variant-numeric:tabular-nums;
+  transition:filter .16s ease,transform .1s ease;
+}
+button:hover{filter:brightness(1.12)}
+button:active{transform:translateY(1px)}
+button:focus-visible{outline:2px solid var(--brass-lt);outline-offset:2px}
+button[aria-pressed="true"]{
+  background:linear-gradient(180deg,#7d5a2a 0%,#5d3f16 40%,#432c0e 100%);
+  color:var(--brass-lt);
+  text-shadow:0 1px 0 rgba(0,0,0,.7),0 0 10px rgba(243,211,155,.35);
+  box-shadow:inset 0 2px 6px rgba(0,0,0,.7),inset 0 0 0 1px rgba(243,211,155,.24);
+}
+button.ghost{
+  background:linear-gradient(180deg,rgba(60,44,26,.9),rgba(28,19,11,.95));
+  color:var(--brass);
+  border-color:#4a3418;
+  text-shadow:0 1px 0 rgba(0,0,0,.8);
+}
+button.ghost[aria-pressed="true"]{color:var(--brass-lt)}
+.readouts{
+  display:flex;
+  flex-wrap:wrap;
+  gap:clamp(10px,1.6vw,26px);
+  margin-left:auto;
+  font-family:var(--mono);
+  font-variant-numeric:tabular-nums;
+}
+.readouts div{display:flex;flex-direction:column;line-height:1.24}
+.readouts .k{font-size:9.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--faint);font-family:var(--display)}
+.readouts .v{font-size:clamp(13px,1vw + 8px,17px);color:var(--brass-lt);white-space:nowrap}
+.rate-note{
+  flex:1 1 100%;
+  font-size:.82em;
+  color:var(--faint);
+  border-top:1px solid var(--hair-soft);
+  padding-top:8px;
+  margin-top:2px;
+}
+/* ============ engraved label plate (raised on hover) ============ */
+.plate{
+  position:absolute;
+  left:0;top:0;
+  width:min(322px,74vw);
+  padding:11px 13px 12px;
+  border-radius:3px;
+  border:1px solid #5d3a12;
+  background:
+    linear-gradient(180deg,#e6bd6d 0%,#cd9833 16%,#ac7625 46%,#8f5f21 80%,#754a17 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255,241,206,.7),
+    inset 0 -1px 0 rgba(0,0,0,.42),
+    inset 0 0 0 3px rgba(255,236,196,.13),
+    0 3px 0 #0a0604,
+    0 22px 40px -20px rgba(0,0,0,.95);
+  color:#2a1b07;
+  opacity:0;
+  transform:translate(-50%,-108%) scale(.97);
+  transform-origin:50% 100%;
+  transition:opacity .18s ease,transform .2s cubic-bezier(.2,.9,.25,1);
+  pointer-events:none;
+  z-index:6;
+}
+.plate.show{opacity:1;transform:translate(-50%,-108%) scale(1)}
+.plate h3{
+  margin:0 0 2px;
+  font-family:var(--display);
+  font-weight:600;
+  font-size:clamp(14px,1.1vw + 9px,19px);
+  letter-spacing:.2em;
+  text-transform:uppercase;
+  text-shadow:0 1px 0 rgba(255,241,206,.6);
+}
+.plate .sub{
+  font-size:.76em;
+  letter-spacing:.1em;
+  color:#4d3510;
+  margin:0 0 8px;
+  text-shadow:0 1px 0 rgba(255,241,206,.4);
+}
+.plate dl{
+  display:grid;
+  grid-template-columns:auto 1fr;
+  gap:2px 12px;
+  margin:0;
+  font-family:var(--mono);
+  font-size:clamp(11px,.72vw + 8px,13px);
+  font-variant-numeric:tabular-nums;
+}
+.plate dt{
+  font-family:var(--display);
+  letter-spacing:.13em;
+  text-transform:uppercase;
+  font-size:.84em;
+  color:#4a3210;
+  align-self:center;
+}
+.plate dd{
+  margin:0;
+  text-align:right;
+  color:#1f1404;
+  border-bottom:1px solid rgba(64,42,12,.28);
+  padding-bottom:1px;
+  text-shadow:0 1px 0 rgba(255,241,206,.45);
+}
+.plate dd.last{border-bottom:0}
+.plate .anomaly{font-weight:700}
+.plate::after{ /* little stem back to the body */
+  content:"";
+  position:absolute;
+  left:50%;bottom:-9px;
+  width:1px;height:9px;
+  background:linear-gradient(180deg,#a87222,rgba(168,114,34,0));
+}
+/* ============ schedule of elements ============ */
+.schedule{margin-top:clamp(38px,6vw,74px)}
+.sched-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px 18px;border-bottom:1px solid var(--hair);padding-bottom:8px}
+.sched-head h2,.method h2,.notes h2{
+  margin:0;
+  font-family:var(--display);
+  font-weight:400;
+  font-size:clamp(21px,2.4vw,36px);
+  letter-spacing:.03em;
+  color:#f0e2c6;
+}
+.sched-head .tagline{font-size:.86em;color:var(--muted);font-style:italic}
+.tablewrap{width:100%;overflow-x:auto;margin-top:14px}
+table{border-collapse:collapse;width:100%;min-width:640px;font-size:.86em}
+caption{
+  caption-side:bottom;
+  text-align:left;
+  padding-top:10px;
+  color:var(--faint);
+  font-size:.9em;
+  font-style:italic;
+}
+th,td{padding:9px 10px;text-align:right;border-bottom:1px solid rgba(217,164,65,.12)}
+th:first-child,td:first-child{text-align:left}
+thead th{
+  font-family:var(--display);
+  font-weight:400;
+  font-size:.86em;
+  letter-spacing:.16em;
+  text-transform:uppercase;
+  color:var(--brass);
+  border-bottom:1px solid var(--hair);
+  white-space:nowrap;
+}
+tbody td{font-family:var(--mono);font-variant-numeric:tabular-nums;color:#cbbda3}
+tbody th{
+  font-family:var(--display);
+  font-weight:400;
+  font-size:1.02em;
+  letter-spacing:.16em;
+  text-transform:uppercase;
+  text-align:left;
+  color:#e6d7b8;
+  white-space:nowrap;
+}
+tbody tr:hover th,tbody tr.hot th{color:var(--brass-lt)}
+tbody tr:hover,tbody tr.hot{background:rgba(217,164,65,.07)}
+tbody tr:hover,tbody tr:focus-visible{outline:none}
+td .patina{color:var(--patina)}
+/* ============ method ============ */
+.method{
+  margin-top:clamp(38px,6vw,74px);
+  display:grid;
+  grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);
+  gap:clamp(22px,3.4vw,52px);
+  align-items:start;
+  padding-top:clamp(18px,2.4vw,28px);
+  border-top:1px solid var(--hair);
+}
+.method p{margin:0 0 1.05em;color:#c6b69b}
+.method p:first-of-type{color:#ddcdb0}
+.eq{
+  display:block;
+  margin:0 0 1.05em;
+  padding:14px 16px;
+  border-left:2px solid var(--brass-dk);
+  background:linear-gradient(90deg,rgba(217,164,65,.07),rgba(217,164,65,0));
+  font-family:var(--mono);
+  font-size:.92em;
+  color:var(--brass-lt);
+  letter-spacing:.02em;
+  white-space:normal;
+  overflow-wrap:break-word;
+}
+.eq small{display:block;margin-top:7px;color:var(--faint);font-family:var(--body);letter-spacing:0}
+.trace{border:1px solid var(--hair-soft);border-radius:4px;background:rgba(0,0,0,.28);padding:12px 14px}
+.trace h3{
+  margin:0 0 8px;
+  font-family:var(--display);
+  font-weight:400;
+  font-size:12px;
+  letter-spacing:.22em;
+  text-transform:uppercase;
+  color:var(--brass);
+}
+.trace pre{
+  margin:0;
+  font-family:var(--mono);
+  font-size:clamp(10.5px,.72vw + 8px,12.5px);
+  line-height:1.7;
+  color:#bfae92;
+  font-variant-numeric:tabular-nums;
+  white-space:pre-wrap;
+}
+.trace .hit{color:var(--brass-lt)}
+/* ============ notes ============ */
+.notes{margin-top:clamp(38px,6vw,74px);padding-top:clamp(18px,2.4vw,28px);border-top:1px solid var(--hair)}
+.notes .cols{
+  margin-top:16px;
+  columns:3 260px;
+  column-gap:clamp(20px,3vw,44px);
+  column-rule:1px solid var(--hair-soft);
+  color:#bfae92;
+  font-size:.94em;
+}
+.notes .cols p{margin:0 0 1em;break-inside:avoid-column}
+.notes .cols p:first-child::first-letter{
+  float:left;
+  font-family:var(--display);
+  font-size:3.1em;
+  line-height:.82;
+  padding:.06em .12em 0 0;
+  color:var(--brass);
+}
+.notes cite{display:block;margin-top:14px;font-style:normal;font-size:.84em;color:var(--faint);letter-spacing:.04em}
+/* ============ footer ============ */
+footer{
+  margin-top:clamp(34px,5vw,64px);
+  padding-top:16px;
+  border-top:1px solid var(--hair);
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px 24px;
+  align-items:baseline;
+  justify-content:space-between;
+  font-family:var(--display);
+  font-size:clamp(10px,.74vw + 8px,12.5px);
+  letter-spacing:.22em;
+  text-transform:uppercase;
+  color:var(--faint);
+}
+footer .mono{font-family:var(--mono);letter-spacing:.08em;text-transform:none}
+/* ============ responsive ============ */
+@media (max-width:1000px){
+  .method{grid-template-columns:minmax(0,1fr)}
+  .window.right{display:none}
+}
+@media (max-width:660px){
+  .mast-top{letter-spacing:.22em}
+  .window.left{width:104px;bottom:6px;left:6px;padding:5px}
+  .readouts{margin-left:0;width:100%}
+  .rail{gap:9px}
+  .wordmark em{letter-spacing:.16em}
+}
+@media (max-width:420px){
+  .rail .grp{flex:1 1 auto}
+  .makers{letter-spacing:.2em;padding:8px 14px}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.001ms !important;animation-iteration-count:1 !important;transition-duration:.001ms !important}
+  .rule::after{display:none}
+  .plate{transition:none}
+}
+</style>
+</head>
+<body>
+<svg class="grain" aria-hidden="true" focusable="false" width="100%" height="100%">
+  <filter id="grainf" x="0" y="0" width="100%" height="100%">
+    <feTurbulence type="fractalNoise" baseFrequency="0.86" numOctaves="3" stitchTiles="stitch" result="n"/>
+    <feColorMatrix in="n" type="saturate" values="0"/>
+  </filter>
+  <rect width="100%" height="100%" filter="url(#grainf)"/>
+</svg>
+
+<main class="wrap">
+<header class="masthead">
+  <div class="rule"></div>
+  <div class="rule thin"></div>
+  <div class="mast-top">
+    <span>Plate&nbsp;XVII</span>
+    <span>Horological &amp; Philosophical Instruments</span>
+    <b>Clock-work Orrery, seven planets &amp; one satellite</b>
+  </div>
+  <h1 class="wordmark">The Clockwork<br>Orrery<em>Brass, ebony &amp; a very long second</em></h1>
+  <p class="lede">
+    Turn the drive and the dial keeps faith with the heavens: each planet is carried on its own
+    <b>true ellipse</b>, quickened at perihelion and flagging at aphelion, exactly as the ephemeris
+    demands. The mechanism below the glass resolves three toothed wheels into a single governed motion;
+    the escapement above it will hold, if you ask it to.
+  </p>
+  <div class="makers">
+    <span class="dot"></span>
+    <span class="anno">Anno MDCCCXCIII</span>
+    <span>&middot;</span>
+    <span>London</span>
+    <span class="dot"></span>
+  </div>
+</header>
+<section class="case" aria-label="The orrery">
+  <div class="lid">
+    <h2>The Dial, in motion</h2>
+    <span class="catno">Div. 1&deg; &middot; radius 15 in. &middot; lever escapement, dead-beat &middot; No. 47</span>
+  </div>
+
+  <div class="dial" id="stage">
+    <svg id="orrery" viewBox="0 0 1000 760" role="img" aria-labelledby="oTitle oDesc">
+      <title id="oTitle">The orrery dial</title>
+      <desc id="oDesc">An engraved brass dial carrying seven concentric elliptical orbits about a central gilt Sun; each planet is placed by its true Keplerian anomaly.</desc>
+      <defs id="statdefs">
+        <radialGradient id="gGround" cx="50%" cy="44%" r="72%">
+          <stop offset="0%" stop-color="#241a11"/>
+          <stop offset="52%" stop-color="#170f09"/>
+          <stop offset="100%" stop-color="#080503"/>
+        </radialGradient>
+        <linearGradient id="gBrassPlate" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#f3d39b"/>
+          <stop offset="26%" stop-color="#d9a441"/>
+          <stop offset="62%" stop-color="#8a5a1f"/>
+          <stop offset="100%" stop-color="#5d3a12"/>
+        </linearGradient>
+        <linearGradient id="gBezel" x1="0" y1="0" x2="0.4" y2="1">
+          <stop offset="0%" stop-color="#f3d39b"/>
+          <stop offset="30%" stop-color="#c8922e"/>
+          <stop offset="55%" stop-color="#8a5a1f"/>
+          <stop offset="78%" stop-color="#d9a441"/>
+          <stop offset="100%" stop-color="#6d4416"/>
+        </linearGradient>
+        <radialGradient id="gScrew" cx="34%" cy="30%" r="76%">
+          <stop offset="0%" stop-color="#f6dfae"/>
+          <stop offset="46%" stop-color="#c8922e"/>
+          <stop offset="100%" stop-color="#6a4315"/>
+        </radialGradient>
+        <radialGradient id="gSun" cx="42%" cy="38%" r="66%">
+          <stop offset="0%" stop-color="#fffdf3"/>
+          <stop offset="26%" stop-color="#ffe9b4"/>
+          <stop offset="58%" stop-color="#f3c96a"/>
+          <stop offset="100%" stop-color="#d98f2a"/>
+        </radialGradient>
+        <radialGradient id="gCorona">
+          <stop offset="0%" stop-color="rgba(255,213,138,.55)"/>
+          <stop offset="38%" stop-color="rgba(226,160,52,.20)"/>
+          <stop offset="100%" stop-color="rgba(226,160,52,0)"/>
+        </radialGradient>
+        <linearGradient id="gPatina" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#6f7d5f"/>
+          <stop offset="100%" stop-color="#3b4632"/>
+        </linearGradient>
+      </defs>
+      <defs id="dyn"></defs>
+      <rect x="0" y="0" width="1000" height="760" fill="url(#gGround)"/>
+      <g id="engrave"></g>
+      <g id="rings"></g>
+      <g id="bodies"></g>
+      <g id="names"></g>
+      <g id="furniture"></g>
+    </svg>
+
+    <div class="plate" id="label" role="status" aria-live="off">
+      <h3 id="lbName">Mercury</h3>
+      <p class="sub" id="lbSub">Planet I &middot; dial radius 4.1 in.</p>
+      <dl>
+        <dt>Sidereal period</dt><dd id="lbPeriod">&mdash;</dd>
+        <dt>Eccentricity</dt><dd id="lbEcc">&mdash;</dd>
+        <dt>True anomaly &nu;</dt><dd class="anomaly" id="lbNu">&mdash;</dd>
+        <dt>Radius vector</dt><dd id="lbR">&mdash;</dd>
+        <dt class="last">Longitude</dt><dd class="last" id="lbLon">&mdash;</dd>
+      </dl>
+    </div>
+
+    <div class="window left">
+      <svg id="gearview" viewBox="0 0 300 210" aria-hidden="true" focusable="false">
+        <defs>
+          <radialGradient id="gGear" cx="36%" cy="30%" r="78%">
+            <stop offset="0%" stop-color="#f6dfae"/>
+            <stop offset="34%" stop-color="#d9a441"/>
+            <stop offset="72%" stop-color="#9a6a25"/>
+            <stop offset="100%" stop-color="#5d3a12"/>
+          </radialGradient>
+          <radialGradient id="gGearDeep" cx="40%" cy="34%" r="72%">
+            <stop offset="0%" stop-color="#c8922e"/>
+            <stop offset="70%" stop-color="#7c5019"/>
+            <stop offset="100%" stop-color="#432a0d"/>
+          </radialGradient>
+        </defs>
+        <rect x="0" y="0" width="300" height="210" fill="#0a0705"/>
+        <g id="gearTrain"></g>
+      </svg>
+      <span class="cap">Train &mdash; 54&nbsp;:&nbsp;24&nbsp;:&nbsp;36</span>
+    </div>
+
+    <div class="window right" id="escWindow">
+      <svg id="esc" viewBox="0 0 160 210" aria-hidden="true" focusable="false">
+        <rect x="0" y="0" width="160" height="210" fill="#0a0705"/>
+        <g id="escGroup"></g>
+        <circle class="beat" id="escBeat" cx="128" cy="26" r="4.5" fill="#f3d39b"/>
+        <text class="state-word" id="escWord" x="80" y="202">FREE</text>
+      </svg>
+      <span class="cap">Escapement</span>
+    </div>
+  </div>
+
+  <div class="rail">
+    <div class="grp" role="group" aria-label="Drive rate">
+      <span class="lbl">Drive</span>
+      <button type="button" class="rate" data-rate="1" aria-pressed="true">1&times;</button>
+      <button type="button" class="rate" data-rate="60" aria-pressed="false">60&times;</button>
+      <button type="button" class="rate" data-rate="360" aria-pressed="false">360&times;</button>
+      <button type="button" class="rate" data-rate="1800" aria-pressed="false">1800&times;</button>
+    </div>
+    <div class="grp">
+      <button type="button" id="holdBtn" class="ghost" aria-pressed="false">Hold</button>
+      <button type="button" id="resetBtn" class="ghost">Epoch</button>
+    </div>
+    <div class="readouts">
+      <div><span class="k">Dial date</span><span class="v" id="roDate">&mdash;</span></div>
+      <div><span class="k">Julian day</span><span class="v" id="roJD">&mdash;</span></div>
+      <div><span class="k">Days from epoch</span><span class="v" id="roDays">&mdash;</span></div>
+    </div>
+    <p class="rate-note">
+      Drag the dial sideways to scrub the ephemeris by hand; a rate of <b>1&times;</b> admits one day of
+      simulated ephemeris to each second of real time, <b>1800&times;</b> five years to the second.
+      <kbd>&larr;</kbd> <kbd>&rarr;</kbd> step a day, <kbd>space</kbd> holds the escapement.
+    </p>
+  </div>
+</section>
+
+<section class="schedule" aria-labelledby="schedH">
+  <div class="sched-head">
+    <h2 id="schedH">Engraved schedule of the elements</h2>
+    <span class="tagline">for the epoch 1893 January 1st, 0h Terrestrial Time</span>
+  </div>
+  <div class="tablewrap">
+    <table id="schedTable">
+      <caption>
+        Elements after the auxiliary tables of the <em>Astronomical Almanac</em>; mean longitudes reduced to the
+        stated epoch. The two right-hand columns are dimensions of the model, not of the heavens &mdash; orbit
+        radii on this dial are reduced geometrically so that Uranus may be shown at all, while periods,
+        eccentricities and every anomaly are left strictly true.
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">Planet</th>
+          <th scope="col">a (AU)</th>
+          <th scope="col">e</th>
+          <th scope="col">T (days)</th>
+          <th scope="col">&varpi; (deg)</th>
+          <th scope="col">i (deg)</th>
+          <th scope="col">Dial radius (in.)</th>
+          <th scope="col">Wheel teeth</th>
+        </tr>
+      </thead>
+      <tbody id="schedBody"></tbody>
+    </table>
+  </div>
+</section>
+<section class="method" aria-labelledby="methH">
+  <div>
+    <h2 id="methH">On the computing of the anomaly</h2>
+    <p>
+      A wheel turned at uniform speed gives a uniform angle, and the heavens are not uniform. The angle the
+      mechanism actually delivers is the <em>mean</em> anomaly <span class="eq" style="display:inline;padding:0;border:0;background:none">M</span>;
+      the angle the planet truly fills, measured at the focus from perihelion, must be extracted from it.
+    </p>
+    <span class="eq">
+      M = E &minus; e&thinsp;sin&thinsp;E
+      <small>Kepler's equation, in circular measure: the mean anomaly M is thrown upon the eccentric orbit by
+      the eccentric anomaly E and the eccentricity e. It cannot be undone algebraically.</small>
+    </span>
+    <p>
+      The artifice used on this dial is the older one of Newton: begin with the arc itself for a near-circular
+      orbit, or with a semicircle when the orbit is much elongated, then correct the trial by the defect
+      divided by the rate of filling.
+    </p>
+    <span class="eq">
+      E<sub>n+1</sub> = E<sub>n</sub> &minus; (E<sub>n</sub> &minus; e&thinsp;sin&thinsp;E<sub>n</sub> &minus; M) / (1 &minus; e&thinsp;cos&thinsp;E<sub>n</sub>)
+      <small>Three or four visits are commonly enough; the panel at the right is the live arithmetic for the
+      planet now under the cursor, printed to the thousandth of a degree.</small>
+    </span>
+    <p>
+      The true anomaly follows without further trial,
+      <span class="eq" style="display:inline;padding:0;border:0;background:none">&tan;(&nu;/2) = &radic;((1+e)/(1&minus;e))&thinsp;tan(E/2)</span>,
+      and the radius vector as <span class="eq" style="display:inline;padding:0;border:0;background:none">r = a(1 &minus; e&thinsp;cos&thinsp;E)</span>.
+      Because the sweep is solved rather than geared, Mercury gains visibly upon the dial as he rounds perihelion
+      in February and drags through aphelion in August, after the manner observed by Kepler and printed in his
+      <em>Astronomia Nova</em> of 1609. The brightened arc drawn behind each planet covers the same interval of
+      time for all of them; its length is the testimony of the second law.
+    </p>
+  </div>
+  <div class="trace">
+    <h3 id="traceHead">Newton's iteration &mdash; Mars</h3>
+    <pre id="tracePre">setting down the first trial&hellip;</pre>
+  </div>
+</section>
+
+<section class="notes" aria-labelledby="notesH">
+  <h2 id="notesH">Provenance &amp; remarks</h2>
+  <div class="cols">
+    <p>
+      The first clock-work model of the solar system is customarily given to George Graham, the London
+      clockmaker, who set it on his lathe about the year 1704 with John Rowley working the divisions. Rowley
+      built a second copy for Charles Boyle, Earl of Orrery, about 1713, and the nobleman's name has since
+      been borne by every gear-cut attempt at the heavens, to the confusion of spellers and the comfort of
+      dealers.
+    </p>
+    <p>
+      Graham's model carried but five planets and the Earth's Moon; the dial was turned horizontally and
+      looked down upon like a table. It was Benjamin Martin of Craven Street who, from 1766, pushed the tribe
+      to its grandest exhibition &mdash; a three-foot universal orrery, planet tables and all, moved by one
+      arboretum and a fiddle-key governing the pace. His instruments were advertized as teaching &ldquo;the
+      science of astronomy without the trouble of a telescope&rdquo;, which is very nearly, and harmlessly, a lie.
+    </p>
+    <p>
+      This No. 47 belongs to the late reduction: seven worlds, one satellite, and the elements taken from
+      the auxiliary tables then in use. Herschel's Georgium Sidus, discovered in 1781, is admitted upon its
+      proper wheel; Neptune, found by Le Verrier and Adams in 1846, is deliberately omitted &mdash; the frame
+      will not carry the eighth arc, and the maker preferred an honest omission to a false arc. The long
+      ellipticities are preserved, not corrected: nothing on this dial is geared to a circle.
+    </p>
+    <p>
+      Use. Turn the handle slowly, or scrub the dial with the finger, and observe that the escapement is an
+      indication and not a tyrant &mdash; hold it and the planets abide exactly where the ephemeris has left them,
+      which is the whole merit of a solved anomaly over a counted one. The plate raised over any planet gives
+      the period, the eccentricity, and the anomaly it is at this instant filling.
+    </p>
+    <cite>
+      Remarks after the sale catalogues of 1889&ndash;1901; Martin's universal orrery, Science &amp; Industry
+      Research Archive, London; Kepler, <em>Astronomia Nova</em>, Heidelberg, 1609.
+    </cite>
+  </div>
+</section>
+
+<footer>
+  <span>No.&nbsp;47 &middot; reduced for the plate &middot; divided by hand</span>
+  <span class="mono">Solved by Kepler&rsquo;s equation, Newton&rsquo;s iteration, 12 terms maximum</span>
+  <span>Anno MDCCCXCIII &middot; London</span>
+</footer>
+</main>
+
+<script>
+(function(){
+'use strict';
+var NS='http://www.w3.org/2000/svg';
+var RAD=Math.PI/180, DEG=180/Math.PI;
+function $(id){return document.getElementById(id);}
+function el(name,attrs,parent){
+  var e=document.createElementNS(NS,name);
+  if(attrs){for(var k in attrs){e.setAttribute(k,attrs[k]);}}
+  if(parent){parent.appendChild(e);}
+  return e;
+}
+function p2(n){return n<10?'0'+n:''+n;}
+function fmt(n,d){var s=n.toFixed(d);return s.replace(/\B(?=(\d{3})+(?!\d))/g,',');}
+
+/* ---- the pieces of the machine ---- */
+var CX=500, CY=344, K=0.52, IN=23.5;          /* centre, vertical squash, pixels per dial inch */
+var EPOCH_JD=2412464.5, J2000=2451545.0;      /* 1893 Jan 1.0 TT, and the epoch of the elements */
+
+var PLANETS=[
+  {name:'Mercury',roman:'I',  a:0.387098,e:0.205630,T:87.969,   peri:77.456, L0:252.251,inc:7.005,dial:4.1, rr:5.4, hub:'#cdc3b6',mid:'#8d8274',rim:'#2d2720',teeth:'84/20'},
+  {name:'Venus',  roman:'II', a:0.723332,e:0.006772,T:224.701,  peri:131.564,L0:181.980,inc:3.395,dial:5.9, rr:8.6, hub:'#f6e3bb',mid:'#c99a52',rim:'#4a3113',teeth:'116/22'},
+  {name:'Earth',  roman:'III',a:1.000001,e:0.016709,T:365.256,  peri:102.947,L0:100.464,inc:0.000,dial:7.5, rr:9.0, hub:'#cfe4f0',mid:'#3f7296',rim:'#12212e',teeth:'126/18'},
+  {name:'Mars',   roman:'IV', a:1.523679,e:0.093400,T:686.980,  peri:336.041,L0:355.453,inc:1.850,dial:9.2, rr:6.8, hub:'#f0a878',mid:'#b2593a',rim:'#3a1a10',teeth:'152/24'},
+  {name:'Jupiter',roman:'V',  a:5.202887,e:0.048386,T:4332.59,  peri:14.728, L0:34.404, inc:1.303,dial:11.2,rr:17.0,hub:'#f2ddb9',mid:'#c19a68',rim:'#43301b',teeth:'244/26'},
+  {name:'Saturn', roman:'VI', a:9.536676,e:0.053862,T:10759.22, peri:92.599, L0:49.944, inc:2.485,dial:13.5,rr:14.4,hub:'#f4e7c2',mid:'#c8ae76',rim:'#453a22',teeth:'386/28',ring:true},
+  {name:'Uranus', roman:'VII',a:19.18916,e:0.047257,T:30685.4,  peri:170.954,L0:313.238,inc:0.773,dial:15.7,rr:10.6,hub:'#dff5f6',mid:'#8dc2c8',rim:'#274045',teeth:'690/30'}
+];
+var MOON={T:27.321661,rr:2.5,dist:15.5};
+
+/* ---- Kepler: solve M = E - e sin E by Newton's iteration ---- */
+function eccAnom(Mdeg,e,trace){
+  var M=Mdeg*RAD, E=(e<0.8?M:Math.PI), i, f, fp, d;
+  for(i=0;i<12;i++){
+    f=E-e*Math.sin(E)-M;
+    fp=1-e*Math.cos(E);
+    d=f/fp;
+    E-=d;
+    if(trace){trace.push({n:i+1,E:E*DEG,d:d*DEG});}
+    if(Math.abs(d)<1e-12){break;}
+  }
+  return E;
+}
+function place(p,jd){
+  var L=p.L0+360*(jd-J2000)/p.T;
+  var M=((L-p.peri)%360+360)%360;
+  var E=eccAnom(M,p.e,null);
+  var nu=2*Math.atan2(Math.sqrt(1+p.e)*Math.sin(E/2),Math.sqrt(1-p.e)*Math.cos(E/2))*DEG;
+  var r=p.a*(1-p.e*Math.cos(E));
+  return {E:E,nu:((nu%360)+360)%360,r:r,lon:(((nu+p.peri)%360)+360)%360,M:M};
+}
+/* dial position from the eccentric anomaly: the same parametrisation draws the ring,
+   so a planet can never drift off its own engraved ellipse. */
+function xy(p,E){
+  var k=p.dial*IN/p.a;
+  return [CX+k*p.a*(Math.cos(E)-p.e), CY-k*p.a*Math.sqrt(1-p.e*p.e)*Math.sin(E)*K];
+}
+/* ---- engraving ---- */
+var gEn=$('engrave'), gRings=$('rings'), gBodies=$('bodies'), gNames=$('names'),
+    gFurn=$('furniture'), dyn=$('dyn'), svg=$('orrery');
+var R_OUT=380, R_BEZ=404, R_NUM=394, R_CARD=426, R_IN=352;
+function ep(rx,ry,deg){var a=deg*RAD;return [CX+rx*Math.cos(a),CY-ry*Math.sin(a)];}
+function ringD(rx,ry,step){
+  var n=Math.max(40,Math.round(360/step)),d='';
+  for(var i=0;i<=n;i++){var q=ep(rx,ry,i*step);d+=(i?'L':'M')+q[0].toFixed(2)+' '+q[1].toFixed(2);}
+  return d+'Z';
+}
+function buildDial(){
+  /* brass bezel: shadow groove, metal, inner glint */
+  el('path',{d:ringD(R_BEZ,R_BEZ*K,1),fill:'none',stroke:'rgba(0,0,0,.8)','stroke-width':11},gEn);
+  el('path',{d:ringD(R_BEZ,R_BEZ*K,1),fill:'none',stroke:'url(#gBezel)','stroke-width':7},gEn);
+  el('path',{d:ringD(R_BEZ-4.5,(R_BEZ-4.5)*K,1),fill:'none',stroke:'rgba(246,223,174,.34)','stroke-width':1},gEn);
+  el('path',{d:ringD(R_BEZ+5,(R_BEZ+5)*K,1),fill:'none',stroke:'rgba(60,38,12,.9)','stroke-width':1.5},gEn);
+  el('path',{d:ringD(R_IN,R_IN*K,1),fill:'none',stroke:'rgba(217,164,65,.16)','stroke-width':1},gEn);
+  /* patina blooms where the brass has breathed */
+  el('ellipse',{cx:CX-322,cy:CY+104,rx:30,ry:11,fill:'url(#gPatina)',opacity:.13},gEn);
+  el('ellipse',{cx:CX+296,cy:CY-118,rx:24,ry:9,fill:'url(#gPatina)',opacity:.10},gEn);
+  /* the graduated circle: one degrees to five, ten, and the signs */
+  for(var d0=0;d0<360;d0+=2){
+    var len=5,cls='tick';
+    if(d0%30===0){len=26;cls='tick sign';}
+    else if(d0%10===0){len=19;cls='tick ten';}
+    else if(d0%5===0){len=13;cls='tick five';}
+    var a=ep(R_OUT,R_OUT*K,d0),b=ep(R_OUT-len,(R_OUT-len)*K,d0);
+    el('line',{x1:a[0].toFixed(2),y1:a[1].toFixed(2),x2:b[0].toFixed(2),y2:b[1].toFixed(2),'class':cls},gEn);
+  }
+  var Z=['I','II','III','IV','V','VI','VII','VIII','IX','X','XI','XII'];
+  for(var s=0;s<12;s++){
+    var q=ep(R_NUM,R_NUM*K,s*30+15);
+    var t=el('text',{x:q[0].toFixed(1),y:(q[1]+5).toFixed(1),'class':'zlab'},gEn);
+    t.textContent=Z[s];
+  }
+  var card=[['0&deg;',0],['90&deg;',90],['180&deg;',180],['270&deg;',270]];
+  for(var c=0;c<card.length;c++){
+    var p3=ep(R_CARD,R_CARD*K,card[c][1]);
+    var t2=el('text',{x:p3[0].toFixed(1),y:(p3[1]+4).toFixed(1),'class':'deglab'},gEn);
+    t2.textContent=card[c][0].replace('&deg;','\u00b0');
+  }
+  var v=ep(R_CARD+16,(R_CARD+16)*K,0);
+  var tv=el('text',{x:v[0].toFixed(1),y:(v[1]-8).toFixed(1),'class':'deglab'},gEn);
+  tv.textContent='\u00b0 VER';
+  /* equinox line and meridian */
+  el('line',{x1:CX-R_BEZ+10,y1:CY,x2:CX+R_BEZ-10,y2:CY,'class':'hairline'},gEn);
+  el('line',{x1:CX,y1:CY-(R_BEZ*K)+10,x2:CX,y2:CY+(R_BEZ*K)-10,'class':'hairline'},gEn);
+}
+function buildRings(){
+  for(var i=0;i<PLANETS.length;i++){
+    var p=PLANETS[i],k=p.dial*IN/p.a;
+    var rx=k*p.a, ry=k*p.a*Math.sqrt(1-p.e*p.e);
+    var cxo=-k*p.e;                       /* the Sun sits at the focus, so the ellipse is offset */
+    var d='';
+    for(var j=0;j<=260;j++){
+      var E=j/260*2*Math.PI;
+      var x=CX+cxo+rx*Math.cos(E), y=CY-ry*Math.sin(E)*K;
+      d+=(j?'L':'M')+x.toFixed(2)+' '+y.toFixed(2);
+    }
+    d+='Z';
+    el('path',{d:d,'class':'groove',transform:'translate(0,1.4)'},gRings);
+    var ring=el('path',{d:d,'class':'ring'},gRings);
+    p.ringEl=ring;
+    p.trailEl=el('path',{d:'M0 0','class':'trail',opacity:.5},gRings);
+    p.trailDays=Math.min(34,Math.max(5,0.028*p.T));
+  }
+}
+/* ---- the Sun, the planets, the Moon ---- */
+function buildBodies(){
+  var sun=el('g',{},gBodies);
+  el('circle',{cx:CX,cy:CY,r:104,fill:'url(#gCorona)'},sun);
+  for(var r=0;r<16;r++){
+    var a=r*22.5*RAD, r1=32, r2=(r%2?46:56);
+    var x1=CX+Math.cos(a)*r1,y1=CY+Math.sin(a)*r1;
+    var x2=CX+Math.cos(a)*r2,y2=CY+Math.sin(a)*r2;
+    var w=2.1;
+    el('path',{
+      d:'M'+(x1-Math.sin(a)*w).toFixed(1)+' '+(y1+Math.cos(a)*w).toFixed(1)+
+        'L'+x2.toFixed(1)+' '+y2.toFixed(1)+
+        'L'+(x1+Math.sin(a)*w).toFixed(1)+' '+(y1-Math.cos(a)*w).toFixed(1)+'Z',
+      fill:'#f3c96a',opacity:.34},sun);
+  }
+  el('circle',{cx:CX,cy:CY,r:26,fill:'url(#gSun)'},sun);
+  el('circle',{cx:CX,cy:CY,r:26,fill:'none',stroke:'rgba(255,246,222,.6)','stroke-width':.9},sun);
+  var st=el('text',{x:CX,y:CY+82,'class':'sunword'},sun);
+  st.textContent='CENTRUM SOLIS';
+
+  for(var i=0;i<PLANETS.length;i++){
+    var p=PLANETS[i];
+    var g=el('g',{},gBodies);
+    if(p.ring){
+      var rg=el('g',{transform:'rotate(-16)'},g);
+      el('ellipse',{cx:0,cy:0,rx:p.rr*2.25,ry:p.rr*0.78,fill:'none',stroke:'#cbb487','stroke-width':2.6,opacity:.62},rg);
+      el('ellipse',{cx:0,cy:0,rx:p.rr*1.72,ry:p.rr*0.58,fill:'none',stroke:'#8d7c58','stroke-width':1.2,opacity:.5},rg);
+    }
+    var grad=el('radialGradient',{id:'pg'+i,cx:'34%',cy:'28%',r:'78%'},dyn);
+    el('stop',{offset:'0%','stop-color':p.hub},grad);
+    el('stop',{offset:'50%','stop-color':p.mid},grad);
+    el('stop',{offset:'100%','stop-color':p.rim},grad);
+    var night=el('linearGradient',{id:'pn'+i,x1:'0',y1:'0',x2:'1',y2:'0'},dyn);
+    el('stop',{offset:'0%','stop-color':'#000000','stop-opacity':'0'},night);
+    el('stop',{offset:'34%','stop-color':'#0a0603','stop-opacity':'.10'},night);
+    el('stop',{offset:'58%','stop-color':'#060402','stop-opacity':'.70'},night);
+    el('stop',{offset:'80%','stop-color':'#020101','stop-opacity':'.92'},night);
+    el('stop',{offset:'100%','stop-color':'#000000','stop-opacity':'.96'},night);
+    el('circle',{cx:0,cy:0,r:p.rr,fill:'url(#pg'+i+')'},g);
+    if(p.ring){
+      el('path',{d:'M'+(-p.rr*2.25)+' 0A'+(p.rr*2.25)+' '+(p.rr*0.78)+' 0 0 0 '+(p.rr*2.25)+' 0',
+        fill:'none',stroke:'#e2cda0','stroke-width':2.2,opacity:.5,transform:'rotate(-16)'},g);
+    }
+    var term=el('circle',{cx:0,cy:0,r:p.rr,fill:'url(#pn'+i+')'},g);
+    el('circle',{cx:0,cy:0,r:p.rr,fill:'none',stroke:'rgba(243,211,155,.26)','stroke-width':.8},g);
+    p.termGrad=night; p.gEl=g;
+    if(p.name==='Earth'){
+      el('circle',{cx:0,cy:0,r:MOON.dist,fill:'none',stroke:'rgba(217,164,65,.24)','stroke-width':.8,'stroke-dasharray':'2 3'},g);
+      var mg=el('radialGradient',{id:'mg0',cx:'34%',cy:'30%',r:'80%'},dyn);
+      el('stop',{offset:'0%','stop-color':'#efe8db'},mg);
+      el('stop',{offset:'100%','stop-color':'#5f584d'},mg);
+      var mnt=el('linearGradient',{id:'mn0',x1:'0',y1:'0',x2:'1',y2:'0'},dyn);
+      el('stop',{offset:'0%','stop-color':'#000000','stop-opacity':'0'},mnt);
+      el('stop',{offset:'55%','stop-color':'#040302','stop-opacity':'.72'},mnt);
+      el('stop',{offset:'100%','stop-color':'#000000','stop-opacity':'.95'},mnt);
+      p.moonOrbit=el('g',{},g);
+      el('circle',{cx:MOON.dist,cy:0,r:MOON.rr,fill:'url(#mg0)'},p.moonOrbit);
+      p.moonTerm=el('circle',{cx:MOON.dist,cy:0,r:MOON.rr,fill:'url(#mn0)'},p.moonOrbit);
+      p.moonGrad=mnt;
+    }
+    el('circle',{cx:0,cy:0,r:Math.max(p.rr+11,17),'class':'body-hit','data-i':i},g);
+    var nm=el('text',{x:0,y:0,'class':'plname'},gNames);
+    nm.textContent=p.roman;
+    p.nameEl=nm;
+    p.hit=g.lastChild;
+  }
+}
+/* ---- case furniture: corner brackets, screws, the maker's plate ---- */
+function mount(x,y,sx,sy){
+  var g=el('g',{transform:'translate('+x+','+y+') scale('+sx+','+sy+')'},gFurn);
+  el('path',{d:'M0 0 H108 V15 H15 V108 H0 Z',fill:'url(#gBrassPlate)',stroke:'#40290e','stroke-width':1},g);
+  el('path',{d:'M4 4 H96',fill:'none',stroke:'rgba(255,240,205,.45)','stroke-width':1.2},g);
+  el('circle',{cx:30,cy:30,r:7,'class':'screw'},g);
+  el('line',{x1:25.2,y1:30,x2:34.8,y2:30,'class':'screw-slot',transform:'rotate(26,30,30)'},g);
+  el('circle',{cx:15,cy:86,r:5.2,'class':'screw'},g);
+  el('line',{x1:11.4,y1:86,x2:18.6,y2:86,'class':'screw-slot',transform:'rotate(-40,15,86)'},g);
+}
+function buildFurniture(){
+  mount(0,0,1,1);mount(1000,0,-1,1);mount(0,760,1,-1);mount(1000,760,-1,-1);
+  var w=430,x0=CX-w/2,y0=636;
+  el('rect',{x:x0-2,y:y0-1,width:w+4,height:74,rx:5,fill:'rgba(0,0,0,.75)'},gFurn);
+  el('rect',{x:x0,y:y0,width:w,height:70,rx:4,fill:'url(#gBrassPlate)',stroke:'#40290e','stroke-width':1.2},gFurn);
+  el('rect',{x:x0+5,y:y0+5,width:w-10,height:60,rx:2,fill:'none',stroke:'rgba(74,47,16,.55)','stroke-width':1},gFurn);
+  var t=el('text',{x:CX,y:y0+34,fill:'#2b1c08','text-anchor':'middle','font-family':'Didot,"Bodoni MT","Hoefler Text",Palatino,Georgia,serif','font-size':'21','letter-spacing':'5.2'},gFurn);
+  t.textContent='ANNO MDCCCXCIII \u00b7 LONDON';
+  var t2=el('text',{x:CX,y:y0+56,fill:'#4a3210','text-anchor':'middle','font-family':'Didot,"Bodoni MT","Hoefler Text",Palatino,Georgia,serif','font-size':'10.5','letter-spacing':'4'},gFurn);
+  t2.textContent='OPUS HOROLOGIORUM \u00b7 NUM. XLVII \u00b7 DIV. UNI GRADUM';
+  var sc=[[x0+18,y0+35],[x0+w-18,y0+35]];
+  for(var i=0;i<2;i++){
+    el('circle',{cx:sc[i][0],cy:sc[i][1],r:6.4,'class':'screw'},gFurn);
+    el('line',{x1:sc[i][0]-4.4,y1:sc[i][1],x2:sc[i][0]+4.4,y2:sc[i][1],'class':'screw-slot',transform:'rotate(35,'+sc[i][0]+','+sc[i][1]+')'},gFurn);
+  }
+  var hs=el('text',{x:CX,y:150,'class':'deglab',fill:'rgba(217,164,65,.34)','font-size':'11','letter-spacing':'6'},gFurn);
+  hs.textContent='ESCAPEMENT HELD';
+  hs.setAttribute('opacity','0');
+  return hs;
+}
+/* ---- the gear train: teeth cut on a common module, so the ratios are true ---- */
+var MOD=2.3;
+function gearPath(N,rp){
+  var ro=rp+MOD*0.95, ri=rp-MOD*1.2, st=2*Math.PI/N, d='';
+  function pt(r,a){return (r*Math.cos(a)).toFixed(2)+' '+(r*Math.sin(a)).toFixed(2);}
+  for(var i=0;i<N;i++){
+    var a=i*st;
+    if(i===0){d='M'+pt(ri,a);}
+    d+='A'+ri.toFixed(2)+' '+ri.toFixed(2)+' 0 0 1 '+pt(ri,a+st*0.16);
+    d+='L'+pt(ro,a+st*0.30);
+    d+='A'+ro.toFixed(2)+' '+ro.toFixed(2)+' 0 0 1 '+pt(ro,a+st*0.52);
+    d+='L'+pt(ri,a+st*0.66);
+    d+='A'+ri.toFixed(2)+' '+ri.toFixed(2)+' 0 0 1 '+pt(ri,a+st);
+  }
+  return d+'Z';
+}
+function buildTrain(){
+  var gT=$('gearTrain');
+  var spec=[{N:54,x:100,y:124},{N:24,p:0,ang:2},{N:36,p:1,ang:-58}];
+  var gears=[],i;
+  for(i=0;i<spec.length;i++){
+    var s=spec[i], r=MOD*s.N/2, o={N:s.N,r:r};
+    if(i===0){o.x=s.x;o.y=s.y;o.w=1;}
+    else{
+      var par=gears[s.p];
+      o.x=par.x+(par.r+r)*Math.cos(s.ang*RAD);
+      o.y=par.y+(par.r+r)*Math.sin(s.ang*RAD);
+      o.w=-par.w*par.N/s.N;
+    }
+    gears.push(o);
+  }
+  /* brass pillars behind the wheels */
+  for(i=0;i<gears.length;i++){
+    el('circle',{cx:gears[i].x,cy:gears[i].y,r:gears[i].r+MOD*1.6,fill:'rgba(0,0,0,.55)'},gT);
+  }
+  for(i=0;i<gears.length;i++){
+    var o=gears[i], g=el('g',{},gT), ri=o.r-MOD*1.2;
+    el('path',{d:gearPath(o.N,o.r),fill:'url(#gGear)',stroke:'#4a2f10','stroke-width':1},g);
+    el('circle',{cx:0,cy:0,r:ri*0.98,fill:'none',stroke:'rgba(246,223,174,.3)','stroke-width':1},g);
+    var holes=o.N>40?5:(o.N>28?4:3);
+    for(var h=0;h<holes;h++){
+      var a=h/holes*360+14;
+      el('circle',{cx:(o.r*0.56*Math.cos(a*RAD)).toFixed(2),cy:(o.r*0.56*Math.sin(a*RAD)).toFixed(2),
+        r:(o.r*0.16).toFixed(2),fill:'#0a0705',stroke:'rgba(217,164,65,.4)','stroke-width':.9},g);
+    }
+    el('circle',{cx:0,cy:0,r:o.r*0.30,fill:'url(#gGearDeep)',stroke:'#40290e','stroke-width':1},g);
+    el('circle',{cx:0,cy:0,r:o.r*0.10,fill:'url(#gScrew)',stroke:'#33200a','stroke-width':.8},g);
+    o.gEl=g;
+  }
+  return gears;
+}
+/* ---- the escapement: escape wheel, dead-beat anchor, crutch and bob ---- */
+function escWheelPath(N,ri,ro){
+  var st=2*Math.PI/N,d='';
+  for(var i=0;i<N;i++){
+    var a=i*st;
+    var x1=(ri*Math.cos(a)).toFixed(2),y1=(ri*Math.sin(a)).toFixed(2);
+    var x2=(ro*Math.cos(a+st*0.12)).toFixed(2),y2=(ro*Math.sin(a+st*0.12)).toFixed(2);
+    var x3=(ri*1.03*Math.cos(a+st*0.70)).toFixed(2),y3=(ri*1.03*Math.sin(a+st*0.70)).toFixed(2);
+    d+=(i?'L':'M')+x1+' '+y1+'L'+x2+' '+y2+'L'+x3+' '+y3;
+  }
+  return d+'Z';
+}
+function buildEscapement(){
+  var G=$('escGroup');
+  el('rect',{x:12,y:8,width:8,height:194,rx:4,fill:'url(#gBrassPlate)',opacity:.4},G);
+  el('rect',{x:140,y:8,width:8,height:194,rx:4,fill:'url(#gBrassPlate)',opacity:.4},G);
+  var wheel=el('g',{transform:'translate(80,72)'},G);
+  el('path',{d:escWheelPath(15,27,37),fill:'url(#gGear)',stroke:'#4a2f10','stroke-width':.9},wheel);
+  el('circle',{cx:0,cy:0,r:27,fill:'none',stroke:'rgba(246,223,174,.25)','stroke-width':.8},wheel);
+  el('circle',{cx:0,cy:0,r:13,fill:'url(#gGearDeep)',stroke:'#40290e','stroke-width':1},wheel);
+  el('circle',{cx:0,cy:0,r:3.4,fill:'url(#gScrew)',stroke:'#33200a','stroke-width':.8},wheel);
+  var anchor=el('g',{transform:'translate(80,26)'},G);
+  el('path',{d:'M-7 -10 L7 -10 L9 20 L31 33 L34 47 L21 50 L6 37 L-6 37 L-21 50 L-34 47 L-31 33 L-9 20 Z',
+    fill:'url(#gGear)',stroke:'#4a2f10','stroke-width':1},anchor);
+  el('path',{d:'M28 40 L36 45 L33 51 L25 47 Z',fill:'#8fa07e',stroke:'#39422e','stroke-width':.8},anchor);
+  el('path',{d:'M-28 40 L-36 45 L-33 51 L-25 47 Z',fill:'#8fa07e',stroke:'#39422e','stroke-width':.8},anchor);
+  el('circle',{cx:0,cy:0,r:4.2,fill:'url(#gScrew)',stroke:'#33200a','stroke-width':.9},anchor);
+  var pend=el('g',{},G);
+  el('line',{x1:80,y1:26,x2:80,y2:168,stroke:'#b98d3f','stroke-width':2.2},pend);
+  el('line',{x1:80,y1:30,x2:80,y2:168,stroke:'rgba(246,223,174,.4)','stroke-width':.8},pend);
+  el('circle',{cx:80,cy:170,r:13,fill:'url(#gScrew)',stroke:'#40290e','stroke-width':1.2},pend);
+  el('circle',{cx:80,cy:170,r:5.5,fill:'none',stroke:'rgba(64,41,14,.6)','stroke-width':1},pend);
+  el('circle',{cx:80,cy:34,r:2.6,fill:'url(#gScrew)',stroke:'#33200a','stroke-width':.7},pend);
+  return {wheel:wheel,anchor:anchor,pend:pend};
+}
+/* ---- build it ---- */
+var reduce=!!(window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+buildDial();buildRings();buildBodies();
+var heldTag=buildFurniture(), gears=buildTrain(), esc=buildEscapement();
+var stage=$('stage'), plate=$('label'), holdBtn=$('holdBtn'), escWord=$('escWord'),
+    escWin=$('escWindow'), roDate=$('roDate'), roJD=$('roJD'), roDays=$('roDays'),
+    tracePre=$('tracePre'), traceHead=$('traceHead');
+svg.setAttribute('tabindex','0');
+var days=0, rate=1, held=reduce, focus=-1, hoverIdx=-1, gearAng=0, beat=0, last=0, txtT=0, traceT=0;
+
+/* ---- calendar ---- */
+var MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function jdToDate(jd){
+  var z=Math.floor(jd+0.5), f=jd+0.5-z, a=z;
+  if(z>=2299161){var al=Math.floor((z-1867216.25)/36524.25);a=z+1+al-Math.floor(al/4);}
+  var b=a+1524,c=Math.floor((b-122.1)/365.25),d=Math.floor(365.25*c),e=Math.floor((b-d)/30.6001);
+  var dayF=b-d-Math.floor(30.6001*e)+f;
+  var month=e<14?e-1:e-13, year=month>2?c-4716:c-4715;
+  var day=Math.floor(dayF), mins=Math.round((dayF-day)*1440);
+  if(mins>=1440){mins-=1440;day++;}
+  return {y:year,m:month,d:day,h:Math.floor(mins/60),mi:mins%60};
+}
+/* ---- the schedule table ---- */
+(function buildTable(){
+  var tb=$('schedBody'),html='';
+  for(var i=0;i<PLANETS.length;i++){
+    var p=PLANETS[i];
+    html+='<tr data-i="'+i+'"><th scope="row">'+p.name+'</th>'+
+      '<td>'+p.a.toFixed(6)+'</td><td>'+p.e.toFixed(6)+'</td><td>'+p.T.toFixed(3)+'</td>'+
+      '<td>'+p.peri.toFixed(3)+'</td><td>'+(p.inc===0?'0.000':p.inc.toFixed(3))+'</td>'+
+      '<td>'+p.dial.toFixed(1)+'</td><td><span class="patina">'+p.teeth+'</span></td></tr>';
+  }
+  tb.innerHTML=html;
+})();
+/* ---- the engraved plate raised over a planet ---- */
+function fillPlate(p){
+  $('lbName').textContent=p.name;
+  $('lbSub').textContent='Planet '+p.roman+' \u00b7 dial radius '+p.dial.toFixed(1)+' in. \u00b7 reduced';
+  var yr=p.T/365.256;
+  $('lbPeriod').textContent=p.T.toFixed(3)+' d'+(yr>=0.1?' ('+yr.toFixed(3)+' yr)':'');
+  $('lbEcc').textContent=p.e.toFixed(6);
+  $('lbR').textContent=(p.lastPl?p.lastPl.r.toFixed(5):'\u2014')+' AU';
+  $('lbLon').textContent=(p.lastPl?p.lastPl.lon.toFixed(2):'\u2014')+'\u00b0';
+}
+function plateNumbers(){
+  var p=PLANETS[focus];
+  if(p&&p.lastPl){$('lbNu').textContent=p.lastPl.nu.toFixed(2)+'\u00b0';}
+}
+function placePlate(){
+  if(focus<0){return;}
+  var p=PLANETS[focus];
+  if(!p.last){return;}
+  var rs=svg.getBoundingClientRect(), rd=stage.getBoundingClientRect(), sc=rs.width/1000;
+  var x=(rs.left-rd.left)+p.last[0]*sc, y=(rs.top-rd.top)+p.last[1]*sc;
+  var pw=plate.offsetWidth, ph=plate.offsetHeight;
+  plate.classList.toggle('below',y-ph-24<0);
+  x=Math.max(pw/2+6,Math.min(rd.width-pw/2-6,x));
+  y=Math.max(ph*0.4+6,Math.min(rd.height-ph*0.35,y));
+  plate.style.left=x.toFixed(1)+'px';
+  plate.style.top=y.toFixed(1)+'px';
+}
+function setFocus(i,fromTable){
+  if(focus>=0){PLANETS[focus].ringEl.classList.remove('sel');PLANETS[focus].nameEl.classList.remove('on');}
+  var rows=$('schedBody').children;
+  if(rows[focus])rows[focus].classList.remove('hot');
+  focus=i;
+  if(i<0){plate.classList.remove('show');return;}
+  var p=PLANETS[i];
+  p.ringEl.classList.add('sel');p.nameEl.classList.add('on');
+  if(rows[i])rows[i].classList.add('hot');
+  fillPlate(p);plateNumbers();plate.classList.add('show');placePlate();
+  traceHead.textContent="Newton's iteration \u2014 "+p.name;
+  if(!fromTable)updateTrace();
+}
+/* ---- Newton's arithmetic, printed live ---- */
+function updateTrace(){
+  var i=focus>=0?focus:(hoverIdx>=0?hoverIdx:3), p=PLANETS[i];
+  var jd=EPOCH_JD+days, L=p.L0+360*(jd-J2000)/p.T, M=((L-p.peri)%360+360)%360;
+  var tr=[];eccAnom(M,p.e,tr);
+  var seed=(p.e<0.8?M:180);
+  var out='planet: '+p.name+'   e = '+p.e.toFixed(6)+'\n'+
+          'M = '+M.toFixed(4)+' deg   seed E\u2080 = '+seed.toFixed(4)+'\n\n'+
+          '  n        E\u2099 (deg)          correction\n';
+  out+='  0  '+seed.toFixed(12).padStart(16)+'            \u2014\n';
+  for(var k=0;k<tr.length;k++){
+    out+='  '+k+'  '+tr[k].E.toFixed(12).padStart(16)+'  '+(tr[k].d>=0?' ':'')+tr[k].d.toFixed(12)+'\n';
+  }
+  var nu=2*Math.atan2(Math.sqrt(1+p.e)*Math.sin(tr[tr.length-1].E*RAD/2),
+                      Math.sqrt(1-p.e)*Math.cos(tr[tr.length-1].E*RAD/2))*DEG;
+  out+='\nconverged in '+tr.length+' visits\ntrue anomaly \u03bd = '+(((nu%360)+360)%360).toFixed(6)+' deg';
+  tracePre.textContent=out;
+}
+/* ---- the dial, frame by frame ---- */
+function render(){
+  var jd=EPOCH_JD+days,i,s;
+  for(i=0;i<PLANETS.length;i++){
+    var p=PLANETS[i], pl=place(p,jd), pos=xy(p,pl.E);
+    p.lastPl=pl;p.last=pos;
+    p.gEl.setAttribute('transform','translate('+pos[0].toFixed(2)+','+pos[1].toFixed(2)+')');
+    var anti=Math.atan2(pos[1]-CY,pos[0]-CX)*DEG;
+    p.termGrad.setAttribute('gradientTransform','rotate('+anti.toFixed(2)+' 0.5 0.5)');
+    var dE=2*Math.PI*p.trailDays/p.T, d='';
+    for(s=0;s<=10;s++){var q=xy(p,pl.E-dE*(1-s/10));d+=(s?'L':'M')+q[0].toFixed(2)+' '+q[1].toFixed(2);}
+    p.trailEl.setAttribute('d',d);
+    p.nameEl.setAttribute('x',pos[0].toFixed(1));
+    p.nameEl.setAttribute('y',(pos[1]-p.rr-9).toFixed(1));
+    if(p.moonOrbit){
+      var ma=((360*jd/MOON.T)+214)%360;
+      p.moonOrbit.setAttribute('transform','rotate('+ma.toFixed(2)+')');
+      p.moonGrad.setAttribute('gradientTransform','rotate('+(anti-ma).toFixed(2)+' 0.5 0.5)');
+    }
+  }
+  if(focus>=0){placePlate();plateNumbers();}
+}
+function driveMechanism(dt){
+  var free=!held;
+  if(free){
+    var dps=Math.max(1.6,Math.min(210,rate*0.34));
+    gearAng=(gearAng+dt*dps)%360000;
+    beat+=dt;
+  }
+  for(var i=0;i<gears.length;i++){
+    gears[i].gEl.setAttribute('transform','translate('+gears[i].x.toFixed(2)+' '+gears[i].y.toFixed(2)+
+      ') rotate('+(gearAng*gears[i].w).toFixed(2)+')');
+  }
+  var th=5.2*Math.sin(Math.PI*beat);
+  esc.pend.setAttribute('transform','rotate('+th.toFixed(3)+',80,26)');
+  esc.anchor.setAttribute('transform','translate(80,26) rotate('+(th*0.82).toFixed(3)+')');
+  var n=Math.floor(beat),f=beat-n,e=f<0.22?1-Math.pow(1-f/0.22,3):1;
+  esc.wheel.setAttribute('transform','translate(80,72) rotate('+(12*(n+e)).toFixed(2)+')');
+}
+function setHeld(v){
+  held=v;
+  holdBtn.setAttribute('aria-pressed',v?'true':'false');
+  holdBtn.textContent=v?'Resume':'Hold';
+  escWord.textContent=v?'HELD':'FREE';
+  escWord.classList.toggle('hold',v);
+  stage.classList.toggle('running',!v);
+  heldTag.setAttribute('opacity',v?'1':'0');
+}
+function strike(){
+  escWin.classList.remove('struck');
+  void escWin.offsetWidth;
+  escWin.classList.add('struck');
+}
+/* ---- reading out ---- */
+function readText(){
+  var jd=EPOCH_JD+days, dt=jdToDate(jd);
+  roDate.textContent=dt.d+' '+MON[dt.m-1]+' '+dt.y+' \u00b7 '+p2(dt.h)+':'+p2(dt.mi);
+  roJD.textContent=fmt(jd,3);
+  roDays.textContent=(days<0?'\u2212':'')+fmt(Math.abs(days),1);
+}
+/* ---- pointers, keys, buttons ---- */
+var dragging=false,moved=0,lastX=0,downTarget=null;
+svg.addEventListener('pointerdown',function(e){
+  dragging=true;moved=0;lastX=e.clientX;downTarget=e.target;
+  svg.classList.add('grab');
+  if(svg.setPointerCapture){try{svg.setPointerCapture(e.pointerId);}catch(err){}}
+});
+svg.addEventListener('pointermove',function(e){
+  if(!dragging){return;}
+  var dx=e.clientX-lastX;lastX=e.clientX;moved+=Math.abs(dx);
+  if(Math.abs(dx)>0.4){
+    days=Math.max(-60000,Math.min(90000,days+dx*(e.shiftKey?0.25:2.4)));
+    if(traceT<performance.now()-260){updateTrace();traceT=performance.now();}
+  }
+});
+function endDrag(e){
+  if(!dragging){return;}
+  dragging=false;svg.classList.remove('grab');
+  var idx=downTarget&&downTarget.getAttribute?downTarget.getAttribute('data-i'):null;
+  if(moved<6){
+    if(idx!==null){setFocus(+idx,false);strike();}
+    else{setHeld(!held);strike();if(held){setFocus(-1);}}
+  }
+  downTarget=null;
+}
+svg.addEventListener('pointerup',endDrag);
+svg.addEventListener('pointercancel',endDrag);
+svg.addEventListener('pointerover',function(e){
+  var idx=e.target.getAttribute?e.target.getAttribute('data-i'):null;
+  if(idx!==null&&e.pointerType==='mouse'){hoverIdx=+idx;updateTrace();}
+});
+svg.addEventListener('pointerout',function(e){
+  var idx=e.target.getAttribute?e.target.getAttribute('data-i'):null;
+  if(idx!==null){hoverIdx=-1;updateTrace();}
+});
+svg.addEventListener('keydown',function(e){
+  var step=e.shiftKey?30:1;
+  if(e.key==='ArrowRight'){days+=step;e.preventDefault();updateTrace();}
+  else if(e.key==='ArrowLeft'){days-=step;e.preventDefault();updateTrace();}
+  else if(e.key===' '||e.key==='Enter'){setHeld(!held);strike();e.preventDefault();}
+});
+var rates=document.querySelectorAll('.rate');
+for(var ri=0;ri<rates.length;ri++){
+  (function(btn){
+    btn.addEventListener('click',function(){
+      rate=parseFloat(btn.getAttribute('data-rate'));
+      for(var j=0;j<rates.length;j++){rates[j].setAttribute('aria-pressed','false');}
+      btn.setAttribute('aria-pressed','true');
+      if(held){setHeld(false);}
+    });
+  })(rates[ri]);
+}
+holdBtn.addEventListener('click',function(){setHeld(!held);strike();});
+$('resetBtn').addEventListener('click',function(){days=0;beat=0;gearAng=0;updateTrace();readText();render();});
+$('schedBody').addEventListener('mouseover',function(e){
+  var tr=e.target.closest?e.target.closest('tr'):null;
+  if(tr&&tr.getAttribute('data-i')){hoverIdx=+tr.getAttribute('data-i');updateTrace();}
+});
+$('schedBody').addEventListener('click',function(e){
+  var tr=e.target.closest?e.target.closest('tr'):null;
+  if(tr&&tr.getAttribute('data-i')){setFocus(+tr.getAttribute('data-i'),false);if(held){return;}}
+});
+window.addEventListener('resize',function(){if(focus>=0){placePlate();}});
+/* ---- go ---- */
+setHeld(reduce);
+updateTrace();readText();render();driveMechanism(0);
+function frame(ts){
+  var dt=last?Math.min(0.05,(ts-last)/1000):0;
+  last=ts;
+  if(!held&&!dragging){days+=rate*dt;}
+  driveMechanism(dt);
+  render();
+  if(ts-txtT>120){readText();txtT=ts;}
+  if(ts-traceT>400&&hoverIdx<0&&focus<0){updateTrace();traceT=ts;}
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
+
