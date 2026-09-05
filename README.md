@@ -185,6 +185,12 @@ Measured on the running container at the shipped defaults (`KV_CACHE_DTYPE=fp8`,
 A 1M-token context now fits 3.5× over. Weights (68.52 GiB/GPU), not KV, are the binding
 constraint on this box.
 
+> **Credit.** The FP8-KV kernel work in `files/patch_qsa_fp8_kv.py` is vendored from
+> [MiaAI-Lab/Qwen3.8-Flash-Next-Single-DGX-Spark](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Next-Single-DGX-Spark) (AGPL-3.0-or-later),
+> which credits the underlying approach to
+> [lancelind/qwen3.8-Flash-DGX](https://github.com/lancelind/qwen3.8-Flash-DGX) (Apache-2.0).
+> Applied here unchanged — every anchor matched this image's QSA sources.
+
 > **How to read those two lines.** They are the same number in two units: **32.02 GiB** is the
 > byte budget, **3,652,200 tokens** is what fits in it (~9.2 KB/token at fp8). The token figure is
 > the capacity of the whole block pool, shared by every concurrent request — it is *not*
@@ -583,6 +589,12 @@ and the corpus-only ~8.3k vocabulary, which would cut the draft head to ~0.02 Gi
 `files/test_draft_vocab.py` checks the shard slicing and the cross-rank reduction against a
 full-vocabulary argmax restricted to the draft set — run it after touching the patch.
 
+> **Credit.** The idea and `files/build_draft_vocab.py` come from
+> [MiaAI-Lab/Qwen3.8-Flash-Next-Single-DGX-Spark](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Next-Single-DGX-Spark) (AGPL-3.0-or-later),
+> which implements it for TP=1. `files/patch_mtp_draft_vocab.py` is a TP-aware rewrite:
+> upstream refuses to engage at `tp_size != 1`, since its reduced head is a plain matmul rather
+> than a vocab-parallel one. FR-Spec is the general technique.
+
 ## YaRN (1M context)
 
 ```bash
@@ -722,6 +734,21 @@ reference; the numbers above supersede these.
 - **`NFS_SHARE=true` only:** do not stop `vllm-fn-nfs` while vLLM is loading or running — the
   worker reads shards from it. Cold start streams ~126 GiB over CX7 (lazy safetensors); once
   weights are in GPU memory the share is idle.
+
+## Credits
+
+| | |
+|---|---|
+| Base deployment | [getrefined/Qwen3.8-Flash-Next-NVFP4-vLLM-DGX-Spark](https://github.com/getrefined/Qwen3.8-Flash-Next-NVFP4-vLLM-DGX-Spark) |
+| FP8 KV cache kernels, draft-vocabulary builder | [MiaAI-Lab/Qwen3.8-Flash-Next-Single-DGX-Spark](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Next-Single-DGX-Spark) (AGPL-3.0-or-later) — the single-Spark TP=1 recipe |
+| FP8-KV approach (via the above) | [lancelind/qwen3.8-Flash-DGX](https://github.com/lancelind/qwen3.8-Flash-DGX) (Apache-2.0) |
+| Concurrency / prefill benchmarks | [MiaAI-Lab/sparkDash](https://github.com/MiaAI-Lab/sparkDash) |
+| PLE quant dispatch | ported from vLLM PR #53899 (`qwen4_exp`) |
+| Model | [nvidia/Qwen3.8-Flash-Next-NVFP4](https://huggingface.co/nvidia/Qwen3.8-Flash-Next-NVFP4) |
+
+vLLM remains Apache-2.0; the container image and checkpoint are governed by their upstream terms.
+Files under `files/` that carry an `SPDX-License-Identifier` header keep the license of their
+origin — see each file.
 
 ## Scripts
 
