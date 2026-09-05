@@ -746,9 +746,16 @@ reference; the numbers above supersede these.
 | PLE quant dispatch | ported from vLLM PR #53899 (`qwen4_exp`) |
 | Model | [nvidia/Qwen3.8-Flash-Next-NVFP4](https://huggingface.co/nvidia/Qwen3.8-Flash-Next-NVFP4) |
 
-vLLM remains Apache-2.0; the container image and checkpoint are governed by their upstream terms.
-Files under `files/` that carry an `SPDX-License-Identifier` header keep the license of their
-origin — see each file.
+## License
+
+**AGPL-3.0-or-later** (this repository only) — see [LICENSE](LICENSE), matching
+[MiaAI-Lab/Qwen3.8-Flash-Next-Single-DGX-Spark](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Next-Single-DGX-Spark),
+from which `files/patch_qsa_fp8_kv.py` and `files/build_draft_vocab.py` are vendored. Those files
+are AGPL-3.0-or-later, so the repository that carries them has to be too.
+
+vLLM remains Apache-2.0; the container image and the model checkpoint are governed by their own
+upstream terms, and nothing here relicenses them. Files under `files/` that carry an
+`SPDX-License-Identifier` header keep the license of their origin — see each file.
 
 ## Scripts
 
