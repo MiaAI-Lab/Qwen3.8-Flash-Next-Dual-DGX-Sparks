@@ -80,13 +80,13 @@ DISPATCH = """            if quant_algo == "MXFP8":
                     quant_config=self.mxfp8_config,
                     moe_config=layer.moe_config,
                 )
-            if quant_algo == "FP8_BLOCK_SCALES":
+            if quant_algo in ("FP8_BLOCK_SCALES", "FP8_PB_WO"):
                 # Imported lazily: modelopt.py deliberately does not import fp8.py
                 # at module scope.
                 from vllm.model_executor.layers.quantization.fp8 import Fp8MoEMethod
 
                 logger.info_once(
-                    "Routed experts %s use FP8_BLOCK_SCALES; building them with "
+                    "Routed experts %s use FP8_BLOCK_SCALES/FP8_PB_WO; building them with "
                     "Fp8MoEMethod (block-quantized).",
                     prefix,
                 )
