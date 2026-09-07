@@ -26,7 +26,13 @@ def main():
     ap.add_argument("--src", required=True)
     ap.add_argument("--dst", required=True)
     ap.add_argument("--samples", type=int, default=6)
+    ap.add_argument("--replaced-shard-prefix", default=None, metavar="PREFIX",
+                    help="source shard files starting with PREFIX were deliberately replaced "
+                         "(e.g. model-plefp8- after files/ple_nvfp4): skip their hard-link and "
+                         "tensor-presence checks; files/ple_nvfp4/verify_ple_nvfp4_checkpoint.py covers them")
     a = ap.parse_args()
+    replaced = {f for f in set(json.load(open(os.path.join(a.src, "model.safetensors.index.json")))["weight_map"].values())
+                if a.replaced_shard_prefix and f.startswith(a.replaced_shard_prefix)}
     src_idx = json.load(open(os.path.join(a.src, "model.safetensors.index.json")))["weight_map"]
     dst_idx = json.load(open(os.path.join(a.dst, "model.safetensors.index.json")))["weight_map"]
     full_cfg = json.load(open(os.path.join(a.dst, "config.json")))
@@ -63,7 +69,7 @@ def main():
         for fused in ("gate_up_proj", "down_proj"):
             expanded.add(f"{base}.{fused}")
     for name in src_idx:
-        if name not in dst_idx and name not in expanded:
+        if name not in dst_idx and name not in expanded and src_idx[name] not in replaced:
             print("MISSING", name); problems += 1
     for lay in fp8_layers:
         for suffix in (".weight", ".weight_scale"):
@@ -73,14 +79,14 @@ def main():
     # 2. untouched shards are the same inode (hard link)
     same = 0
     for f in sorted(set(src_idx.values())):
-        if f.startswith("model-bf16-"):
+        if f.startswith("model-bf16-") or f in replaced:
             continue
         s, d = os.path.join(a.src, f), os.path.join(a.dst, f)
         if os.path.exists(d) and os.stat(s).st_ino == os.stat(d).st_ino:
             same += 1
         else:
             print("NOT HARDLINKED", f); problems += 1
-    print(f"hard-linked shards ok: {same}")
+    print(f"hard-linked shards ok: {same}" + (f" ({len(replaced)} replaced shards skipped)" if replaced else ""))
 
     # 3. dtype/shape checks + dequant error samples in the rewritten shards
     checked = 0
