@@ -4,6 +4,29 @@ All decode numbers: `bench/decodebench.py --decode 400 --contexts 1000`,
 single stream, server otherwise idle, runs validated clean (exactly 1600
 generation tokens) unless noted.
 
+## Scope of the "output-safe" claim -- read this before repeating it
+
+Three independent adversarial reviews (gpt-6-astra, gpt-5.6-sol, gpt-5.5) converged on
+the same correction, and it matters:
+
+- **The DRAFTER changes are distribution-preserving.** Reduced draft vocabulary,
+  quantized MTP layer, and draft-head storage balancing only alter the proposal q.
+  Rejection sampling is exact for any q, so these cannot change the served
+  distribution -- only acceptance rate.
+- **FP8-dense is NOT in that category.** It quantizes the TARGET model -- attention,
+  GDN projections, HyperConnection and the target lm_head all participate in the
+  authoritative forward pass. Every request is affected, including requests with
+  speculative decoding off. rel RMSE 0.026 / cosine 0.9997 bound the WEIGHT error;
+  they do not bound generation quality, and small logit perturbations can flip greedy
+  choices near ties. Treat FP8-dense as an explicit quality mode, not a free win.
+- **Distribution-preserving is not seed-reproducible.** Changing which tokens are
+  proposed changes accept/reject decisions and therefore RNG consumption, so the same
+  seed can yield a different (equally valid) sequence. Three separate guarantees are
+  worth stating separately: target distribution, greedy equivalence, seeded replay.
+- **Task validation is still outstanding.** Run `bench/reasoning_check.py` plus the
+  GSM8K/AIME harness. Do NOT gate on perplexity: on this model family AIME dropped
+  86.7 -> 80.8 while long-context perplexity improved.
+
 ## Headline
 
 | config | prose | code | entropy | copy | mean | acceptance |
