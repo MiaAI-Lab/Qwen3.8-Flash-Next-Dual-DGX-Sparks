@@ -76,15 +76,17 @@ new_mqa = '''    # Tuned on GB300: larger row batches provide enough parallelism
 assert src.count(old_mqa) == 1
 src = src.replace(old_mqa, new_mqa)
 
+_KVQ = '        KV_QUANT_MODE=kv_quant_mode\n' if 'KV_QUANT_MODE=kv_quant_mode' in src else ''
+_KVQ = _KVQ.replace('kv_quant_mode', 'kv_quant_mode,') if _KVQ else ''
 old_mqa_launch = '''        MAX_N=MAX_N,
         COMPRESS_RATIO=compress_ratio,
-        num_warps=2,
+''' + _KVQ + '''        num_warps=2,
     )
     return logits, visible_blocks
 '''
 new_mqa_launch = '''        MAX_N=MAX_N,
         COMPRESS_RATIO=compress_ratio,
-        num_warps=mqa_warps,
+''' + _KVQ + '''        num_warps=mqa_warps,
     )
     return logits, visible_blocks
 '''

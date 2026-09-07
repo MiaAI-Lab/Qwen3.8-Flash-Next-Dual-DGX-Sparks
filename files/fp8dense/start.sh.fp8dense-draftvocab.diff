@@ -1,0 +1,86 @@
+--- a/start.sh
++++ b/start.sh
+@@ -383,12 +383,26 @@
+ if $DO_LAUNCH && [[ "$FP8_DENSE" == "true" ]]; then
+     info "=== Step 4c: FP8-dense overlay ==="
+     OV="$SCRIPT_DIR/files/overlay"
+-    [[ -f "$OV/modelopt.py" ]] || python3 "$OV/apply_patches.py"
+-    add_overlay "$OV/modelopt.py"        "$VLLM_PKG/model_executor/layers/quantization/modelopt.py"
++    # Idempotent; extracts the .orig files from the image on first use.
++    python3 "$OV/apply_patches.py"
++    # modelopt.py is deliberately NOT mounted from here: step 6b always mounts
++    # files/modelopt_patched.py at that container path (docker refuses two -v on
++    # one destination), so files/stack_modelopt_fp8dense.py folds the fp8dense
++    # hunks into that file in step 6b instead.
+     add_overlay "$OV/model.py"           "$VLLM_PKG/models/qwen3_8_flash_next/nvidia/model.py"
+     add_overlay "$OV/hyperconnection.py" "$VLLM_PKG/models/qwen3_8_flash_next/nvidia/hyperconnection.py"
+-    add_overlay "$OV/mtp.py"             "$VLLM_PKG/models/qwen3_8_flash_next/nvidia/mtp.py"
+-    ok "FP8-dense overlay: 4 files"
++    if [[ -n "$MTP_DRAFT_VOCAB" ]]; then
++        # Both the FP8 hunks and the reduced-vocabulary drafter patch nvidia/mtp.py.
++        # They are textually disjoint; the stacker applies both and bridges the one
++        # semantic collision (an FP8 lm_head slice must be dequantized with its
++        # per-row weight_scale). Step 4e then only mounts the vocab file + env.
++        python3 "$SCRIPT_DIR/files/stack_mtp_fp8_draftvocab.py" "$SCRIPT_DIR"
++        add_overlay "$OV/mtp_draftvocab.py" "$VLLM_PKG/models/qwen3_8_flash_next/nvidia/mtp.py"
++        ok "FP8-dense overlay: model, hyperconnection, mtp+draft-vocab (modelopt folded in step 6b)"
++    else
++        add_overlay "$OV/mtp.py"         "$VLLM_PKG/models/qwen3_8_flash_next/nvidia/mtp.py"
++        ok "FP8-dense overlay: model, hyperconnection, mtp (modelopt folded in step 6b)"
++    fi
+ fi
+ # When KV_CACHE_DTYPE is fp8, step 4f owns the ops/qsa.py mount and stacks the
+ # GB10 launch profile on top of the FP8-KV patch (see files/stack_qsa_fp8_gb10.py).
+@@ -428,13 +442,15 @@
+     [[ -f "$MTP_DRAFT_VOCAB" ]] || err "MTP_DRAFT_VOCAB file not found: $MTP_DRAFT_VOCAB
+        Build one with: python3 files/build_draft_vocab.py <corpus.jsonl> --out draft_vocab.txt --size 65536"
+     if [[ "$FP8_DENSE" == "true" ]]; then
+-        err "MTP_DRAFT_VOCAB and FP8_DENSE both overlay nvidia/mtp.py - pick one."
++        # nvidia/mtp.py is already mounted from files/overlay/mtp_draftvocab.py (step 4c).
++        info "  FP8_DENSE=true: drafter stacked on the FP8 mtp.py overlay in step 4c"
++    else
++        extract_from_image "$VLLM_PKG/models/qwen3_8_flash_next/nvidia/mtp.py" \
++                           "$SCRIPT_DIR/files/mtp_patched.py.orig"
++        python3 "$SCRIPT_DIR/files/patch_mtp_draft_vocab.py"
++        add_overlay "$SCRIPT_DIR/files/mtp_patched.py" \
++                    "$VLLM_PKG/models/qwen3_8_flash_next/nvidia/mtp.py"
+     fi
+-    extract_from_image "$VLLM_PKG/models/qwen3_8_flash_next/nvidia/mtp.py" \
+-                       "$SCRIPT_DIR/files/mtp_patched.py.orig"
+-    python3 "$SCRIPT_DIR/files/patch_mtp_draft_vocab.py"
+-    add_overlay "$SCRIPT_DIR/files/mtp_patched.py" \
+-                "$VLLM_PKG/models/qwen3_8_flash_next/nvidia/mtp.py"
+     add_overlay "$MTP_DRAFT_VOCAB" "/etc/vllm-draft-vocab.txt"
+     OVERLAY_ENV+=("-e VLLM_MTP_DRAFT_VOCAB=/etc/vllm-draft-vocab.txt")
+     ok "Draft vocab: $(wc -l < "$MTP_DRAFT_VOCAB") ids from $MTP_DRAFT_VOCAB"
+@@ -609,6 +625,12 @@
+     # Stacks on top: adds the FP8_BLOCK_SCALES routed-expert branch that neither
+     # this image nor upstream vLLM has, which is what MTP needs on this checkpoint.
+     python3 "$SCRIPT_DIR/files/patch_modelopt_fp8_block_moe.py"
++    if [[ "$FP8_DENSE" == "true" ]]; then
++        # Third layer on the same file: the FP8-dense MIXED_PRECISION dispatch
++        # (FP8_PER_CHANNEL_PER_TOKEN / FP8_PB_WO + extra prefix spellings).
++        python3 "$SCRIPT_DIR/files/stack_modelopt_fp8dense.py" "$SCRIPT_DIR"
++        ok "FP8-dense modelopt hunks stacked on the MXFP8 + FP8-block-MoE patch"
++    fi
+     ok "MXFP8 fallback patch ready: $PATCHED_MODELOPT"
+     HEAD_MODELOPT_MOUNT="-v $PATCHED_MODELOPT:$MODEL_OPT_PKG:ro"
+     WORKER_MODELOPT_MOUNT="-v /tmp/modelopt_patched.py:$MODEL_OPT_PKG:ro"
+@@ -873,7 +895,7 @@
+     $WORKER_HF_MOUNT \
+     -v $REMOTE_HOME/.cache/vllm:/root/.cache/vllm \
+     $IMAGE \
+-    /root/.cache/huggingface/hub/models--RadixArk--Qwen3.8-Flash-Next-NVFP4/snapshots/7b719225242aacd3dbd3f9407468c2ee9a9d2594 \
++    /root/.cache/huggingface/hub/models--${ORG}--${NAME}/snapshots/${SNAPSHOT_SHA} \
+     $VLLM_ARGS_STR \
+     --node-rank 1 \
+     --headless
+@@ -924,7 +946,7 @@
+     -v $HF_CACHE_DIR:/root/.cache/huggingface \
+     -v $HOME/.cache/vllm:/root/.cache/vllm \
+     $IMAGE \
+-    /root/.cache/huggingface/hub/models--RadixArk--Qwen3.8-Flash-Next-NVFP4/snapshots/7b719225242aacd3dbd3f9407468c2ee9a9d2594 \
++    /root/.cache/huggingface/hub/models--${ORG}--${NAME}/snapshots/${SNAPSHOT_SHA} \
+     $VLLM_ARGS_STR \
+     --node-rank 0 \
+     --host 0.0.0.0 \
