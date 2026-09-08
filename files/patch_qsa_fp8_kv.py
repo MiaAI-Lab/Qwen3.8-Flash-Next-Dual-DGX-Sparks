@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (C) 2026 MiaAI Lab (https://x.com/MiaAI_lab)
+# Vendored unchanged from MiaAI-Lab/Qwen3.8-Flash-Next-Single-DGX-Spark.
 """Teach the Qwen3.8-Flash-Next QSA kernels to read an FP8-e4m3 KV cache.
 
 Credit, for this file only: the FP8-KV approach comes from

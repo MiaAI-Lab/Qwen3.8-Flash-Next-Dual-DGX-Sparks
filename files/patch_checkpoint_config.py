@@ -81,10 +81,13 @@ def add_aliases(quant_config: dict, num_hidden_layers: int) -> bool:
 # RoutedExperts algos ModelOptMixedPrecisionConfig.get_quant_method can build.
 # Anything else resolves to a *silently unquantized* MoE, which then dies at load
 # with "has no parameter 'w2_weight_scale_inv'".
+# FP8_PB_WO is ModelOpt's newer name for the same 128x128 block-scaled FP8 weights
+# (nvidia/Qwen3.8-Flash-Next-NVFP4 commit fc694b54, 2026-09-05, renamed it in
+# config.json only; hf_quant_config.json still says FP8_BLOCK_SCALES).
 # FP8_BLOCK_SCALES is supported only because files/patch_modelopt_fp8_block_moe.py
 # adds that branch; stock vLLM (image and upstream main) would build an
 # unquantized MoE and die at load.
-SUPPORTED_MOE_ALGOS = {"FP8", "NVFP4", "W4A16_NVFP4", "MXFP8", "FP8_BLOCK_SCALES"}
+SUPPORTED_MOE_ALGOS = {"FP8", "NVFP4", "W4A16_NVFP4", "MXFP8", "FP8_BLOCK_SCALES", "FP8_PB_WO"}
 
 
 def mtp_moe_algo(snapshot_dir: str) -> str:

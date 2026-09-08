@@ -80,15 +80,16 @@ DISPATCH = """            if quant_algo == "MXFP8":
                     quant_config=self.mxfp8_config,
                     moe_config=layer.moe_config,
                 )
-            if quant_algo == "FP8_BLOCK_SCALES":
+            if quant_algo in ("FP8_BLOCK_SCALES", "FP8_PB_WO"):
                 # Imported lazily: modelopt.py deliberately does not import fp8.py
                 # at module scope.
                 from vllm.model_executor.layers.quantization.fp8 import Fp8MoEMethod
 
                 logger.info_once(
-                    "Routed experts %s use FP8_BLOCK_SCALES; building them with "
+                    "Routed experts %s use %s; building them with "
                     "Fp8MoEMethod (block-quantized).",
                     prefix,
+                    quant_algo,
                 )
                 return Fp8MoEMethod(
                     quant_config=self._fp8_block_scales_config(prefix),
@@ -104,10 +105,21 @@ def _replace_once(src: str, old: str, new: str, what: str) -> str:
     return src.replace(old, new)
 
 
+NEW_BRANCH = 'if quant_algo in ("FP8_BLOCK_SCALES", "FP8_PB_WO"):'
+OLD_BRANCH = 'if quant_algo == "FP8_BLOCK_SCALES":'
+
+
 def patch() -> None:
     src = open(TARGET).read()
-    if "FP8_BLOCK_SCALES" in src:
+    if NEW_BRANCH in src:
         print("already patched", TARGET)
+        return
+    if OLD_BRANCH in src:
+        # Patched by an earlier version of this script: widen the branch to the
+        # FP8_PB_WO alias without re-applying the helper.
+        src = _replace_once(src, OLD_BRANCH, NEW_BRANCH, "moe dispatch (alias upgrade)")
+        open(TARGET, "w").write(src)
+        print("upgraded (FP8_PB_WO alias)", TARGET)
         return
     src = _replace_once(src, ANCHOR_HELPER, HELPER + ANCHOR_HELPER, "helper")
     src = _replace_once(src, ANCHOR_DISPATCH, DISPATCH, "moe dispatch")
