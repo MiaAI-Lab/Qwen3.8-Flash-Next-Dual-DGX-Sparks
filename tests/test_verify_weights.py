@@ -5,6 +5,7 @@ so no network access is needed. Covers the expected path, every failure mode the
 verifier can report, and the resolution logic for the standard hub layout.
 """
 
+import hashlib
 import os
 import shutil
 import sys
@@ -39,10 +40,11 @@ def make_file(path, size, content=None):
 
 
 def shas(root, files):
-    """Write the given files under root and return a valid manifest for them.
+    """Write the given files under root and return a manifest like the real API.
 
-    files maps relative path -> content bytes/str. Returns the manifest entries
-    (with correct size and LFS SHA-256) for those files.
+    files maps relative path -> content bytes/str. Shard like files get both
+    an lfs SHA-256 and a top level oid. Other files get only oid, the git blob
+    SHA-1, with no lfs key.
     """
     manifest = {}
     for rel, content in files.items():
@@ -52,8 +54,17 @@ def shas(root, files):
             content = content.encode()
         with open(path, "wb") as f:
             f.write(content)
-        manifest[rel] = {"type": "file", "size": len(content),
-                         "lfs": {"oid": "sha256:" + vw.file_sha256(path)}}
+        size = len(content)
+        if rel.endswith((".safetensors", ".bin", ".pt", ".onnx", ".h5")):
+            # Real LFS entries carry a pointer blob id in oid, not the content
+            # id, so use a dummy valid SHA-1 here. The verifier must prefer
+            # lfs.oid; a verifier that reads oid would fail on pristine files.
+            manifest[rel] = {"type": "file", "size": size,
+                             "oid": hashlib.sha1(b"pointer:" + content).hexdigest(),
+                             "lfs": {"oid": "sha256:" + vw.file_sha256(path)}}
+        else:
+            manifest[rel] = {"type": "file", "size": size,
+                             "oid": vw.file_git_sha1(path)}
     return manifest
 
 
@@ -381,6 +392,22 @@ class VerifyWeightsTest(unittest.TestCase):
             f.write(b"WXYZ")  # same size, different content
         problems = vw.verify(self.tmp, manifest, workers=2)
         self.assertEqual(self.kinds(problems), ["HASH"])
+
+    def test_non_lfs_same_size_rewrite_caught(self):
+        """Failure case: same size rewrite of a plain git file is caught."""
+        manifest = shas(self.tmp, {"config.json": b'{"a": 1}'})
+        with open(os.path.join(self.tmp, "config.json"), "wb") as f:
+            f.write(b'{"a": 2}')  # same size, different content
+        problems = vw.verify(self.tmp, manifest, workers=2)
+        self.assertEqual(self.kinds(problems), ["HASH"])
+
+    def test_extra_file_does_not_fail(self):
+        """Edge case: a local file outside the manifest is extra, not a failure."""
+        manifest = shas(self.tmp, {"config.json": b"hello"})
+        make_file(os.path.join(self.tmp, "stray.safetensors"), 4, b"XXXX")
+        problems = vw.verify(self.tmp, manifest, workers=2)
+        self.assertEqual(problems, [])
+        self.assertEqual(vw.find_extras(self.tmp, manifest), ["stray.safetensors"])
 
     def test_fetch_manifest_pagination(self):
         """Expected use: a paginated API response is followed to completion."""

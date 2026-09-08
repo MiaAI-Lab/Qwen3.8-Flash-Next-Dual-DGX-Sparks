@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
-"""verify-weights.py — Verify local model files against the Hugging Face tree manifest.
+"""verify-weights.py: Verify local model files against the Hugging Face tree manifest.
 
 Compares every file under the model directory against the manifest served by the
-Hugging Face API: presence, size, and (for LFS files) the content SHA-256. A
-size-only check does not catch a shard that was corrupted mid-download while
-keeping its apparent size wrong only by a few hundred MB (see issue #30); hashing
-the LFS blobs does.
+Hugging Face API: presence, size, and content hash. The hash method follows the
+way git stores the file. An LFS file carries its content SHA-256 in "lfs.oid". A
+plain git file carries its git blob SHA-1 in the top-level "oid". Each file is
+checked by exactly one of the two.
+
+A size-only check is not enough. It misses a shard corrupted mid-download whose
+size is wrong by a few hundred MB (see issue #30), and it misses a config.json
+rewritten at the same size. Hashing the content catches both.
 
 Only the Python 3 standard library is used, so the script runs on the head node
 and on worker nodes without installing anything.
@@ -22,16 +26,18 @@ without needing model-API access. HF_API_BASE overrides the API endpoint (used
 by tests and mirrors); HF_TOKEN authenticates private repos.
 
 Exit status:
-  0  every manifest file is present, matches its size, and (for LFS files) its SHA-256
+  0  every manifest file is present, its size matches, and its content digest
+     matches (SHA-256 for LFS files, git blob SHA-1 for plain git files)
   1  at least one problem was found (missing / size / hash / unreadable / broken link)
   2  the manifest could not be obtained, the model directory could not be resolved,
      or the snapshot revision could not be determined
 
-Files in the model directory that are not in the manifest (lock files, download
-artifacts, trees metadata, stale snapshots, ...) are reported as extras but are
-not failures. Under the standard hub layout, the verified tree is the snapshot
-that refs/main points to (or the only snapshot, or an explicit --path); the
-deduplicated blobs/ and other snapshots are not hashed twice.
+Files in the model directory that are not in the manifest (leftover shards,
+manual edits, stray downloads, ...) are listed as EXTRA. They are not failures
+and they never change the exit status. Under the standard hub layout, the
+verified tree is the snapshot that refs/main points to (or the only snapshot,
+or an explicit --path); the deduplicated blobs/ and other snapshots are not
+hashed twice.
 """
 
 from __future__ import annotations
@@ -56,6 +62,11 @@ IGNORED_SUFFIXES = (".lock", ".metadata", ".incomplete")
 IGNORED_FILES = {".gitignore", "CACHEDIR.TAG"}
 
 _EMPTY_OID = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+
+# The tree API puts a git blob SHA-1 in the top-level "oid" of every file entry,
+# so its shape tells a usable digest from anything else.
+_SHA1_HEX_LEN = 40
+_HEX_DIGITS = frozenset("0123456789abcdef")
 
 
 class VerifierError(Exception):
@@ -215,8 +226,23 @@ def file_sha256(path: str) -> str:
     return digest.hexdigest()
 
 
+def file_git_sha1(path: str) -> str:
+    """Return the hex git blob SHA-1 of a file, streaming it in 1 MiB chunks.
+
+    Git hashes the text "blob <size>\\0" and then the content, so the size is
+    read first to build that header. This is the digest the tree API reports in
+    "oid" for a file that git stores directly instead of in LFS.
+    """
+    digest = hashlib.sha1()
+    digest.update(b"blob %d\0" % os.path.getsize(path))
+    with open(path, "rb") as handle:
+        for chunk in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def expected_oid(entry: dict) -> str:
-    """Return the lowercase hex SHA-256 for a manifest entry ("" if none).
+    """Return the lowercase hex content SHA-256 from an entry's lfs.oid ("" if none).
 
     Handles lfs being absent or null (regular git files, some API responses),
     any-case "sha256:" prefix or none. Only non-empty LFS oids are hash-checked;
@@ -234,6 +260,35 @@ def expected_oid(entry: dict) -> str:
     return oid
 
 
+def expected_git_oid(entry: dict) -> str:
+    """Return the lowercase hex git blob SHA-1 from an entry's "oid" ("" if none).
+
+    For a plain git file this digest covers the file content, so it is the only
+    content check that file can ever get. For an LFS file it covers the pointer
+    text instead, so callers must prefer lfs.oid (see expected_digest).
+    """
+    oid = (entry.get("oid") or "").strip().lower()
+    if len(oid) != _SHA1_HEX_LEN or not _HEX_DIGITS.issuperset(oid):
+        return ""  # not a blob id, so there is nothing to compare against
+    return oid
+
+
+def expected_digest(entry: dict) -> tuple[str, str]:
+    """Return (algorithm, digest) for an entry, or ("", "") when it has none.
+
+    Every file is checked by exactly one method. The LFS SHA-256 wins, because
+    the top-level "oid" of an LFS file hashes the pointer text and not the
+    content. A plain git file has no usable lfs.oid, so its blob SHA-1 is used.
+    """
+    oid = expected_oid(entry)
+    if oid:
+        return "sha256", oid
+    blob = expected_git_oid(entry)
+    if blob:
+        return "sha1", blob
+    return "", ""
+
+
 class Problem:
     """A single verification problem, categorized for reporting."""
 
@@ -248,10 +303,12 @@ def verify(tree_dir: str, manifest: dict[str, dict], workers: int,
     """Verify the model tree against the manifest and return all problems.
 
     Every manifest entry is checked for presence; present files are checked for
-    size and, for entries carrying an LFS SHA-256, for content hash. Problems
-    are collected instead of raising, so one bad file does not hide another.
-    With hash_files=False (dry run) the SHA-256 pass is skipped, leaving only
-    the cheap presence/size checks.
+    size and, when the manifest supplies a digest, for content (SHA-256 for LFS
+    entries, git blob SHA-1 for plain git entries). Problems are collected
+    instead of raising, so one bad file does not hide another. With
+    hash_files=False (dry run) the hashing pass is skipped, leaving only the
+    cheap presence/size checks. Local files that the manifest does not list are
+    not problems; use find_extras() to report them.
     """
     if workers < 1:
         workers = 1
@@ -285,24 +342,26 @@ def verify(tree_dir: str, manifest: dict[str, dict], workers: int,
             # race with a writer; still hash it so a same-size rewrite is caught.
         hashable.append(rel)
 
-    hash_targets = [
-        (rel, expected_oid(manifest[rel]))
-        for rel in hashable
-        if expected_oid(manifest[rel])
-    ]
+    # Pick one digest method per file. Files the manifest gives no usable
+    # digest for stay out of this list and are covered by presence and size.
+    hash_targets: list[tuple[str, str, str]] = []
+    for rel in hashable:
+        algorithm, digest = expected_digest(manifest[rel])
+        if algorithm:
+            hash_targets.append((rel, algorithm, digest))
     if not hash_files:
         return problems
     if hash_targets:
-        def check(item: tuple[str, str]) -> Problem | None:
-            rel, oid = item
-            expected_size = manifest[rel].get("size")
-            expected = expected_oid(manifest[rel])
+        def check(item: tuple[str, str, str]) -> Problem | None:
+            """Hash one file the way the manifest describes it and compare."""
+            rel, algorithm, digest = item
             try:
-                actual = file_sha256(local[rel])
+                actual = (file_git_sha1(local[rel]) if algorithm == "sha1"
+                          else file_sha256(local[rel]))
             except OSError as exc:
                 return Problem("UNREADABLE", rel, str(exc))
-            if actual != expected:
-                return Problem("HASH", rel, f"expected {expected[:12]}…, found {actual[:12]}…")
+            if actual != digest:
+                return Problem("HASH", rel, f"expected {digest[:12]}…, found {actual[:12]}…")
             return None
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
@@ -311,6 +370,17 @@ def verify(tree_dir: str, manifest: dict[str, dict], workers: int,
                     problems.append(outcome)
 
     return problems
+
+
+def find_extras(tree_dir: str, manifest: dict[str, dict]) -> list[str]:
+    """Return sorted local paths that the manifest does not list.
+
+    Extras are stray files, not failures. Callers print them but keep the
+    exit status from verify.
+    """
+    local, _ = iter_model_files(tree_dir)
+    expected = set(manifest)
+    return sorted(set(local) - expected)
 
 
 def main(argv: list[str]) -> int:
@@ -323,7 +393,7 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--fetch-only", action="store_true",
                         help="Fetch (and save) the manifest, then exit without verifying")
     parser.add_argument("--dry-run", "-n", action="store_true",
-                        help="Resolve and check presence/size only, skip the SHA-256 pass")
+                        help="Resolve and check presence/size only, skip content hashing")
     parser.add_argument("--workers", type=int, default=8, help="Parallel hash workers (default: 8)")
     parser.add_argument("--quiet", action="store_true", help="Only print problems")
     args = parser.parse_args(argv)
@@ -394,11 +464,21 @@ def main(argv: list[str]) -> int:
         print(f"Manifest: {len(manifest)} files ({expected_bytes / 1e9:.1f} GB)")
         print(f"Verifying {tree_dir} ...")
         if args.dry_run:
-            print("Dry run: checking presence and size only (no SHA-256 hashing).\n")
+            print("Dry run: checking presence and size only (no content hashing).\n")
         else:
-            print("Hashing LFS files; this reads the full checkpoint and takes a while on first run.\n")
+            print("Hashing files; this reads the full checkpoint and takes a while on first run.\n")
 
     problems = verify(tree_dir, manifest, args.workers, hash_files=not args.dry_run)
+
+    # Extras are for info only and never change the exit status, so a walk
+    # failure here is ignored; verify already did its own walk.
+    try:
+        extras = find_extras(tree_dir, manifest)
+    except VerifierError:
+        extras = []
+    if extras and not args.quiet:
+        for rel in extras:
+            print(f"{'EXTRA':<10} {rel}")
 
     if problems:
         for p in problems:
@@ -411,9 +491,9 @@ def main(argv: list[str]) -> int:
 
     if not args.quiet:
         if args.dry_run:
-            print(f"OK: {len(manifest)} files present with matching sizes (SHA-256 hashing skipped).")
+            print(f"OK: {len(manifest)} files present with matching sizes (content hashing skipped).")
         else:
-            print(f"OK: {len(manifest)} files verified, all sizes and SHA-256 hashes match.")
+            print(f"OK: {len(manifest)} files verified, all sizes and content hashes match.")
     return 0
 
 
