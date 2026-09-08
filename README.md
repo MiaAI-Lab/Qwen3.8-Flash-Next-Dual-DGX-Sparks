@@ -408,19 +408,6 @@ docker run --rm --gpus all --ipc host \
 
 `stock` (default) leaves the image untouched. The `gb10` table is a starting point, not a result.
 
-**`reasoning_effort`:** the chat template accepts **`low`, `medium`, `xhigh`** (default
-`xhigh`) and rejects anything else at template-render time with HTTP 400:
-
-```
-Unexpected reasoning effort max. Supported types are xhigh (default), medium, and low.
-```
-
-`max` and `high` are *not* accepted — worth knowing if you point a client at this lane
-that also talks to models where `high`/`max` are valid, or share one client config across
-models. Two related caveats: thinking tokens are billed against the request's `max_tokens`
-(a small `max_tokens` returns empty `content` with `finish_reason: "length"`), and
-`chat_template_kwargs.thinking_budget` is **not** honored by this build.
-
 ## The PLE Patch
 
 The NVFP4 checkpoint stores the 51B-param N-gram/PLE embedding table as FP8 shards + one global
@@ -493,6 +480,37 @@ curl http://localhost:8888/v1/chat/completions \
 > paths — `--allowed-local-media-path` is not set), default limit is 1 image + 1 video per
 > prompt, and the vision encoder budget is 16,384 tokens (larger inputs are auto-resized /
 > sparse-sampled for video).
+
+## Chat-template kwargs
+
+Two kwargs the checkpoint's `chat_template.jinja` reads, neither of them obvious from the
+config. Pass both under `chat_template_kwargs`:
+
+**`reasoning_effort`** — `low` | `medium` | `xhigh`, default `xhigh`. Anything else is
+rejected while the template renders, so the request fails with HTTP 400 before it reaches
+the engine:
+
+```
+Unexpected reasoning effort max. Supported types are xhigh (default), medium, and low.
+```
+
+`high` and `max` are both **not** accepted. Worth knowing if you share one client config
+with models where they are valid — that is how we found it.
+
+**`enable_thinking`** — default `true`; `false` prefills an empty `<think></think>` block
+for a non-thinking turn. Note the interaction with the above: the `reasoning_effort` check
+sits *inside* the thinking branch of the template, so with `enable_thinking: false` an
+invalid `reasoning_effort` is silently ignored instead of rejected. The same client config
+400s in thinking mode and passes here.
+
+```bash
+curl http://localhost:8888/v1/chat/completions \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"qwen3.8-flash-next","messages":[{"role":"user","content":"Hi"}],"max_tokens":2048,"chat_template_kwargs":{"reasoning_effort":"low"}}'
+```
+
+See [Multimodal](#multimodal) for the two adjacent facts that thinking consumes
+`max_tokens` and that `thinking_budget` is not honored by this build.
 
 ## Checkpoint: nvidia/Qwen3.8-Flash-Next-NVFP4
 
