@@ -165,12 +165,13 @@ except Exception as e:
         or " 403" in f" {text}"
     )
     if gated:
+        retry = sys.argv[2] if len(sys.argv) > 2 else "HF_TOKEN=hf_... ./download.sh"
         print(
             "403: this repo is gated.\n"
             "Accept the terms on that page:\n"
             f"  https://huggingface.co/{sys.argv[1]}\n"
             "Then set HF_TOKEN and retry:\n"
-            f"  {sys.argv[2] if len(sys.argv) > 2 else \"HF_TOKEN=hf_... ./download.sh\"}",
+            f"  {retry}",
             file=sys.stderr,
         )
         sys.exit(1)
