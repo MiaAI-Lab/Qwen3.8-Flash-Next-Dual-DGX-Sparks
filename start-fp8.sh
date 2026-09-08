@@ -5,7 +5,8 @@
 #
 # Official FP8 is fine-grained (block-128) over the whole checkpoint, so the
 # NVFP4 PLE resolver shim is not applied. Context is native 262144 (no YaRN):
-# FP8 weights leave too little KV for 1M on this 2×Spark kit.
+# FP8 weights leave too little KV for 1M on this 2×Spark kit (available KV
+# cache is around 500k tokens, not the ~3.65M of nvidia NVFP4 with fp8 KV).
 #
 # Weights stay on the head HuggingFace cache and are exported over NFS
 # (ConnectX) — the worker does not download or rsync a local copy.

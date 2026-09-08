@@ -40,10 +40,8 @@ vim .env
 #    or ./start.sh --nfs to share the head cache over NFS instead of rsyncing
 #    or ABLIT=1 ./start.sh --no-download
 
-#    Or serve official FP8 instead: https://huggingface.co/Qwen/Qwen3.8-Flash-Next-FP8
-#    Same cluster .env; native 262K, no YaRN.
-#    API name: qwen3.8-flash-next-fp8
-./start-fp8.sh --no-download
+#    Optional — official FP8 instead of NVFP4 (see below):
+#    ./download.sh --fp8 && ./start-fp8.sh --no-download
 
 # 4. Confirm the KV cache pool that vLLM actually allocated (~11 min after launch)
 docker logs vllm-fn 2>&1 | grep -E "Available KV cache memory|GPU KV cache size"
@@ -61,6 +59,26 @@ docker logs vllm-fn 2>&1 | grep -E "Available KV cache memory|GPU KV cache size"
 | `--nfs` | Distribute weights over NFS instead of rsync (see [below](#nfs-weight-sharing-optional)) |
 | `--no-nfs` | Force rsync distribution even if `NFS_SHARE=true` in `.env` |
 | `ABLIT=1` | Env/`.env` flag: serve the gated Keys house QSA L3–47 checkpoint (see [Abliterated checkpoint](#abliterated-checkpoint-ablit)) |
+
+## Official FP8 checkpoint (optional)
+
+Same two-Spark launch as `./start.sh`, but serve
+[`Qwen/Qwen3.8-Flash-Next-FP8`](https://huggingface.co/Qwen/Qwen3.8-Flash-Next-FP8)
+instead of NVFP4. Cluster IPs, TP/EP/MTP, image and ports still come from `.env`.
+Context is native 262K with YaRN off — FP8 weights leave too little KV for 1M
+on this kit. **Available KV cache is around 500k tokens**, not the 3.65M of
+the nvidia NVFP4 checkpoint with `KV_CACHE_DTYPE=fp8`.
+
+```bash
+./download.sh --fp8
+./stop.sh                          # start.sh and start-fp8.sh share vllm-fn
+./start-fp8.sh --no-download
+# API name: qwen3.8-flash-next-fp8
+```
+
+This is **not** `FP8_DENSE=true` (hybrid NVFP4 experts + FP8 dense projections)
+and **not** fp8 KV on stock NVFP4. `ABLIT=1` is ignored when `./start-fp8.sh`
+sets `OVERRIDE_MODEL_ID`.
 
 ## What Happens
 
@@ -225,7 +243,10 @@ alias, so MTP 3 still works.
 ## KV cache budget
 
 Measured on the running container at the shipped defaults (`KV_CACHE_DTYPE=fp8`,
-`GPU_MEMORY_UTILIZATION=0.835`, `MAX_MODEL_LEN=262144`, MTP3, TP2, nvidia NVFP4 checkpoint):
+`GPU_MEMORY_UTILIZATION=0.835`, `MAX_MODEL_LEN=262144`, MTP3, TP2, nvidia NVFP4 checkpoint).
+Official FP8 (`./start-fp8.sh`) is a different checkpoint — see
+[Official FP8 checkpoint](#official-fp8-checkpoint-optional); its available KV
+cache is around **500k tokens**, not the 3.65M below.
 
 ```
 [gpu_worker.py:693]   Available KV cache memory: 32.02 GiB
@@ -863,6 +884,7 @@ weights. It does not redistribute them and does not relicense them.
 |--------|---------|
 | `download.sh` | fetch weights onto the **head** (`ABLIT=1` for the gated Keys house snapshot — requires `HF_TOKEN` and accepted Hugging Face terms; `--fp8` for official FP8); `start.sh` handles the worker |
 | `start.sh` | optional download on head → distribute to worker (rsync, or NFS with `--nfs`) → verify complete snapshot → image sync → PLE + MXFP8 patches → launch rank 1 then rank 0. `ABLIT=1` selects the Keys house checkpoint |
+| `start-fp8.sh` | optional official FP8 path (`Qwen/Qwen3.8-Flash-Next-FP8`); native 262K, no YaRN; **~500k KV cache tokens** on this kit |
 | `stop.sh` | `docker rm -f vllm-fn` on worker, then head (`--nfs` also stops the share) |
 | `check-weights.sh` | verify the checkpoint on the head and on the worker (local copy, or over NFS when `NFS_SHARE=true`) |
 | `check-weights.sh --verify` | per-file SHA-256 verification against the Hugging Face manifest (~1 min read-only) |

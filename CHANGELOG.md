@@ -37,6 +37,11 @@ Two patches in this release are adapted from
   rewrites that to `FP8_BLOCK_SCALES` (nvidia / `hf_quant_config.json`) so
   speculative decoding still loads.
 
+- **Official FP8 launch path** — README documents `./start-fp8.sh` as the
+  optional `Qwen/Qwen3.8-Flash-Next-FP8` entry point. On this 2×Spark kit the
+  available KV cache is around 500k tokens (not the 3.65M of nvidia NVFP4
+  with `KV_CACHE_DTYPE=fp8`).
+
 ### Added — nvidia NVFP4 checkpoint support (2026-09-05)
 
 Three checkpoint-specific gaps had to be closed before this checkpoint would serve. All three
