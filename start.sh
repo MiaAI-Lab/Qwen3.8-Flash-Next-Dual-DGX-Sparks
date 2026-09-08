@@ -112,6 +112,14 @@ fi
 MTP_DRAFT_VOCAB="${MTP_DRAFT_VOCAB:-}"
 # QSA Triton launch profile: stock | gb10 | path to JSON from files/qsa_gb10/bench_qsa_kernels.py
 QSA_PROFILE="${QSA_PROFILE:-stock}"
+MTP_DRAFT_SAMPLE_METHOD="${MTP_DRAFT_SAMPLE_METHOD:-}"
+# VLLM_EXTRA_ENV: space-separated KEY=VALUE pairs injected into BOTH containers.
+# Use this (not EXTRA_DOCKER_ARGS, which reaches only the head) for anything that
+# changes kernel selection or numerics -- the two ranks must run identical
+# kernels, and a decode step waits for the slower one.
+VLLM_EXTRA_ENV="${VLLM_EXTRA_ENV:-}"
+COMPILATION_MODE="${COMPILATION_MODE:-0}"
+CUDAGRAPH_MODE="${CUDAGRAPH_MODE:-FULL_DECODE_ONLY}"
 # Refuse to launch when another process already holds the GPU (both nodes).
 REQUIRE_IDLE_GPU="${REQUIRE_IDLE_GPU:-true}"
 
@@ -375,18 +383,42 @@ extract_from_image() {   # extract_from_image <container path> <host dest>
 if $DO_LAUNCH && [[ "$FP8_DENSE" == "true" ]]; then
     info "=== Step 4c: FP8-dense overlay ==="
     OV="$SCRIPT_DIR/files/overlay"
-    [[ -f "$OV/modelopt.py" ]] || python3 "$OV/apply_patches.py"
-    add_overlay "$OV/modelopt.py"        "$VLLM_PKG/model_executor/layers/quantization/modelopt.py"
+    # Idempotent; extracts the .orig files from the image on first use.
+    python3 "$OV/apply_patches.py"
+    # modelopt.py is deliberately NOT mounted from here: step 6b always mounts
+    # files/modelopt_patched.py at that container path (docker refuses two -v on
+    # one destination), so files/stack_modelopt_fp8dense.py folds the fp8dense
+    # hunks into that file in step 6b instead.
     add_overlay "$OV/model.py"           "$VLLM_PKG/models/qwen3_8_flash_next/nvidia/model.py"
     add_overlay "$OV/hyperconnection.py" "$VLLM_PKG/models/qwen3_8_flash_next/nvidia/hyperconnection.py"
-    add_overlay "$OV/mtp.py"             "$VLLM_PKG/models/qwen3_8_flash_next/nvidia/mtp.py"
-    ok "FP8-dense overlay: 4 files"
+    if [[ -n "$MTP_DRAFT_VOCAB" ]]; then
+        # Both the FP8 hunks and the reduced-vocabulary drafter patch nvidia/mtp.py.
+        # They are textually disjoint; the stacker applies both and bridges the one
+        # semantic collision (an FP8 lm_head slice must be dequantized with its
+        # per-row weight_scale). Step 4e then only mounts the vocab file + env.
+        python3 "$SCRIPT_DIR/files/stack_mtp_fp8_draftvocab.py" "$SCRIPT_DIR"
+        add_overlay "$OV/mtp_draftvocab.py" "$VLLM_PKG/models/qwen3_8_flash_next/nvidia/mtp.py"
+        ok "FP8-dense overlay: model, hyperconnection, mtp+draft-vocab (modelopt folded in step 6b)"
+    else
+        add_overlay "$OV/mtp.py"         "$VLLM_PKG/models/qwen3_8_flash_next/nvidia/mtp.py"
+        ok "FP8-dense overlay: model, hyperconnection, mtp (modelopt folded in step 6b)"
+    fi
 fi
-if $DO_LAUNCH && [[ "$QSA_PROFILE" != "stock" ]]; then
+# When KV_CACHE_DTYPE is fp8, step 4f owns the ops/qsa.py mount and stacks the
+# GB10 launch profile on top of the FP8-KV patch (see files/stack_qsa_fp8_gb10.py).
+# Mounting it here too would give docker two -v for the same destination.
+if $DO_LAUNCH && [[ "$QSA_PROFILE" != "stock" && "$KV_CACHE_DTYPE" != fp8* ]]; then
     info "=== Step 4d: QSA profile overlay ($QSA_PROFILE) ==="
     QO="$SCRIPT_DIR/files/qsa_gb10"
+    # apply_patch.py reads qsa.py.orig, which nothing else extracts (and *.orig is
+    # gitignored), so a clean checkout would die here without this.
+    [[ -f "$QO/qsa.py.orig" ]] || extract_from_image \
+        "$VLLM_PKG/models/qwen3_8_flash_next/nvidia/ops/qsa.py" "$QO/qsa.py.orig"
     [[ -f "$QO/qsa.py" ]] || python3 "$QO/apply_patch.py"
     add_overlay "$QO/qsa.py" "$VLLM_PKG/models/qwen3_8_flash_next/nvidia/ops/qsa.py"
+fi
+# The profile env must reach both nodes whichever path mounted the file.
+if $DO_LAUNCH && [[ "$QSA_PROFILE" != "stock" ]]; then
     if [[ -f "$QSA_PROFILE" ]]; then
         add_overlay "$QSA_PROFILE" "/etc/vllm-qsa-profile.json"
         OVERLAY_ENV+=("-e VLLM_QSA_PROFILE_JSON=/etc/vllm-qsa-profile.json")
@@ -410,13 +442,15 @@ if $DO_LAUNCH && [[ -n "$MTP_DRAFT_VOCAB" ]]; then
     [[ -f "$MTP_DRAFT_VOCAB" ]] || err "MTP_DRAFT_VOCAB file not found: $MTP_DRAFT_VOCAB
        Build one with: python3 files/build_draft_vocab.py <corpus.jsonl> --out draft_vocab.txt --size 65536"
     if [[ "$FP8_DENSE" == "true" ]]; then
-        err "MTP_DRAFT_VOCAB and FP8_DENSE both overlay nvidia/mtp.py - pick one."
+        # nvidia/mtp.py is already mounted from files/overlay/mtp_draftvocab.py (step 4c).
+        info "  FP8_DENSE=true: drafter stacked on the FP8 mtp.py overlay in step 4c"
+    else
+        extract_from_image "$VLLM_PKG/models/qwen3_8_flash_next/nvidia/mtp.py" \
+                           "$SCRIPT_DIR/files/mtp_patched.py.orig"
+        python3 "$SCRIPT_DIR/files/patch_mtp_draft_vocab.py"
+        add_overlay "$SCRIPT_DIR/files/mtp_patched.py" \
+                    "$VLLM_PKG/models/qwen3_8_flash_next/nvidia/mtp.py"
     fi
-    extract_from_image "$VLLM_PKG/models/qwen3_8_flash_next/nvidia/mtp.py" \
-                       "$SCRIPT_DIR/files/mtp_patched.py.orig"
-    python3 "$SCRIPT_DIR/files/patch_mtp_draft_vocab.py"
-    add_overlay "$SCRIPT_DIR/files/mtp_patched.py" \
-                "$VLLM_PKG/models/qwen3_8_flash_next/nvidia/mtp.py"
     add_overlay "$MTP_DRAFT_VOCAB" "/etc/vllm-draft-vocab.txt"
     OVERLAY_ENV+=("-e VLLM_MTP_DRAFT_VOCAB=/etc/vllm-draft-vocab.txt")
     ok "Draft vocab: $(wc -l < "$MTP_DRAFT_VOCAB") ids from $MTP_DRAFT_VOCAB"
@@ -430,16 +464,25 @@ fi
 # ---------------------------------------------------------------------------
 if $DO_LAUNCH && [[ "$KV_CACHE_DTYPE" == fp8* ]]; then
     info "=== Step 4f: FP8 KV cache patch ($KV_CACHE_DTYPE) ==="
-    if [[ "$QSA_PROFILE" != "stock" ]]; then
-        err "KV_CACHE_DTYPE=$KV_CACHE_DTYPE and QSA_PROFILE=$QSA_PROFILE both overlay ops/qsa.py - pick one."
-    fi
     extract_from_image "$VLLM_PKG/models/qwen3_8_flash_next/nvidia/ops/qsa.py" \
                        "$SCRIPT_DIR/files/qsa_ops_patched.py.orig"
     extract_from_image "$VLLM_PKG/models/qwen3_8_flash_next/nvidia/qsa.py" \
                        "$SCRIPT_DIR/files/qsa_nvidia_patched.py.orig"
     python3 "$SCRIPT_DIR/files/patch_qsa_fp8_kv.py"
-    add_overlay "$SCRIPT_DIR/files/qsa_ops_patched.py" \
-                "$VLLM_PKG/models/qwen3_8_flash_next/nvidia/ops/qsa.py"
+    # The FP8-KV patch and the GB10 launch profile both rewrite ops/qsa.py and
+    # collide on exactly one anchor (the MQA scorer launch, where FP8 inserts
+    # KV_QUANT_MODE above num_warps). Stacking them FP8-first with a
+    # KV_QUANT_MODE-aware anchor keeps both. Precedent: patch_modelopt_fp8_block_moe
+    # already stacks on the MXFP8 patch.
+    if [[ "$QSA_PROFILE" != "stock" ]]; then
+        info "  stacking GB10 QSA launch profile on top of the FP8-KV patch"
+        python3 "$SCRIPT_DIR/files/stack_qsa_fp8_gb10.py" "$SCRIPT_DIR"
+        add_overlay "$SCRIPT_DIR/files/qsa_gb10/qsa.py" \
+                    "$VLLM_PKG/models/qwen3_8_flash_next/nvidia/ops/qsa.py"
+    else
+        add_overlay "$SCRIPT_DIR/files/qsa_ops_patched.py" \
+                    "$VLLM_PKG/models/qwen3_8_flash_next/nvidia/ops/qsa.py"
+    fi
     add_overlay "$SCRIPT_DIR/files/qsa_nvidia_patched.py" \
                 "$VLLM_PKG/models/qwen3_8_flash_next/nvidia/qsa.py"
     warn "FP8 KV is a quality trade on sparse attention - validate reasoning on your workload."
@@ -582,6 +625,12 @@ if $DO_LAUNCH; then
     # Stacks on top: adds the FP8_BLOCK_SCALES routed-expert branch that neither
     # this image nor upstream vLLM has, which is what MTP needs on this checkpoint.
     python3 "$SCRIPT_DIR/files/patch_modelopt_fp8_block_moe.py"
+    if [[ "$FP8_DENSE" == "true" ]]; then
+        # Third layer on the same file: the FP8-dense MIXED_PRECISION dispatch
+        # (FP8_PER_CHANNEL_PER_TOKEN / FP8_PB_WO + extra prefix spellings).
+        python3 "$SCRIPT_DIR/files/stack_modelopt_fp8dense.py" "$SCRIPT_DIR"
+        ok "FP8-dense modelopt hunks stacked on the MXFP8 + FP8-block-MoE patch"
+    fi
     ok "MXFP8 fallback patch ready: $PATCHED_MODELOPT"
     HEAD_MODELOPT_MOUNT="-v $PATCHED_MODELOPT:$MODEL_OPT_PKG:ro"
     WORKER_MODELOPT_MOUNT="-v /tmp/modelopt_patched.py:$MODEL_OPT_PKG:ro"
@@ -618,7 +667,19 @@ if $DO_LAUNCH; then
 
     # JSON args: use printf to build properly quoted strings for the heredoc
     if [[ "$MTP_NUM_SPECULATIVE_TOKENS" -gt 0 ]]; then
-        if [[ -n "$MTP_DRAFT_VOCAB" ]]; then
+        # draft_sample_method=probabilistic samples from the draft distribution and
+        # uses the true target/draft probability ratio at verification, which keeps
+        # the output distribution identical while recovering acceptance that the
+        # greedy one-hot path loses under temperature>0. It is mutually exclusive
+        # with use_local_argmax_reduction (speculator.py:293), and that flag is the
+        # only path to the reduced draft vocabulary -- so the two levers cannot be
+        # combined. Refuse loudly rather than silently dropping one.
+        if [[ -n "$MTP_DRAFT_SAMPLE_METHOD" && "$MTP_DRAFT_SAMPLE_METHOD" != "greedy" ]]; then
+            if [[ -n "$MTP_DRAFT_VOCAB" ]]; then
+                err "MTP_DRAFT_SAMPLE_METHOD=$MTP_DRAFT_SAMPLE_METHOD is incompatible with MTP_DRAFT_VOCAB (use_local_argmax_reduction) - pick one."
+            fi
+            VLLM_ARGS+=("--speculative-config" "$(printf "'{\"method\":\"mtp\",\"num_speculative_tokens\":%s,\"draft_sample_method\":\"%s\"}'" "$MTP_NUM_SPECULATIVE_TOKENS" "$MTP_DRAFT_SAMPLE_METHOD")")
+        elif [[ -n "$MTP_DRAFT_VOCAB" ]]; then
             # get_top_tokens (added by patch_mtp_draft_vocab.py) is only reached
             # through this flag; it also cuts the draft all-gather from
             # O(vocab_size) to O(2*tp_size) per token.
@@ -628,7 +689,10 @@ if $DO_LAUNCH; then
         fi
     fi
 
-    VLLM_ARGS+=("--compilation-config" "$(printf "'{\"mode\":0,\"cudagraph_mode\":\"FULL_DECODE_ONLY\"}'")")
+    # COMPILATION_MODE: 0=eager (NONE), 3=VLLM_COMPILE (Inductor). Mode 0 was the
+    # historical default here with no recorded rationale; 3 enables Inductor fusion
+    # of the elementwise/norm/quant glue between weight-streaming GEMMs.
+    VLLM_ARGS+=("--compilation-config" "$(printf "'{\"mode\":%s,\"cudagraph_mode\":\"%s\"}'" "$COMPILATION_MODE" "$CUDAGRAPH_MODE")")
 
     # hf-overrides: ONE merged payload, nested under "text_config".
     # vLLM's ModelConfig._apply_dict_overrides only recurses into keys that are
@@ -708,6 +772,16 @@ print(json.dumps({"text_config": tc}, separators=(",", ":")) if tc else "")
     # HF token
     if [[ -n "$HF_TOKEN" ]]; then
         DOCKER_ARGS+=(-e "HF_TOKEN=$HF_TOKEN")
+    fi
+    # VLLM_EXTRA_ENV goes to both nodes; see the declaration above. The head and
+    # worker are each launched from their own heredoc with an explicit -e list
+    # (DOCKER_ARGS does not build them), so the flags must be spliced into both.
+    EXTRA_ENV_FLAGS=""
+    if [[ -n "$VLLM_EXTRA_ENV" ]]; then
+        for _kv in $VLLM_EXTRA_ENV; do
+            EXTRA_ENV_FLAGS+=" -e $_kv"
+        done
+        info "  Extra env (both nodes): $VLLM_EXTRA_ENV"
     fi
     if [[ -n "$EXTRA_DOCKER_ARGS" ]]; then
         # shellcheck disable=SC2206
@@ -807,6 +881,7 @@ docker run \
     -e NCCL_IB_GID_INDEX=$IB_GID_INDEX \
     -e NCCL_IB_AUTO_DETECT=0 \
     -e NCCL_DEBUG=WARN \
+    $EXTRA_ENV_FLAGS \
     -e HF_HUB_OFFLINE=1 \
     -e TRANSFORMERS_OFFLINE=1 \
     -e VLLM_HOST_IP=$WORKER_IP \
@@ -820,7 +895,7 @@ docker run \
     $WORKER_HF_MOUNT \
     -v $REMOTE_HOME/.cache/vllm:/root/.cache/vllm \
     $IMAGE \
-    $MODEL_ID \
+    /root/.cache/huggingface/hub/models--${ORG}--${NAME}/snapshots/${SNAPSHOT_SHA} \
     $VLLM_ARGS_STR \
     --node-rank 1 \
     --headless
@@ -860,6 +935,7 @@ docker run \
     -e HF_HUB_OFFLINE=1 \
     -e TRANSFORMERS_OFFLINE=1 \
     -e VLLM_HOST_IP=$HEAD_IP \
+    $EXTRA_ENV_FLAGS \
     ${VLLM_ALLOW_LONG_MAX_MODEL_LEN:+-e VLLM_ALLOW_LONG_MAX_MODEL_LEN=$VLLM_ALLOW_LONG_MAX_MODEL_LEN} \
     $PLE_OFFLOAD_ENV \
     -e HF_HOME=/root/.cache/huggingface \
@@ -870,7 +946,7 @@ docker run \
     -v $HF_CACHE_DIR:/root/.cache/huggingface \
     -v $HOME/.cache/vllm:/root/.cache/vllm \
     $IMAGE \
-    $MODEL_ID \
+    /root/.cache/huggingface/hub/models--${ORG}--${NAME}/snapshots/${SNAPSHOT_SHA} \
     $VLLM_ARGS_STR \
     --node-rank 0 \
     --host 0.0.0.0 \

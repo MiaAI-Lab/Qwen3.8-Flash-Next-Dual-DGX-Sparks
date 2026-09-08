@@ -46,8 +46,12 @@ files/modelopt_patched.py
 files/qsa_ops_patched.py
 files/qsa_nvidia_patched.py
 files/overlay/*.py
+!files/overlay/apply_patches.py
 files/qsa_gb10/qsa.py
 
 # Draft vocabularies are built from a corpus (files/build_draft_vocab.py);
 # see README "Reduced-vocabulary MTP drafting".
 files/draft_vocab_*.txt
+
+# autoresearch runtime snapshot (per-machine; the sweep regenerates it)
+autoresearch/baseline.env
