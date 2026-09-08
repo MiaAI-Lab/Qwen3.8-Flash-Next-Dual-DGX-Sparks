@@ -107,6 +107,15 @@ def _replace_once(src: str, old: str, new: str, what: str) -> str:
 
 NEW_BRANCH = 'if quant_algo in ("FP8_BLOCK_SCALES", "FP8_PB_WO"):'
 OLD_BRANCH = 'if quant_algo == "FP8_BLOCK_SCALES":'
+# Same message change, for files patched by the earlier version of this script.
+# Without it an upgraded file keeps logging the old hardcoded name.
+OLD_LOG = '''"Routed experts %s use FP8_BLOCK_SCALES; building them with "
+                    "Fp8MoEMethod (block-quantized).",
+                    prefix,'''
+NEW_LOG = '''"Routed experts %s use %s; building them with "
+                    "Fp8MoEMethod (block-quantized).",
+                    prefix,
+                    quant_algo,'''
 
 
 def patch() -> None:
@@ -116,8 +125,10 @@ def patch() -> None:
         return
     if OLD_BRANCH in src:
         # Patched by an earlier version of this script: widen the branch to the
-        # FP8_PB_WO alias without re-applying the helper.
+        # FP8_PB_WO alias without re-applying the helper. Also carry the log
+        # line across, so the message prints the real algo, not the old name.
         src = _replace_once(src, OLD_BRANCH, NEW_BRANCH, "moe dispatch (alias upgrade)")
+        src = _replace_once(src, OLD_LOG, NEW_LOG, "moe dispatch log (alias upgrade)")
         open(TARGET, "w").write(src)
         print("upgraded (FP8_PB_WO alias)", TARGET)
         return

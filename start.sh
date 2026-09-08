@@ -234,9 +234,51 @@ fi
 # the FP8 PLE table only in quantization_config.config_groups). Recover it from
 # the checkpoint and feed it back via --hf-overrides below. Empty = already
 # declared, or no quantized PLE table.
+# PLE config must come from the snapshot the engine will load. refs/main
+# names that revision. Directory order does not. Never guess by ls order.
+# Fail fast on a broken download instead of patching the wrong tree.
+resolve_ple_config_dir() {  # sets PLE_CONFIG_DIR, exits loud on error
+    local ref_file="$HEAD_MODEL_PATH/refs/main"
+    local rev=""
+    if [[ -f "$ref_file" ]]; then
+        # huggingface_hub >= 1.x writes refs/main with a trailing newline,
+        # and stray spaces would poison the path the same way.
+        rev=$(tr -d '[:space:]' < "$ref_file")
+    fi
+    if [[ -n "$rev" ]]; then
+        PLE_CONFIG_DIR="$HEAD_MODEL_PATH/snapshots/$rev"
+        if [[ ! -d "$PLE_CONFIG_DIR" ]]; then
+            err "refs/main names revision '$rev' but snapshots/$rev is missing in $HEAD_MODEL_PATH. Re-run ./download.sh $MODEL_ID."
+        fi
+        if [[ ! -f "$PLE_CONFIG_DIR/config.json" ]]; then
+            err "refs/main names revision '$rev' but snapshots/$rev has no config.json (partial download). Delete $PLE_CONFIG_DIR and re-run ./download.sh $MODEL_ID."
+        fi
+        return 0
+    fi
+    # No refs/main at all. Accept the only snapshot. Refuse to guess
+    # between several. Called as a plain command, not in $(...), so the
+    # PLE_CONFIG_DIR assignment above survives (subshells drop it).
+    local found=()
+    local d
+    for d in "$HEAD_MODEL_PATH"/snapshots/*/; do
+        [[ -d "$d" ]] || continue
+        found+=("${d%/}")
+    done
+    if [[ ${#found[@]} -eq 1 ]]; then
+        PLE_CONFIG_DIR="${found[0]}"
+        if [[ ! -f "$PLE_CONFIG_DIR/config.json" ]]; then
+            err "Only snapshot ${found[0]} exists but it has no config.json (partial download). Delete it and re-run ./download.sh $MODEL_ID."
+        fi
+        return 0
+    fi
+    if [[ ${#found[@]} -eq 0 ]]; then
+        err "No snapshot under $HEAD_MODEL_PATH/snapshots. Re-run ./download.sh $MODEL_ID."
+    fi
+    err "Several snapshots under $HEAD_MODEL_PATH/snapshots but refs/main is missing. Delete stale revisions or re-run ./download.sh $MODEL_ID."
+}
 PLE_CONFIG_DIR="$MODEL_DIR"
 if [[ ! -f "$PLE_CONFIG_DIR/config.json" ]]; then
-    PLE_CONFIG_DIR=$(ls -d "$HEAD_MODEL_PATH"/snapshots/*/ 2>/dev/null | head -1)
+    resolve_ple_config_dir
 fi
 PLE_EMBEDDING_DTYPE="${PLE_EMBEDDING_DTYPE:-}"
 if [[ -z "$PLE_EMBEDDING_DTYPE" && -f "$PLE_CONFIG_DIR/config.json" ]]; then
@@ -466,8 +508,11 @@ if $DO_LAUNCH && [[ -n "${SNAPSHOT_SHA:-}" ]]; then
         ok "Checkpoint already declares absolute MTP layer indices"
     else
         # quantized_layers lives in BOTH config.json and the legacy
-        # hf_quant_config.json, and vLLM reads the legacy file when present —
-        # mounting only config.json leaves the stale mapping in play.
+        # hf_quant_config.json, and the two can disagree: nvidia/... rev
+        # fc694b54 says FP8_PB_WO in config.json and FP8_BLOCK_SCALES in the
+        # sidecar. Runtime evidence (issue #38) shows the MoE dispatch
+        # consumes config.json, so that mount is the one that must be right.
+        # The sidecar is mounted too, for consistency, not because it wins.
         for cfg_name in $PATCHED_FILES; do
             case "$cfg_name" in
                 config.json)         host_file="$SCRIPT_DIR/files/config_patched.json" ;;
