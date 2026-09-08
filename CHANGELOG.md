@@ -14,6 +14,26 @@ Two patches in this release are adapted from
 (AGPL-3.0-or-later), a single-Spark TP=1 recipe. Its FP8-KV approach is in turn credited there to
 `lancelind/qwen3.8-Flash-DGX` (Apache-2.0).
 
+### Added — ABLIT 0/1 gated Keys checkpoint (2026-09-08)
+
+- **`ABLIT` 0/1 flag** (`.env.sample`, `start.sh`, `download.sh`, `check-weights.sh`).
+  `ABLIT=1` serves the gated Keys house checkpoint
+  `drowzeys/keys-Qwen3.8-Flash-Next-NVFP4-dual-ablit-house-qsa-L3-47` (nvidia dual-Spark
+  NVFP4 layout, QSA `o_proj` house projection at L3/7/11/15/19/23/27/31/35/39/43/47).
+  The download is the **full** snapshot so Hugging Face's terms gate stays in force —
+  accept access on the repo page, then `ABLIT=1 ./download.sh` with `HF_TOKEN`.
+  `OVERRIDE_MODEL_ID` (`./start-fp8.sh`) and `FP8_DENSE=true` still win over `ABLIT` for
+  checkpoint selection. `ABLIT` and `HF_TOKEN` honour the environment over `.env`, matching
+  the single-Spark 0/1 flag. `README.md` summarises the gate's terms rather than just
+  telling you to accept them, and credits Keys (drowzeys) for the splice.
+
+  Completeness: `files/resolve_snapshot.py` requires every shard named by
+  `model.safetensors.index.json` before `download.sh` reports success and before
+  `start.sh` launches or skips rsync. An interrupted gated fetch no longer looks
+  "ready." `ABLIT=1 ./download.sh` with no `HF_TOKEN` fails immediately and prints
+  the gate instructions. `check-weights.sh` mirrors `start.sh` precedence so
+  `FP8_DENSE=true` / `OVERRIDE_MODEL_ID` are not checked as the Keys cache.
+
 ### Added — nvidia NVFP4 checkpoint support (2026-09-05)
 
 Three checkpoint-specific gaps had to be closed before this checkpoint would serve. All three

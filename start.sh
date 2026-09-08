@@ -19,6 +19,7 @@
 #   ./start.sh --launch       # skip download/sync; apply patch + launch
 #   ./start.sh --nfs          # distribute weights over NFS instead of rsync
 #   ./start.sh --no-nfs       # force rsync distribution (overrides NFS_SHARE=true)
+#   ABLIT=1 ./start.sh        # gated Keys house QSA L3-47 checkpoint (download first)
 # ============================================================================
 set -euo pipefail
 
@@ -35,7 +36,12 @@ err()   { echo -e "\033[1;31m[ERR ]\033[0m  $*"; exit 1; }
 
 # ---------------------------------------------------------------------------
 # Load .env
+# Environment wins over .env for ABLIT / HF_TOKEN (same 0/1 pattern as
+# MiaAI-Lab/Qwen3.8-Flash-Next-Single-DGX-Spark). Other knobs still follow
+# ".env beats the environment".
 # ---------------------------------------------------------------------------
+_CLI_ABLIT="${ABLIT:-}"
+_CLI_HF_TOKEN="${HF_TOKEN:-}"
 if [[ ! -f .env ]]; then
     echo "ERROR: .env not found. Copy .env.sample to .env and edit it."
     echo "  cp .env.sample .env"
@@ -44,6 +50,15 @@ fi
 
 # shellcheck source=.env
 source .env
+
+[[ -n "$_CLI_ABLIT" ]] && ABLIT="$_CLI_ABLIT"
+ABLIT="${ABLIT:-0}"
+[[ "$ABLIT" == "0" || "$ABLIT" == "1" ]] || err "ABLIT must be 0 or 1 (got: '$ABLIT')"
+[[ -n "$_CLI_HF_TOKEN" ]] && HF_TOKEN="$_CLI_HF_TOKEN"
+HF_TOKEN="${HF_TOKEN:-}"
+[[ -n "$HF_TOKEN" ]] && export HF_TOKEN
+ABLIT_MODEL_ID="drowzeys/keys-Qwen3.8-Flash-Next-NVFP4-dual-ablit-house-qsa-L3-47"
+ABLIT_PAGE="https://huggingface.co/${ABLIT_MODEL_ID}"
 
 # Validate required variables
 for var in HEAD_IP WORKER_IP IFACE IB_HCA IB_GID_INDEX MODEL_ID \
@@ -70,6 +85,12 @@ SERVED_MODEL_NAME="${SERVED_MODEL_NAME:-qwen3.8-flash-next}"
 ENABLE_EXPERT_PARALLEL="${ENABLE_EXPERT_PARALLEL:-true}"
 MTP_NUM_SPECULATIVE_TOKENS="${MTP_NUM_SPECULATIVE_TOKENS:-3}"
 KV_CACHE_DTYPE="${KV_CACHE_DTYPE:-fp8}"   # fp8 needs files/patch_qsa_fp8_kv.py, applied automatically in step 4f; auto = bf16
+# dtype of the GDN recurrent (SSM) state. The checkpoint asks for float32; the
+# fused GDN kernel also accepts bfloat16 (FUSED_GDN_STATE_DTYPES in
+# qwen_gdn_linear_attn.py). BF16 halves the ~0.23 GB per sequence the state
+# costs to read and write every step, and halves the mamba page, which lets
+# vLLM pick a smaller attention block. Empty keeps the checkpoint's float32.
+MAMBA_SSM_CACHE_DTYPE="${MAMBA_SSM_CACHE_DTYPE:-}"
 PLE_OFFLOAD="${PLE_OFFLOAD:-false}"
 # Vision MLP intermediate_size=4304 is not divisible by 16 after TP split (4304/2=2152).
 # NVFP4 kernels require input features % 16 == 0, so replicate the encoder on each GPU.
@@ -106,6 +127,17 @@ FP8_DENSE_MODEL_ID="${FP8_DENSE_MODEL_ID:-MiaAI-Lab/Qwen3.8-Flash-Next-NVFP4-FP8
 if [[ "$FP8_DENSE" == "true" ]]; then
     MODEL_ID="$FP8_DENSE_MODEL_ID"
     DO_DOWNLOAD_DEFAULT=false   # local-only checkpoint, never on the Hub
+fi
+# ABLIT=1 serves the gated Keys house QSA o_proj checkpoint (L3–47).
+# OVERRIDE_MODEL_ID (start-fp8.sh) and FP8_DENSE=true still win.
+if [[ "$ABLIT" == "1" ]]; then
+    if [[ "$FP8_DENSE" == "true" ]]; then
+        warn "ABLIT=1 ignored for checkpoint selection: FP8_DENSE=true (MODEL_ID=$MODEL_ID)"
+    elif [[ -n "${OVERRIDE_MODEL_ID:-}" && "$MODEL_ID" != "$ABLIT_MODEL_ID" ]]; then
+        warn "ABLIT=1 ignored for checkpoint selection: OVERRIDE_MODEL_ID=$MODEL_ID"
+    else
+        MODEL_ID="$ABLIT_MODEL_ID"
+    fi
 fi
 # Reduced-vocabulary MTP drafting: path to a token-id list from
 # files/build_draft_vocab.py, or empty to draft over the full 248,320 vocabulary.
@@ -146,6 +178,8 @@ for arg in "$@"; do
             echo "  --launch       Skip download + sync; apply patch and launch"
             echo "  --nfs          Share the head cache over NFS instead of rsync (no worker copy)"
             echo "  --no-nfs       Force rsync distribution even if NFS_SHARE=true in .env"
+            echo "  ABLIT=1        Serve the gated Keys house QSA L3-47 checkpoint"
+            echo "                 (accept the Hugging Face terms, then ABLIT=1 ./download.sh)"
             exit 0
             ;;
         *)
@@ -153,6 +187,12 @@ for arg in "$@"; do
             ;;
     esac
 done
+
+if [[ "$ABLIT" == "1" && "$MODEL_ID" == "$ABLIT_MODEL_ID" ]]; then
+    warn "ABLIT=1: serving gated Keys checkpoint ($ABLIT_MODEL_ID)."
+    warn "     Safety refusals are removed. MTP, PLE, experts and the chat template stay stock."
+    warn "     Compatible ONLY with the nvidia dual-Spark NVFP4 layout (this recipe)."
+fi
 
 # shellcheck source=files/nfs-share.sh
 source "$SCRIPT_DIR/files/nfs-share.sh"
@@ -213,6 +253,14 @@ if [[ ! -d "$MODEL_DIR" ]]; then
 fi
 
 if [[ -z "$MODEL_DIR" || ! -d "$MODEL_DIR" ]]; then
+    if [[ "$ABLIT" == "1" && "$MODEL_ID" == "$ABLIT_MODEL_ID" ]]; then
+        err "Could not resolve local cache path for $MODEL_ID under $HUB_PATH
+       Fetch it first (HF_TOKEN required):
+         1. Set HF_TOKEN in .env (or: export HF_TOKEN=hf_...)
+         2. Open $ABLIT_PAGE
+         3. Accept the terms on that page
+         4. ABLIT=1 ./download.sh"
+    fi
     err "Could not resolve local cache path for $MODEL_ID under $HUB_PATH"
 fi
 case "$MODEL_DIR" in
@@ -220,14 +268,38 @@ case "$MODEL_DIR" in
     *) err "snapshot ${MODEL_DIR} is not under HF_HOME=${HF_CACHE_DIR}" ;;
 esac
 
-ok "Model cache: $MODEL_DIR"
-
 ORG="${MODEL_ID%%/*}"
 NAME="${MODEL_ID##*/}"
 HEAD_MODEL_PATH="$HUB_PATH/models--${ORG}--${NAME}"
 if [[ ! -d "$HEAD_MODEL_PATH" ]]; then
+    if [[ "$ABLIT" == "1" && "$MODEL_ID" == "$ABLIT_MODEL_ID" ]]; then
+        err "Could not find HF repo cache at $HEAD_MODEL_PATH
+       Fetch it first (HF_TOKEN required):
+         1. Set HF_TOKEN in .env (or: export HF_TOKEN=hf_...)
+         2. Open $ABLIT_PAGE
+         3. Accept the terms on that page
+         4. ABLIT=1 ./download.sh"
+    fi
     err "Could not find HF repo cache at $HEAD_MODEL_PATH (resolved snapshot: ${MODEL_DIR:-none})"
 fi
+
+# Every shard named by the safetensors index must exist. A hub dir from an
+# interrupted download is not enough — rsync would copy the hole to the worker
+# and vLLM would die minutes into load.
+SNAP=""
+SNAP_RC=0
+SNAP="$(python3 "$SCRIPT_DIR/files/resolve_snapshot.py" "$HEAD_MODEL_PATH")" && SNAP_RC=0 || SNAP_RC=$?
+[[ -n "$SNAP" ]] || err "No snapshot under $HEAD_MODEL_PATH/snapshots"
+if [[ "$SNAP_RC" -ne 0 ]]; then
+    if [[ "$ABLIT" == "1" && "$MODEL_ID" == "$ABLIT_MODEL_ID" ]]; then
+        err "Checkpoint snapshot is incomplete (missing indexed weight shards).
+       Resume with (HF_TOKEN required):  ABLIT=1 ./download.sh
+       Accept the terms on $ABLIT_PAGE first."
+    fi
+    err "Checkpoint snapshot is incomplete (missing indexed weight shards).
+       Resume with:  ./download.sh $MODEL_ID"
+fi
+ok "Model cache: $HEAD_MODEL_PATH  (snapshot $SNAP)"
 
 # Checkpoints disagree about declaring text_config.ple_embedding_dtype, which is
 # what the patched ple_layer.py dispatches on (nvidia/... omits it and declares
@@ -236,49 +308,14 @@ fi
 # declared, or no quantized PLE table.
 # PLE config must come from the snapshot the engine will load. refs/main
 # names that revision. Directory order does not. Never guess by ls order.
-# Fail fast on a broken download instead of patching the wrong tree.
-resolve_ple_config_dir() {  # sets PLE_CONFIG_DIR, exits loud on error
-    local ref_file="$HEAD_MODEL_PATH/refs/main"
-    local rev=""
-    if [[ -f "$ref_file" ]]; then
-        # huggingface_hub >= 1.x writes refs/main with a trailing newline,
-        # and stray spaces would poison the path the same way.
-        rev=$(tr -d '[:space:]' < "$ref_file")
-    fi
-    if [[ -n "$rev" ]]; then
-        PLE_CONFIG_DIR="$HEAD_MODEL_PATH/snapshots/$rev"
-        if [[ ! -d "$PLE_CONFIG_DIR" ]]; then
-            err "refs/main names revision '$rev' but snapshots/$rev is missing in $HEAD_MODEL_PATH. Re-run ./download.sh $MODEL_ID."
-        fi
-        if [[ ! -f "$PLE_CONFIG_DIR/config.json" ]]; then
-            err "refs/main names revision '$rev' but snapshots/$rev has no config.json (partial download). Delete $PLE_CONFIG_DIR and re-run ./download.sh $MODEL_ID."
-        fi
-        return 0
-    fi
-    # No refs/main at all. Accept the only snapshot. Refuse to guess
-    # between several. Called as a plain command, not in $(...), so the
-    # PLE_CONFIG_DIR assignment above survives (subshells drop it).
-    local found=()
-    local d
-    for d in "$HEAD_MODEL_PATH"/snapshots/*/; do
-        [[ -d "$d" ]] || continue
-        found+=("${d%/}")
-    done
-    if [[ ${#found[@]} -eq 1 ]]; then
-        PLE_CONFIG_DIR="${found[0]}"
-        if [[ ! -f "$PLE_CONFIG_DIR/config.json" ]]; then
-            err "Only snapshot ${found[0]} exists but it has no config.json (partial download). Delete it and re-run ./download.sh $MODEL_ID."
-        fi
-        return 0
-    fi
-    if [[ ${#found[@]} -eq 0 ]]; then
-        err "No snapshot under $HEAD_MODEL_PATH/snapshots. Re-run ./download.sh $MODEL_ID."
-    fi
-    err "Several snapshots under $HEAD_MODEL_PATH/snapshots but refs/main is missing. Delete stale revisions or re-run ./download.sh $MODEL_ID."
-}
-PLE_CONFIG_DIR="$MODEL_DIR"
+# SNAP was already resolved by files/resolve_snapshot.py (complete shards,
+# refs/main preferred).
+PLE_CONFIG_DIR="$HEAD_MODEL_PATH/snapshots/$SNAP"
+if [[ ! -f "$PLE_CONFIG_DIR/config.json" && -f "$MODEL_DIR/config.json" ]]; then
+    PLE_CONFIG_DIR="$MODEL_DIR"
+fi
 if [[ ! -f "$PLE_CONFIG_DIR/config.json" ]]; then
-    resolve_ple_config_dir
+    err "snapshot $SNAP has no config.json (partial download). Delete $PLE_CONFIG_DIR and re-run ./download.sh $MODEL_ID."
 fi
 PLE_EMBEDDING_DTYPE="${PLE_EMBEDDING_DTYPE:-}"
 if [[ -z "$PLE_EMBEDDING_DTYPE" && -f "$PLE_CONFIG_DIR/config.json" ]]; then
@@ -318,19 +355,32 @@ else
     info "=== Step 3: Sync weights to worker ($WORKER_IP) ==="
     if ! $DO_SYNC; then
         info "  --launch: skipping sync (assuming worker cache is current)"
-    elif ssh_worker "test -d '$REMOTE_HUB/models--${ORG}--${NAME}'" 2>/dev/null; then
-        ok "Worker already has models--${ORG}--${NAME} — skipping rsync."
-        info "  (delete $REMOTE_HUB/models--${ORG}--${NAME} on the worker to force a re-sync)"
     else
-        [[ -d "$HEAD_MODEL_PATH" ]] || err "HEAD ($HEAD_IP): $HEAD_MODEL_PATH — NOT FOUND. Nothing to sync; run ./download.sh first."
-        info "  Worker cache: $REMOTE_HUB"
-        warn "  This copies the full checkpoint over the network and needs the same"
-        warn "  free space on the worker. NFS_SHARE=true avoids both — see the README."
-        ssh_worker "mkdir -p '$REMOTE_HUB'"
-        rsync -av --progress --partial \
-            "${HEAD_MODEL_PATH}/" \
-            "${WORKER_USER:+${WORKER_USER}@}${WORKER_IP}:${REMOTE_HUB}/models--${ORG}--${NAME}/"
-        ok "Rsync complete."
+        WORKER_SNAP_RC=2
+        if ssh_worker "test -d '$REMOTE_HUB/models--${ORG}--${NAME}'" 2>/dev/null; then
+            set +e
+            ssh_worker python3 - "$REMOTE_HUB/models--${ORG}--${NAME}" \
+                < "$SCRIPT_DIR/files/resolve_snapshot.py" >/dev/null
+            WORKER_SNAP_RC=$?
+            set -e
+        fi
+        if [[ "$WORKER_SNAP_RC" -eq 0 ]]; then
+            ok "Worker already has a complete snapshot of models--${ORG}--${NAME} — skipping rsync."
+            info "  (delete $REMOTE_HUB/models--${ORG}--${NAME} on the worker to force a re-sync)"
+        else
+            [[ -d "$HEAD_MODEL_PATH" ]] || err "HEAD ($HEAD_IP): $HEAD_MODEL_PATH — NOT FOUND. Nothing to sync; run ./download.sh first."
+            if [[ "$WORKER_SNAP_RC" -eq 1 ]]; then
+                warn "Worker snapshot is incomplete — re-syncing."
+            fi
+            info "  Worker cache: $REMOTE_HUB"
+            warn "  This copies the full checkpoint over the network and needs the same"
+            warn "  free space on the worker. NFS_SHARE=true avoids both — see the README."
+            ssh_worker "mkdir -p '$REMOTE_HUB'"
+            rsync -av --progress --partial \
+                "${HEAD_MODEL_PATH}/" \
+                "${WORKER_USER:+${WORKER_USER}@}${WORKER_IP}:${REMOTE_HUB}/models--${ORG}--${NAME}/"
+            ok "Rsync complete."
+        fi
     fi
 fi
 
@@ -644,6 +694,7 @@ if $DO_LAUNCH; then
     VLLM_ARGS+=("--max-num-batched-tokens" "$MAX_NUM_BATCHED_TOKENS")
     VLLM_ARGS+=("--max-model-len" "$MAX_MODEL_LEN")
     VLLM_ARGS+=("--kv-cache-dtype" "$KV_CACHE_DTYPE")
+    [[ -n "$MAMBA_SSM_CACHE_DTYPE" ]] && VLLM_ARGS+=("--mamba-ssm-cache-dtype" "$MAMBA_SSM_CACHE_DTYPE")
     VLLM_ARGS+=("--load-format" "safetensors")
     VLLM_ARGS+=("--safetensors-load-strategy" "lazy")
     VLLM_ARGS+=("--enable-chunked-prefill")
@@ -750,10 +801,6 @@ print(json.dumps({"text_config": tc}, separators=(",", ":")) if tc else "")
     DOCKER_ARGS+=("-e HF_HOME=/root/.cache/huggingface")
     DOCKER_ARGS+=("-v $HF_CACHE_DIR:/root/.cache/huggingface")
     DOCKER_ARGS+=("-v $HOME/.cache/vllm:/root/.cache/vllm")
-    # HF token
-    if [[ -n "$HF_TOKEN" ]]; then
-        DOCKER_ARGS+=(-e "HF_TOKEN=$HF_TOKEN")
-    fi
     if [[ -n "$EXTRA_DOCKER_ARGS" ]]; then
         # shellcheck disable=SC2206
         DOCKER_ARGS+=($EXTRA_DOCKER_ARGS)
@@ -767,6 +814,11 @@ print(json.dumps({"text_config": tc}, separators=(",", ":")) if tc else "")
     info ""
     info "Config:"
     info "  Model:      $MODEL_ID"
+    if [[ "$ABLIT" == "1" && "$MODEL_ID" == "$ABLIT_MODEL_ID" ]]; then
+        info "  ABLIT:      1 (gated Keys house QSA L3-47)"
+    else
+        info "  ABLIT:      $ABLIT"
+    fi
     if [[ "$NFS_SHARE" == "true" ]]; then
         info "  Weights:    NFS from $NFS_SERVER_IP (head cache, no worker copy)"
     else
@@ -783,6 +835,7 @@ print(json.dumps({"text_config": tc}, separators=(",", ":")) if tc else "")
     info "  IB_HCA:     $IB_HCA"
     info "  FP8 dense:  $FP8_DENSE   QSA profile: $QSA_PROFILE"
     info "  KV dtype:   $KV_CACHE_DTYPE   Draft vocab: ${MTP_DRAFT_VOCAB:-full}"
+    info "  SSM state:  ${MAMBA_SSM_CACHE_DTYPE:-float32 (checkpoint)}"
     info "  MM encoder: $MM_ENCODER_TP_MODE tp-mode"
     [[ -n "$EXTRA_VLLM_ARGS" ]] && info "  Extra args: $EXTRA_VLLM_ARGS"
     info ""

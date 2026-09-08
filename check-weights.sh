@@ -70,16 +70,42 @@ if [[ ! -f .env ]]; then
     exit 1
 fi
 
-source .env
-
 info()  { echo -e "\033[1;34m[INFO]\033[0m  $*"; }
 ok()    { echo -e "\033[1;32m[ OK ]\033[0m  $*"; }
 warn()  { echo -e "\033[1;33m[WARN]\033[0m  $*"; }
 err()   { echo -e "\033[1;31m[ERR ]\033[0m  $*"; exit 1; }
 
+_CLI_ABLIT="${ABLIT:-}"
+_CLI_OVERRIDE_MODEL_ID="${OVERRIDE_MODEL_ID:-}"
+_CLI_FP8_DENSE="${FP8_DENSE:-}"
+source .env
+[[ -n "$_CLI_ABLIT" ]] && ABLIT="$_CLI_ABLIT"
+ABLIT="${ABLIT:-0}"
+[[ "$ABLIT" == "0" || "$ABLIT" == "1" ]] || err "ABLIT must be 0 or 1 (got: '$ABLIT')"
+[[ -n "$_CLI_OVERRIDE_MODEL_ID" ]] && OVERRIDE_MODEL_ID="$_CLI_OVERRIDE_MODEL_ID"
+[[ -n "$_CLI_FP8_DENSE" ]] && FP8_DENSE="$_CLI_FP8_DENSE"
+
 WORKER_USER="${WORKER_USER:-}"
 WORKER_IP="${WORKER_IP:?WORKER_IP not set in .env}"
 MODEL_ID="${MODEL_ID:?MODEL_ID not set in .env}"
+ABLIT_MODEL_ID="drowzeys/keys-Qwen3.8-Flash-Next-NVFP4-dual-ablit-house-qsa-L3-47"
+FP8_DENSE="${FP8_DENSE:-false}"
+FP8_DENSE_MODEL_ID="${FP8_DENSE_MODEL_ID:-MiaAI-Lab/Qwen3.8-Flash-Next-NVFP4-FP8dense}"
+if [[ -n "${OVERRIDE_MODEL_ID:-}" ]]; then
+    MODEL_ID="$OVERRIDE_MODEL_ID"
+fi
+if [[ "$FP8_DENSE" == "true" ]]; then
+    MODEL_ID="$FP8_DENSE_MODEL_ID"
+fi
+if [[ "$ABLIT" == "1" ]]; then
+    if [[ "$FP8_DENSE" == "true" ]]; then
+        warn "ABLIT=1 ignored for checkpoint selection: FP8_DENSE=true (MODEL_ID=$MODEL_ID)"
+    elif [[ -n "${OVERRIDE_MODEL_ID:-}" && "$MODEL_ID" != "$ABLIT_MODEL_ID" ]]; then
+        warn "ABLIT=1 ignored for checkpoint selection: OVERRIDE_MODEL_ID=$MODEL_ID"
+    else
+        MODEL_ID="$ABLIT_MODEL_ID"
+    fi
+fi
 IFACE="${IFACE:?IFACE not set in .env}"
 NFS_SHARE="${NFS_SHARE:-false}"
 NFS_SERVER_IP="${NFS_SERVER_IP:-}"
@@ -246,6 +272,9 @@ check_node() {
 source "$SCRIPT_DIR/files/nfs-share.sh"
 
 echo "Checking weights for: $MODEL_ID"
+if [[ "$ABLIT" == "1" && "$MODEL_ID" == "$ABLIT_MODEL_ID" ]]; then
+    echo "ABLIT=1 (gated Keys house QSA L3-47)"
+fi
 echo "Head cache:   $MODEL_PATH"
 echo "Worker cache: $WORKER_MODEL_PATH"
 echo ""
