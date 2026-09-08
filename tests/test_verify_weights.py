@@ -6,6 +6,7 @@ verifier can report, and the resolution logic for the standard hub layout.
 """
 
 import hashlib
+import json
 import os
 import shutil
 import sys
@@ -238,11 +239,42 @@ class VerifyWeightsTest(unittest.TestCase):
         make_file(os.path.join(self.tmp, "model.safetensors"), 4, b"abcd")
         manifest = shas(self.tmp, {"model.safetensors": b"abcd"})
         manifest_path = os.path.join(self.tmp, "manifest.json")
-        vw.save_manifest(manifest_path, manifest)
-        loaded = vw.load_manifest(manifest_path)
+        vw.save_manifest(manifest_path, manifest, "org/model", "main")
+        loaded, meta = vw.load_manifest(manifest_path)
         self.assertEqual(loaded, manifest)
+        self.assertEqual(meta.get("repo"), "org/model")
+        self.assertEqual(meta.get("revision"), "main")
+        self.assertTrue(meta.get("fetched_at"))
         problems = vw.verify(self.tmp, loaded, workers=2)
         self.assertEqual(problems, [])
+
+    def test_load_manifest_legacy_bare_mapping(self):
+        """Edge case: a manifest saved by an older version has no provenance."""
+        manifest = shas(self.tmp, {"config.json": b"{}"})
+        manifest_path = os.path.join(self.tmp, "legacy.json")
+        with open(manifest_path, "w") as handle:
+            json.dump(manifest, handle)
+        loaded, meta = vw.load_manifest(manifest_path)
+        self.assertEqual(loaded, manifest)
+        self.assertEqual(meta, {})
+
+    def test_main_manifest_wrong_repo_returns_2(self):
+        """Failure case: a manifest saved for another repo is refused, not verified."""
+        manifest = shas(self.tmp, {"config.json": b"{}"})
+        manifest_path = os.path.join(self.tmp, "manifest.json")
+        vw.save_manifest(manifest_path, manifest, "other/model", "main")
+        rc = vw.main(["--repo", "org/model", "--path", self.tmp,
+                      "--manifest", manifest_path, "--quiet"])
+        self.assertEqual(rc, 2)
+
+    def test_main_manifest_right_repo_verifies(self):
+        """Expected use: a manifest saved for this repo passes the cross-check."""
+        manifest = shas(self.tmp, {"config.json": b"{}"})
+        manifest_path = os.path.join(self.tmp, "manifest.json")
+        vw.save_manifest(manifest_path, manifest, "org/model", "main")
+        rc = vw.main(["--repo", "org/model", "--path", self.tmp,
+                      "--manifest", manifest_path, "--quiet"])
+        self.assertEqual(rc, 0)
 
     def test_load_manifest_malformed_raises(self):
         """Failure case: a corrupt manifest file raises VerifierError."""

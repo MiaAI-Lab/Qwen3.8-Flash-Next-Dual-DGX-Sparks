@@ -48,6 +48,7 @@ import hashlib
 import json
 import os
 import sys
+from datetime import datetime, timezone
 import urllib.error
 import urllib.request
 
@@ -62,6 +63,11 @@ IGNORED_SUFFIXES = (".lock", ".metadata", ".incomplete")
 IGNORED_FILES = {".gitignore", "CACHEDIR.TAG"}
 
 _EMPTY_OID = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+
+# Saved manifests wrap the files mapping with provenance, so a later run can
+# tell which repo and revision the hashes belong to.
+MANIFEST_FORMAT = "verify-weights-manifest"
+MANIFEST_VERSION = 1
 
 # The tree API puts a git blob SHA-1 in the top-level "oid" of every file entry,
 # so its shape tells a usable digest from anything else.
@@ -114,8 +120,13 @@ def fetch_manifest(repo: str, revision: str) -> dict[str, dict]:
     return manifest
 
 
-def load_manifest(path: str) -> dict[str, dict]:
-    """Load a manifest previously saved with --save-manifest."""
+def load_manifest(path: str) -> tuple[dict[str, dict], dict]:
+    """Load a manifest previously saved with --save-manifest.
+
+    Returns (files, meta). Files maps relative path -> API entry. Meta holds
+    the repo, revision and fetch time recorded at save time, or {} for a
+    manifest saved by an older version, which carried no provenance.
+    """
     try:
         with open(path, "r", encoding="utf-8") as handle:
             payload = json.load(handle)
@@ -123,13 +134,33 @@ def load_manifest(path: str) -> dict[str, dict]:
         raise VerifierError(f"could not load manifest {path}: {exc}") from exc
     if not isinstance(payload, dict):
         raise VerifierError(f"manifest {path} is not a mapping of path -> entry")
-    return payload
+    if payload.get("format") == MANIFEST_FORMAT:
+        files = payload.get("files")
+        if not isinstance(files, dict):
+            raise VerifierError(f"manifest {path} has no files mapping")
+        meta = {key: payload.get(key, "") for key in ("repo", "revision", "fetched_at")}
+        return files, meta
+    return payload, {}
 
 
-def save_manifest(path: str, manifest: dict[str, dict]) -> None:
-    """Save a manifest for reuse by another node / later run."""
+def save_manifest(path: str, manifest: dict[str, dict],
+                   repo: str = "", revision: str = "") -> None:
+    """Save a manifest for reuse by another node / later run.
+
+    The repo and revision the manifest was fetched for travel with it, so a
+    later --manifest run can refuse a manifest saved for a different repo
+    instead of verifying one checkpoint against another one's hashes.
+    """
+    payload = {
+        "format": MANIFEST_FORMAT,
+        "version": MANIFEST_VERSION,
+        "repo": repo,
+        "revision": revision,
+        "fetched_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "files": manifest,
+    }
     with open(path, "w", encoding="utf-8") as handle:
-        json.dump(manifest, handle)
+        json.dump(payload, handle)
 
 
 def resolve_snapshot(root: str) -> tuple[str, bool]:
@@ -413,7 +444,7 @@ def main(argv: list[str]) -> int:
             print(f"ERROR: {exc}", file=sys.stderr)
             return 2
         if args.save_manifest:
-            save_manifest(args.save_manifest, manifest)
+            save_manifest(args.save_manifest, manifest, repo, args.revision)
         if not args.quiet:
             print(f"Manifest: {len(manifest)} files")
         return 0
@@ -444,12 +475,23 @@ def main(argv: list[str]) -> int:
         print(f"ERROR: model directory not found: {tree_dir}", file=sys.stderr)
         return 2
 
+    manifest_meta: dict = {}
     if args.manifest:
         try:
-            manifest = load_manifest(args.manifest)
+            manifest, manifest_meta = load_manifest(args.manifest)
         except VerifierError as exc:
             print(f"ERROR: {exc}", file=sys.stderr)
             return 2
+        # A manifest saved for another repo would verify this checkpoint
+        # against the wrong hashes and report nonsense. Refuse it loudly.
+        # Manifests saved by older versions carry no repo and skip the check.
+        saved_repo = manifest_meta.get("repo", "")
+        if saved_repo and saved_repo != repo:
+            print(f"ERROR: manifest {args.manifest} was saved for repo "
+                  f"'{saved_repo}', not '{repo}'", file=sys.stderr)
+            return 2
+        if args.save_manifest:
+            save_manifest(args.save_manifest, manifest, repo, args.revision)
     else:
         try:
             manifest = fetch_manifest(repo, args.revision)
@@ -457,11 +499,16 @@ def main(argv: list[str]) -> int:
             print(f"ERROR: {exc}", file=sys.stderr)
             return 2
         if args.save_manifest:
-            save_manifest(args.save_manifest, manifest)
+            save_manifest(args.save_manifest, manifest, repo, args.revision)
 
     expected_bytes = sum(e.get("size", 0) for e in manifest.values() if isinstance(e.get("size"), int))
     if not args.quiet:
-        print(f"Manifest: {len(manifest)} files ({expected_bytes / 1e9:.1f} GB)")
+        saved_info = ""
+        if args.manifest and (manifest_meta.get("repo") or manifest_meta.get("fetched_at")):
+            saved_info = (f" (saved for {manifest_meta.get('repo', '?')}"
+                          f"@{manifest_meta.get('revision', '?')} "
+                          f"at {manifest_meta.get('fetched_at', '?')})")
+        print(f"Manifest: {len(manifest)} files ({expected_bytes / 1e9:.1f} GB){saved_info}")
         print(f"Verifying {tree_dir} ...")
         if args.dry_run:
             print("Dry run: checking presence and size only (no content hashing).\n")

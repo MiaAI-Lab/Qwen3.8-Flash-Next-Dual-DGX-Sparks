@@ -10,14 +10,15 @@
 #   ./check-weights.sh --dry-run          # plan --verify without hashing or scp
 #   ./check-weights.sh --manifest FILE    # verify against a saved manifest (no API call)
 #
-# --verify streams every shard and compares its SHA-256 with the checksum the
-# Hugging Face API reports for the repo. A size-only check does not catch a
+# --verify streams every shard and compares its content hash with the manifest
+# the Hugging Face API reports for the repo (SHA-256 for LFS shards, git blob
+# SHA-1 for plain files). A size-only check does not catch a
 # shard corrupted mid-download that kept roughly the wrong size (see issue #30);
 # hashing does. It fetches the manifest once on the head, saves it locally, and
 # ships it to the worker so both nodes validate against the same manifest.
 #
 # --dry-run (alias -n) does the same planning and the cheap presence/size checks
-# on both nodes, but skips the SHA-256 pass and the scp of the verifier to the
+# on both nodes, but skips the hashing pass and the scp of the verifier to the
 # worker. It is safe to run while the cluster is busy: no 135 GB reads, no
 # copies, only a manifest fetch and stat calls.
 #
@@ -91,7 +92,10 @@ MODEL_REL="hub/models--${ORG}--${NAME}"
 # Resolve the local model directory exactly like start.sh does: the standard
 # hub path (blobs/refs/snapshots) first, then the `hf path` CLI if the hub dir
 # does not exist. check-weights.sh must agree with the launcher about where
-# the weights live, or a real --verify run would hash nothing.
+# the weights live, or a real --verify run would hash nothing. It deliberately
+# does NOT guess beyond that: walking up the tree looking for any config.json
+# can resolve to an unrelated checkpoint, and a verifier that checks the wrong
+# tree is worse than one that reports it missing.
 resolve_model_dir() {
     local hub="$HUB_PATH/models--${ORG}--${NAME}"
     if [[ -d "$hub" && -n "$(ls -A "$hub" 2>/dev/null)" ]]; then
@@ -116,20 +120,6 @@ resolve_model_dir() {
         echo "$guess"
         return 0
     fi
-    # Direct-download layout: `hf download --local-dir <dir>` and manual rsync
-    # both put model files at the repo root, not under hub/models--.... The
-    # local-dir carries a .cache/ directory produced by the downloader, so walk
-    # up from HF_CACHE_DIR looking for a model content file (config.json plus
-    # the safetensors index). This also covers weight dirs copied next to a
-    # .cache dir by hand.
-    local dir="$HF_CACHE_DIR"
-    for _ in 1 2 3 4 5; do
-        dir="$(cd "$dir/.." 2>/dev/null && pwd)" || break
-        if [[ -f "$dir/config.json" && -f "$dir/model.safetensors.index.json" ]]; then
-            echo "$dir"
-            return 0
-        fi
-    done
     return 1
 }
 
@@ -147,8 +137,10 @@ ssh_worker() {
 # absolute roots per node (e.g. /home/user/models-gigabyte on head vs
 # /home/user/models on worker) with the same layout, so an explicit
 # WORKER_MODEL_PATH override in .env is the reliable way to pin it; without it
-# we mirror the head's HF_HOME under the worker's $HOME and resolve the same
-# layout the head used (hub path or direct local-dir, via resolve_model_dir).
+# we mirror the head's HF_HOME under the worker's $HOME. The worker is
+# expected to keep the standard hub path there. No guessing beyond that, for
+# the same reason as resolve_model_dir above: check_node reports a missing
+# worker copy as NOT FOUND, which is honest, while a guessed dir would not be.
 WORKER_MODEL_PATH="${WORKER_MODEL_PATH:-}"
 if [[ -z "$WORKER_MODEL_PATH" ]]; then
     REMOTE_HOME="$HOME"
@@ -160,25 +152,32 @@ if [[ -z "$WORKER_MODEL_PATH" ]]; then
     else
         REMOTE_HF="$HF_CACHE_DIR"
     fi
-    # Prefer the hub path under the worker's HF cache, then walk up looking for
-    # a direct local-dir layout, exactly like the head side.
     WORKER_MODEL_PATH="$REMOTE_HF/hub/models--${ORG}--${NAME}"
-    if [[ ! -d "$WORKER_MODEL_PATH" ]]; then
-        WORKER_MODEL_PATH="$(ssh_worker "HF_CACHE_DIR='$REMOTE_HF'; ORG='$ORG'; NAME='$NAME'
-            for dir in \"\$HF_CACHE_DIR\" \"\$HF_CACHE_DIR/..\" \"\$HOME\"; do
-                if [[ -f \"\$dir/config.json\" && -f \"\$dir/model.safetensors.index.json\" ]]; then
-                    echo \"\$dir\"; break
-                fi
-            done" 2>/dev/null | tail -1)"
-        [[ -n "$WORKER_MODEL_PATH" ]] || WORKER_MODEL_PATH="$REMOTE_HF/hub/models--${ORG}--${NAME}"
-    fi
 fi
+
+# Translate the verifier's exit status into a message. verify-weights.py
+# returns 1 when the weights failed verification and 2 when the check itself
+# broke (unresolvable manifest, missing python3, ...). Those are different
+# answers: the first means corrupt weights, the second means try again.
+# Printing "mismatch" for both would send an operator after weights when the
+# tool is what broke.
+report_verify_rc() {  # report_verify_rc <rc> <label> <path>
+    local vrc="$1" vlabel="$2" vpath="$3"
+    if [[ "$vrc" -eq 1 ]]; then
+        echo "  $vlabel ❌  verification FAILED for $vpath (does not match the manifest)"
+        return 1
+    elif [[ "$vrc" -ne 0 ]]; then
+        echo "  $vlabel ❌  could not verify $vpath (checker exit $vrc; tool failure, not a weight mismatch)"
+        return 1
+    fi
+    return 0
+}
 
 check_node() {
     local label="$1"
     local path="$2"
     local run_cmd="${3:-local}"
-    local size shards
+    local size shards rc worker_tmp
 
     if [[ "$run_cmd" == "local" ]]; then
         if [[ -d "$path" ]]; then
@@ -189,18 +188,16 @@ check_node() {
             if $DO_VERIFY; then
                 if $DO_DRY_RUN; then
                     echo "         [dry run] presence + size check only (no hashing)"
-                    if ! python3 "$SCRIPT_DIR/verify-weights.py" --path "$path" --repo "$MODEL_ID" \
-                            --manifest "$VERIFY_MANIFEST" --dry-run; then
-                        echo "  $label ❌  problem(s) found"
-                        return 1
-                    fi
+                    rc=0
+                    python3 "$SCRIPT_DIR/verify-weights.py" --path "$path" --repo "$MODEL_ID" \
+                            --manifest "$VERIFY_MANIFEST" --dry-run || rc=$?
+                    report_verify_rc "$rc" "$label" "$path" || return 1
                 else
-                    echo "         Verifying SHA-256 against the HF manifest ..."
-                    if ! python3 "$SCRIPT_DIR/verify-weights.py" --path "$path" --repo "$MODEL_ID" \
-                            --manifest "$VERIFY_MANIFEST"; then
-                        echo "  $label ❌  SHA-256 mismatch in $path"
-                        return 1
-                    fi
+                    echo "         Verifying content hashes against the HF manifest ..."
+                    rc=0
+                    python3 "$SCRIPT_DIR/verify-weights.py" --path "$path" --repo "$MODEL_ID" \
+                            --manifest "$VERIFY_MANIFEST" || rc=$?
+                    report_verify_rc "$rc" "$label" "$path" || return 1
                 fi
             fi
             return 0
@@ -217,17 +214,24 @@ check_node() {
             echo "         Size: $size | Shards: $shards"
             if $DO_VERIFY; then
                 if $DO_DRY_RUN; then
-                    echo "         [dry run] would scp verifier + manifest and hash $path"
+                    echo "         [dry run] would stage verifier + manifest and hash $path"
                 else
-                    echo "         Verifying SHA-256 against the HF manifest ..."
+                    echo "         Verifying content hashes against the HF manifest ..."
                     # The worker cache does not have the repo checkout, so ship the
                     # verifier (stdlib-only, single file) and the manifest there.
-                    scp -q "$SCRIPT_DIR/verify-weights.py" "${WORKER_USER:+${WORKER_USER}@}${WORKER_IP}:/tmp/verify-weights.py"
-                    scp -q "$VERIFY_MANIFEST" "${WORKER_USER:+${WORKER_USER}@}${WORKER_IP}:/tmp/verify-manifest.json"
-                    if ! ssh_cmd "python3 /tmp/verify-weights.py --path '$path' --repo '$MODEL_ID' --manifest /tmp/verify-manifest.json"; then
-                        echo "  $label ❌  SHA-256 mismatch in $path"
+                    # A fresh private temp dir, not a fixed /tmp path: predictable
+                    # names are a symlink-attack surface and leak between runs.
+                    worker_tmp=""
+                    if ! worker_tmp=$(ssh_worker "mktemp -d /tmp/verify-weights.XXXXXX" 2>/dev/null); then
+                        echo "  $label ❌  could not stage verifier on worker"
                         return 1
                     fi
+                    scp -q "$SCRIPT_DIR/verify-weights.py" "${WORKER_USER:+${WORKER_USER}@}${WORKER_IP}:${worker_tmp}/verify-weights.py"
+                    scp -q "$VERIFY_MANIFEST" "${WORKER_USER:+${WORKER_USER}@}${WORKER_IP}:${worker_tmp}/manifest.json"
+                    rc=0
+                    ssh_worker "python3 '${worker_tmp}/verify-weights.py' --path '$path' --repo '$MODEL_ID' --manifest '${worker_tmp}/manifest.json'" || rc=$?
+                    ssh_worker "rm -rf '$worker_tmp'" 2>/dev/null || true
+                    report_verify_rc "$rc" "$label" "$path" || return 1
                 fi
             fi
             return 0
@@ -253,6 +257,15 @@ export HF_TOKEN="${HF_TOKEN:-}"
 # A mirror set in .env must reach the verifier too, on both nodes.
 [[ -n "${HF_API_BASE:-}" ]] && export HF_API_BASE
 VERIFY_MANIFEST=""
+# Temp manifest created by this run. Tracked separately from VERIFY_MANIFEST
+# so the EXIT trap only removes what we created, never a user --manifest file.
+VERIFY_MANIFEST_TMP=""
+cleanup_verify_manifest() {
+    if [[ -n "$VERIFY_MANIFEST_TMP" ]]; then
+        rm -f "$VERIFY_MANIFEST_TMP"
+    fi
+}
+trap cleanup_verify_manifest EXIT
 if $DO_VERIFY; then
     if [[ -n "$SAVED_MANIFEST" ]]; then
         if [[ ! -f "$SAVED_MANIFEST" ]]; then
@@ -262,7 +275,8 @@ if $DO_VERIFY; then
         VERIFY_MANIFEST="$SAVED_MANIFEST"
         echo "Using saved manifest: $VERIFY_MANIFEST"
     else
-        VERIFY_MANIFEST="${TMPDIR:-/tmp}/verify-manifest.json"
+        VERIFY_MANIFEST="$(mktemp "${TMPDIR:-/tmp}/verify-manifest.XXXXXX.json")"
+        VERIFY_MANIFEST_TMP="$VERIFY_MANIFEST"
         echo "Fetching manifest for $MODEL_ID ..."
         if ! python3 "$SCRIPT_DIR/verify-weights.py" --repo "$MODEL_ID" \
                 --save-manifest "$VERIFY_MANIFEST" --fetch-only --quiet; then

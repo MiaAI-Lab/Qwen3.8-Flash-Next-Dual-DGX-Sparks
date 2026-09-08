@@ -80,9 +80,9 @@ export HF_API_BASE="http://127.0.0.1:$PORT"
 mkdir -p "$WORK/bin"
 cat > "$WORK/bin/ssh" <<SSH
 #!/usr/bin/env bash
-# Stub ssh for check-weights.sh. The worker model path equals the head's, and
-# /tmp/verify-weights.py + /tmp/verify-manifest.json are pre-copied by the test.
-# Everything before the ssh host argument is ignored; the rest runs locally.
+# Stub ssh for check-weights.sh. The worker model path equals the head's.
+# Everything before the ssh host argument is ignored; the rest runs locally,
+# so remote mktemp, python and rm -rf all execute for real on this machine.
 args=("\$@")
 hostpos=-1
 for i in "\${!args[@]}"; do
@@ -112,20 +112,28 @@ exit 0
 SSH
 cat > "$WORK/bin/scp" <<SCP
 #!/usr/bin/env bash
-# Stub scp: the worker files are pre-copied by the test harness.
-exit 0
+# Stub scp: copy src to dst, stripping any host: prefix and skipping flags,
+# so the worker temp dir flow behaves like the real one.
+args=()
+for a in "\$@"; do
+    case "\$a" in
+        -*) continue ;;
+        *) args+=("\$a") ;;
+    esac
+done
+src="\${args[0]}"
+dst="\${args[1]}"
+dst="\${dst#*:}"
+cp "\$src" "\$dst"
 SCP
 chmod +x "$WORK/bin/ssh" "$WORK/bin/scp"
-
-# Pre-copy to the "worker" (this machine) so the stubbed remote command works.
-cp "$REPO_ROOT/verify-weights.py" /tmp/verify-weights.py
-cp "$WORK/manifest.json" /tmp/verify-manifest.json
 
 # --- .env for check-weights.sh ----------------------------------------------
 cat > .env <<ENV
 HEAD_IP=10.0.0.1
 WORKER_IP=10.0.0.2
 MODEL_ID=org/model
+IFACE=eth0
 HF_HOME=$HF_HOME
 ENV
 
