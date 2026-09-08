@@ -20,8 +20,11 @@ and loading dies at:
   'mtp.layers.48.mlp.experts.0.down_proj.weight_scale_inv'
 
 BOTH files must be patched: `quantized_layers` appears in config.json's
-`quantization_config` *and* in the legacy hf_quant_config.json, and vLLM reads
-the legacy file when it is present. Patching only config.json is not enough.
+`quantization_config` *and* in the legacy hf_quant_config.json, and the two
+can disagree (nvidia/... rev fc694b54 says FP8_PB_WO in config.json and
+FP8_BLOCK_SCALES in the sidecar). Runtime evidence (issue #38) shows the MoE
+dispatch consumes config.json, so that file is the one that must be right.
+The sidecar is patched for consistency, not because it wins.
 
 Outputs go next to this script; start.sh bind-mounts them over the snapshot's
 copies in the container, so the HF cache is never modified.
@@ -126,7 +129,9 @@ def main(snapshot_dir: str, out_dir: str) -> None:
             json.dump(config, fh, indent=2)
         patched.append("config.json")
 
-    # Legacy sidecar — vLLM prefers it when present, so it needs the same fix.
+    # Legacy sidecar. Patched for consistency with config.json. Runtime
+    # evidence (issue #38) shows the MoE dispatch consumes config.json, so
+    # the config.json alias above is the load-bearing one.
     legacy_path = os.path.join(snapshot_dir, "hf_quant_config.json")
     if os.path.isfile(legacy_path):
         with open(legacy_path) as fh:
