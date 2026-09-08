@@ -217,6 +217,11 @@ The abliteration splice is by **Keys (drowzeys)**, a house projection on NVIDIA 
 (axis recovered per QSA layer from Dealign, not a Dealign weight dump). See the
 checkpoint's model card, and [Credits](#credits) below.
 
+The Keys `config.json` mislabels MTP routed experts as `FP8_PB_WO`; nvidia and
+this snapshot's own `hf_quant_config.json` record `FP8_BLOCK_SCALES` (same 128×128
+tensors). `start.sh` rewrites that overlay the same way it adds the `mtp.layers.48`
+alias, so MTP 3 still works.
+
 ## KV cache budget
 
 Measured on the running container at the shipped defaults (`KV_CACHE_DTYPE=fp8`,

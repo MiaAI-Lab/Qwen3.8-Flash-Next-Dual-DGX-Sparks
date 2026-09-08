@@ -82,7 +82,9 @@ DISPATCH = """            if quant_algo == "MXFP8":
                 )
             if quant_algo in ("FP8_BLOCK_SCALES", "FP8_PB_WO"):
                 # Imported lazily: modelopt.py deliberately does not import fp8.py
-                # at module scope.
+                # at module scope. FP8_PB_WO with group_size 128 is the same
+                # 128x128 block format as nvidia's FP8_BLOCK_SCALES (Keys house
+                # config.json mislabels the MTP experts).
                 from vllm.model_executor.layers.quantization.fp8 import Fp8MoEMethod
 
                 logger.info_once(

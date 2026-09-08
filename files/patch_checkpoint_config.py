@@ -93,6 +93,40 @@ def add_aliases(quant_config: dict, num_hidden_layers: int) -> bool:
 SUPPORTED_MOE_ALGOS = {"FP8", "NVFP4", "W4A16_NVFP4", "MXFP8", "FP8_BLOCK_SCALES", "FP8_PB_WO"}
 
 
+def _mtp_expert_algo(info: dict) -> str:
+    """quant_algo for an MTP experts entry, with the Keys house alias applied."""
+    algo = str(info.get("quant_algo", "")).upper()
+    if algo == "FP8_PB_WO" and info.get("group_size") == 128:
+        return "FP8_BLOCK_SCALES"
+    return algo
+
+
+def normalize_mtp_fp8_pb_wo(quant_config: dict) -> bool:
+    """Rewrite MTP experts FP8_PB_WO → FP8_BLOCK_SCALES in the overlay.
+
+    nvidia and this snapshot's hf_quant_config.json record the same 128x128
+    block-scaled tensors as FP8_BLOCK_SCALES. The Keys house config.json (and
+    nvidia after fc694b54) say FP8_PB_WO. Dispatch already accepts both names;
+    the rewrite keeps the overlay aligned with nvidia's older label. Returns
+    True if anything changed.
+    """
+    changed = False
+    layers = quant_config.get("quantized_layers")
+    if not isinstance(layers, dict):
+        return False
+    for key, info in layers.items():
+        if not (MTP_RE.match(key) and key.endswith(".mlp.experts")):
+            continue
+        if not isinstance(info, dict):
+            continue
+        if _mtp_expert_algo(info) == "FP8_BLOCK_SCALES" and (
+            str(info.get("quant_algo", "")).upper() == "FP8_PB_WO"
+        ):
+            info["quant_algo"] = "FP8_BLOCK_SCALES"
+            changed = True
+    return changed
+
+
 def mtp_moe_algo(snapshot_dir: str) -> str:
     """quant_algo of the MTP routed experts, or "" when they are unquantized."""
     for name in ("config.json", "hf_quant_config.json"):
@@ -104,7 +138,9 @@ def mtp_moe_algo(snapshot_dir: str) -> str:
         quant = doc.get("quantization_config") or doc.get("quantization") or {}
         for key, info in (quant.get("quantized_layers") or {}).items():
             if MTP_RE.match(key) and key.endswith(".mlp.experts"):
-                return str(info.get("quant_algo", "")).upper()
+                if not isinstance(info, dict):
+                    return str(info).upper()
+                return _mtp_expert_algo(info)
     return ""
 
 
@@ -124,10 +160,14 @@ def main(snapshot_dir: str, out_dir: str) -> None:
     patched: list[str] = []
 
     quant_config = config.get("quantization_config")
-    if isinstance(quant_config, dict) and add_aliases(quant_config, num_hidden_layers):
-        with open(os.path.join(out_dir, "config_patched.json"), "w") as fh:
-            json.dump(config, fh, indent=2)
-        patched.append("config.json")
+    if isinstance(quant_config, dict):
+        # Both must run: `or` would skip the rewrite when aliases already apply.
+        changed = add_aliases(quant_config, num_hidden_layers)
+        changed = normalize_mtp_fp8_pb_wo(quant_config) or changed
+        if changed:
+            with open(os.path.join(out_dir, "config_patched.json"), "w") as fh:
+                json.dump(config, fh, indent=2)
+            patched.append("config.json")
 
     # Legacy sidecar. Patched for consistency with config.json. Runtime
     # evidence (issue #38) shows the MoE dispatch consumes config.json, so
@@ -136,7 +176,10 @@ def main(snapshot_dir: str, out_dir: str) -> None:
     if os.path.isfile(legacy_path):
         with open(legacy_path) as fh:
             legacy = json.load(fh)
-        if add_aliases(legacy.get("quantization", legacy), num_hidden_layers):
+        quant = legacy.get("quantization", legacy)
+        changed = add_aliases(quant, num_hidden_layers)
+        changed = normalize_mtp_fp8_pb_wo(quant) or changed
+        if changed:
             with open(os.path.join(out_dir, "hf_quant_config_patched.json"), "w") as fh:
                 json.dump(legacy, fh, indent=2)
             patched.append("hf_quant_config.json")

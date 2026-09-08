@@ -585,9 +585,11 @@ if $DO_LAUNCH && [[ -n "${SNAPSHOT_SHA:-}" ]]; then
             --mtp-moe-algo "$PLE_CONFIG_DIR") && MTP_RC=0 || MTP_RC=$?
         if [[ "$MTP_RC" -eq 3 ]]; then
             err "MTP experts are ${MTP_ALGO}, which this image's mixed-precision MoE
-       dispatch cannot build (supports FP8 / NVFP4 / W4A16_NVFP4 / MXFP8).
-       Set MTP_NUM_SPECULATIVE_TOKENS=0 in .env to serve without speculative
-       decoding, or use a checkpoint whose MTP experts are NVFP4."
+       dispatch cannot build (supports FP8 / NVFP4 / W4A16_NVFP4 / MXFP8 /
+       FP8_BLOCK_SCALES; FP8_PB_WO with group_size 128 is treated as
+       FP8_BLOCK_SCALES). Set MTP_NUM_SPECULATIVE_TOKENS=0 in .env to serve
+       without speculative decoding, or use a checkpoint whose MTP experts
+       are NVFP4."
         fi
         ok "MTP experts quantization: ${MTP_ALGO:-unquantized} (supported)"
     fi

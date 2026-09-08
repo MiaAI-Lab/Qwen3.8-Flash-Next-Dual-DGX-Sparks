@@ -33,6 +33,9 @@ Two patches in this release are adapted from
   "ready." `ABLIT=1 ./download.sh` with no `HF_TOKEN` fails immediately and prints
   the gate instructions. `check-weights.sh` mirrors `start.sh` precedence so
   `FP8_DENSE=true` / `OVERRIDE_MODEL_ID` are not checked as the Keys cache.
+  The Keys `config.json` mislabels MTP experts as `FP8_PB_WO`; `start.sh`
+  rewrites that to `FP8_BLOCK_SCALES` (nvidia / `hf_quant_config.json`) so
+  speculative decoding still loads.
 
 ### Added — nvidia NVFP4 checkpoint support (2026-09-05)
 
