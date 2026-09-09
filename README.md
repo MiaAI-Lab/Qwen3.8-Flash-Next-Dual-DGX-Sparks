@@ -94,6 +94,14 @@ sets `OVERRIDE_MODEL_ID`.
    `ENABLE_EXPERT_PARALLEL=false` and `MTP_NUM_SPECULATIVE_TOKENS=0` are honored). The head's
    rendered script is kept as `.last_head_launch.sh` for inspection.
 
+> **Not done for you: dropping page caches.** `start.sh` needs no root and does
+> **not** drop page caches. Do it yourself on **both** nodes before a launch —
+> it matters on GB10 unified memory (see [Gotchas](#gotchas)):
+>
+> ```bash
+> sync && echo 3 | sudo tee /proc/sys/vm/drop_caches
+> ```
+
 Both containers are named **`vllm-fn`** (head and worker); `./stop.sh` removes both.
 
 ## NFS weight sharing (optional)
@@ -556,6 +564,37 @@ curl http://localhost:8888/v1/chat/completions \
 > prompt, and the vision encoder budget is 16,384 tokens (larger inputs are auto-resized /
 > sparse-sampled for video).
 
+## Chat-template kwargs
+
+Two kwargs the checkpoint's `chat_template.jinja` reads, neither of them obvious from the
+config. Pass both under `chat_template_kwargs`:
+
+**`reasoning_effort`** — `low` | `medium` | `xhigh`, default `xhigh`. Anything else is
+rejected while the template renders, so the request fails with HTTP 400 before it reaches
+the engine:
+
+```
+Unexpected reasoning effort max. Supported types are xhigh (default), medium, and low.
+```
+
+`high` and `max` are both **not** accepted. Worth knowing if you share one client config
+with models where they are valid — that is how we found it.
+
+**`enable_thinking`** — default `true`; `false` prefills an empty `<think></think>` block
+for a non-thinking turn. Note the interaction with the above: the `reasoning_effort` check
+sits *inside* the thinking branch of the template, so with `enable_thinking: false` an
+invalid `reasoning_effort` is silently ignored instead of rejected. The same client config
+400s in thinking mode and passes here.
+
+```bash
+curl http://localhost:8888/v1/chat/completions \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"qwen3.8-flash-next","messages":[{"role":"user","content":"Hi"}],"max_tokens":2048,"chat_template_kwargs":{"reasoning_effort":"low"}}'
+```
+
+See [Multimodal](#multimodal) for the two adjacent facts that thinking consumes
+`max_tokens` and that `thinking_budget` is not honored by this build.
+
 ## Checkpoint: nvidia/Qwen3.8-Flash-Next-NVFP4
 
 133 GB / 11 shards: BF16 dense (attention, GDN, hyper-connections, shared experts,
@@ -796,7 +835,8 @@ reference; the numbers above supersede these.
   loads on this box — offloading will OOM or thrash swap. Keep it `false`
   here; the FP8 PLE shard fits comfortably on the GPU.
 - **Drop page caches before every launch** if you hit a `CUDA out of memory` that
-  "worked yesterday" on unified memory: `sync && echo 3 | sudo tee /proc/sys/vm/drop_caches`.
+  "worked yesterday" on unified memory: `sync && echo 3 | sudo tee /proc/sys/vm/drop_caches`
+  on **both** nodes. `start.sh` does **not** do this for you (it needs no root).
 - **Never point `IB_HCA` at an HCA cabled to another cluster** — NCCL will hang mid-NCCL-init
   with no useful error. One exact-match device per node (leading `=`).
 - **`IB_GID_INDEX=3` does not come up on every ConnectX/RoCE setup.** If NCCL/RoCE fails

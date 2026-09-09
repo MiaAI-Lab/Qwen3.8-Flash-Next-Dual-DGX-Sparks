@@ -925,12 +925,24 @@ docker run \
     --node-rank 1 \
     --headless
 LAUNCH_EOF
-    chmod +x "$WORKER_SCRIPT"
-    scp -q "$WORKER_SCRIPT" "${WORKER_USER:+${WORKER_USER}@}${WORKER_IP}:/tmp/vllm_worker_launch.sh"
-    rm -f "$WORKER_SCRIPT"
-
+    # No chmod here on purpose: mktemp already creates the file 0600. What used
+    # to be `chmod +x` *loosened* that to 0711 under every umask below 077, and
+    # the +x bit was never needed — the script is run as `bash <file>`, which
+    # works fine on mode 0600. Matters as soon as EXTRA_VLLM_ARGS carries
+    # something like `--api-key <key>` and the rendered script holds a secret.
+    #
+    # Feed it to the worker on stdin instead of scp'ing it to the fixed path
+    # /tmp/vllm_worker_launch.sh: nothing is left on the worker to leak or to
+    # clean up, there is no predictable /tmp name to pre-create as a symlink,
+    # and ssh still reports the remote exit status, so `set -e` fails fast when
+    # the worker's `docker run` fails instead of hanging in the health loop.
     info "  (starting worker container...)"
-    ssh_worker "bash /tmp/vllm_worker_launch.sh"
+    worker_rc=0
+    ssh_worker "bash -s" < "$WORKER_SCRIPT" || worker_rc=$?
+    rm -f "$WORKER_SCRIPT"
+    if (( worker_rc != 0 )); then
+        err "Worker container failed to start (exit $worker_rc) — not launching the head."
+    fi
     ok "Worker container started."
     info "  Waiting 15s for worker to initialize..."
     sleep 15
@@ -976,8 +988,12 @@ docker run \
     --host 0.0.0.0 \
     --port $PORT
 LAUNCH_EOF
-    chmod +x "$HEAD_SCRIPT"
+    # Same reasoning as the worker script above: mktemp's 0600 is already right,
+    # so no chmod. The inspection copy below does need one — `cp` onto an
+    # existing .last_head_launch.sh keeps that file's old mode, so on any tree
+    # that ever ran the `chmod +x` version above it stays 0711 (verified).
     cp "$HEAD_SCRIPT" "$SCRIPT_DIR/.last_head_launch.sh"   # for inspection (gitignored)
+    chmod 600 "$SCRIPT_DIR/.last_head_launch.sh"           # may contain --api-key values
 
     info "  (starting head container...)"
     bash "$HEAD_SCRIPT"
