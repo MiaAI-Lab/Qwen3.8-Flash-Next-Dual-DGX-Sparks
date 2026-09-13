@@ -14,6 +14,45 @@ Two patches in this release are adapted from
 (AGPL-3.0-or-later), a single-Spark TP=1 recipe. Its FP8-KV approach is in turn credited there to
 `lancelind/qwen3.8-Flash-DGX` (Apache-2.0).
 
+### Added — GB10 auto-tuning wired into `start.sh` (2026-09-12)
+
+- **The three dead `.env` knobs are consumed now** (`grep -c` in `start.sh` was 0 for each):
+  `CPUSET_CPUS` → `--cpuset-cpus 5-9,15-19` on both `docker run` heredocs, `VLLM_EXTRA_ENV` →
+  one `-e KEY=VAL` per entry, `VLLM_USE_V2_MODEL_RUNNER=1` → `-e VLLM_USE_V2_MODEL_RUNNER=1`.
+  `DOCKER_ARGS` is still a dead path, so the injections sit next to
+  `--device /dev/infiniband` in the worker and head heredocs.
+- **cpuset and niceness stay at the docker level.** The image entrypoint is wrapped
+  (`--entrypoint /bin/sh` + `-c 'renice -n -19 $$; exec vllm serve "$0" "$@"'`) so PID 1 sets its
+  own priority and the forked engine/worker threads inherit it — the container carries
+  `CAP_SYS_NICE`. `docker inspect` gives `cpuset=5-9,15-19`, `entrypoint=[/bin/sh]`,
+  `capadd=[CAP_SYS_NICE]` on both nodes; all 197 head / 148 worker threads report `nice=-19` with
+  `Cpus_allowed_list=5-9,15-19`. The JSON args survive the wrapper (`num_speculative_tokens: 3`,
+  `original_max_position_embeddings: 262144` in the engine log).
+- **`TUNE_BODY` + `apply_tuning()`** run on both nodes once `/health` returns 200. The body is one
+  string handed straight to `bash -c` on the head and to `bash -s` on the worker over the key-auth
+  ssh — no `mktemp`/`scp`/`rm` round trip. It writes only `/proc/irq/*`: mlx5 `comp`/`async`
+  vectors are spread over `5 6 7 8 9 15 16 17 18 19` by `i % 10`. The core list is hardcoded
+  because this kit targets DGX Spark only; the IRQ numbers are read live from `/proc/interrupts`
+  since they shift with PCI enumeration order. GPU IRQs stay on `0-19` (measured no difference) and
+  nothing runs irqbalance, so the values are not overwritten.
+- **Password-free sudo.** The ladder is root → `sudo -n` → `sudo -A` (`SUDO_ASKPASS`) →
+  `SUDO_PASS`, with `/etc/sudoers.d/vllm-tuning` on each node
+  (`<user> ALL=(ALL) NOPASSWD: /usr/bin/bash -c *, /usr/bin/bash -s`). `SUDO_PASS` defaults to
+  empty in `start.sh`; the literal lives only in the local `.env`. After a full relaunch both nodes
+  print `tuned: ... mlx5_vecs=80` with no `[sudo] password` prompt, while non-allowlisted commands
+  still prompt.
+- **Measured (paired A/B on this cluster).** IRQ→big cores: TTFT median 202.9 → 161.8 ms (−20.3%),
+  share of samples ≤170 ms 39% → 64%, decode flat. `nice -19`: 8-concurrency aggregate +3.3%
+  (4/6 rounds), TTFT median −4.8%. Process cpuset alone: aggregate +0.9…3.3%, single-stream decode
+  −1.4…2.2%. `SCHED_FIFO 99` regressed (median 316.6 ms) and is not used. Post-relaunch samples:
+  decode 17–19.1 tok/s, first-step TTFT 155–165 ms.
+- **The residual TTFT "double peak" is step quantization, not DVFS.** Inside one engine step every
+  queued request emits its first token together, so concurrency 1/3/4/8 shows 1/2/2/3 levels
+  (`174 | 290 291 291`, `178 | 306 307 307 | 426 426 427 427`) ~110–130 ms apart; a 13-token prompt
+  gives the same ladder, so the gap is the step count, not prefill work. The SM clock only spans
+  2409–2535 MHz (≈1.01–1.05×) and cannot account for it — tune `MAX_NUM_SEQS` /
+  `MAX_NUM_BATCHED_TOKENS` instead, and keep single-stream and burst samples in separate groups.
+
 ### Added — ABLIT 0/1 gated Keys checkpoint (2026-09-08)
 
 - **`ABLIT` 0/1 flag** (`.env.sample`, `start.sh`, `download.sh`, `check-weights.sh`).

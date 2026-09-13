@@ -35,6 +35,69 @@ warn()  { echo -e "\033[1;33m[WARN]\033[0m  $*"; }
 err()   { echo -e "\033[1;31m[ERR ]\033[0m  $*"; exit 1; }
 
 # ---------------------------------------------------------------------------
+# GB10 tuning applied once the engine is up (both nodes). Values are not kept
+# across a reboot, so they live here instead of a separate step. Measured on
+# this cluster (paired A/B, see CHANGELOG):
+#   mlx5 IRQ → X925  : TTFT median 202.9 → 161.8 ms (−20.3%), decode unchanged
+#   vLLM nice −19    : 8-conc aggregate +3.3%, TTFT median −4.8%, decode flat
+#   SCHED_FIFO 99    : TTFT median 316.6 ms (+64%, 10/20 samples at the 400 ms
+#                      step) — not used; the ~300 vLLM threads stop yielding.
+# Core numbers are hardcoded for DGX Spark (GB10 = 10×X925 + 10×A725); only the
+# IRQ numbers are looked up live because they shift with PCI enumeration order.
+# ---------------------------------------------------------------------------
+# The body is a plain string handed straight to bash (`-c` here, `-s`/stdin on the
+# worker) — no temp file, no scp, nothing to clean up. After the wrapper below, the
+# only root writes left are the /proc/irq ones; the cpu list and the niceness are
+# container-level now (--cpuset-cpus on the run line + entrypoint `renice`, and the
+# container already carries CAP_SYS_NICE).
+TUNE_BODY=$(
+    cat <<'EOS'
+BIG=(5 6 7 8 9 15 16 17 18 19)
+nb=${#BIG[@]}; i=0
+for irq in $(awk '/mlx5_comp/{print $1}' /proc/interrupts | tr -d :); do
+    echo ${BIG[$((i % nb))]} > /proc/irq/$irq/smp_affinity_list 2>/dev/null
+    i=$((i + 1))
+done
+for irq in $(awk '/mlx5_async/{print $1}' /proc/interrupts | tr -d :); do
+    echo ${BIG[0]} > /proc/irq/$irq/smp_affinity_list 2>/dev/null
+done
+printf 'tuned: big=[%s] mlx5_vecs=%s\n' "${BIG[*]}" "$i"
+printf '  first vecs:'; for irq in $(awk '/mlx5_comp/{print $1}' /proc/interrupts | tr -d : | head -3); do
+    printf ' %s→%s' "$irq" "$(cat /proc/irq/$irq/smp_affinity_list)"; done; echo
+printf '  vllm:'; for p in $(pgrep -f 'vllm serve|VLLM::'); do
+    printf ' %s[%s/nice%s]' "$p" "$(awk '/Cpus_allowed_list/{print $2}' /proc/$p/status)" "$(awk '{print $19}' /proc/$p/stat)"; done; echo
+EOS
+)
+
+# Privilege ladder, first match wins (no secret once the drop-in exists):
+#   1) already root           → plain bash
+#   2) NOPASSWD drop-in       → sudo -n        (preferred)
+#   3) SUDO_ASKPASS helper    → sudo -A
+#   4) SUDO_PASS in .env      → printf … | sudo -S
+# One-time drop-in per node, e.g.
+#   echo '<user> ALL=(ALL) NOPASSWD: /usr/bin/bash -c *, /usr/bin/bash -s' \
+#     > /etc/sudoers.d/vllm-tuning
+apply_tuning() {
+    info "=== Tuning: mlx5 IRQ -> X925 big cores (cpuset+nice already set by docker) ==="
+    if [[ "$(id -u)" == "0" ]]; then
+        bash -c "$TUNE_BODY"
+    elif sudo -n bash -c "$TUNE_BODY"; then
+        :
+    elif [[ -n "${SUDO_ASKPASS:-}" ]]; then
+        sudo -A bash -c "$TUNE_BODY"
+    else
+        printf '%s\n' "$SUDO_PASS" | sudo -S bash -c "$TUNE_BODY"
+    fi
+    # Worker: same body on stdin over the key-auth ssh. Probe -n first so the
+    # password is only used when no NOPASSWD rule exists.
+    if ssh_worker "sudo -n bash -c :" 2>/dev/null; then
+        printf '%s\n' "$TUNE_BODY" | ssh_worker "sudo -n bash -s" | sed 's/^/  worker: /'
+    else
+        printf '%s\n' "$TUNE_BODY" | ssh_worker "printf '%s\n' '$SUDO_PASS' | sudo -S bash -s" | sed 's/^/  worker: /'
+    fi
+}
+
+# ---------------------------------------------------------------------------
 # Load .env
 # Environment wins over .env for ABLIT / HF_TOKEN (same 0/1 pattern as
 # MiaAI-Lab/Qwen3.8-Flash-Next-Single-DGX-Spark). Other knobs still follow
@@ -146,6 +209,30 @@ MTP_DRAFT_VOCAB="${MTP_DRAFT_VOCAB:-}"
 QSA_PROFILE="${QSA_PROFILE:-stock}"
 # Refuse to launch when another process already holds the GPU (both nodes).
 REQUIRE_IDLE_GPU="${REQUIRE_IDLE_GPU:-true}"
+
+# -- Local tuning knobs (DGX Spark / GB10 only) ------------------------------
+# CPUSET_CPUS              : --cpuset-cpus value for both containers; empty or
+#                            "off" = no pinning. On GB10 the X925 big cores are
+#                            5-9,15-19 (A725 small cores are 0-4,10-14).
+# VLLM_EXTRA_ENV           : space-separated KEY=VAL list, injected as -e into
+#                            both containers.
+# VLLM_USE_V2_MODEL_RUNNER : 1 → -e VLLM_USE_V2_MODEL_RUNNER=1.
+# SUDO_PASS                : empty by design — the secret lives only in .env (or the
+#                            environment), not in this tracked file. Preferred setup is a
+#                            passwordless sudoers drop-in, then the ladder resolves with
+#                            `sudo -n` and SUDO_PASS is never read:
+#                              echo '<user> ALL=(ALL) NOPASSWD: /usr/bin/bash -c *, /usr/bin/bash -s' \
+#                                > /etc/sudoers.d/vllm-tuning     # one per node
+CPUSET_CPUS="${CPUSET_CPUS:-}"
+VLLM_EXTRA_ENV="${VLLM_EXTRA_ENV:-}"
+VLLM_USE_V2_MODEL_RUNNER="${VLLM_USE_V2_MODEL_RUNNER:-}"
+SUDO_PASS="${SUDO_PASS:-}"          # no literal here; .env is the only place it lives
+
+CPUSET_ARG=""
+[[ -n "$CPUSET_CPUS" && "$CPUSET_CPUS" != "off" ]] && CPUSET_ARG="--cpuset-cpus $CPUSET_CPUS"
+EXTRA_ENV_ARG=""
+for _kv in $VLLM_EXTRA_ENV; do EXTRA_ENV_ARG+=" -e $_kv"; done
+[[ "$VLLM_USE_V2_MODEL_RUNNER" == "1" ]] && EXTRA_ENV_ARG+=" -e VLLM_USE_V2_MODEL_RUNNER=1"
 
 # YaRN only makes sense ABOVE the native 262144 context. At or below native,
 # rope scaling degrades quality for zero benefit — force it off.
@@ -899,6 +986,8 @@ docker run \
     --gpus all --network host --ipc host \
     --cap-add SYS_NICE --ulimit memlock=-1 --ulimit stack=67108864 \
     --device /dev/infiniband:/dev/infiniband \
+    $CPUSET_ARG \
+    --entrypoint /bin/sh \
     -e GLOO_SOCKET_IFNAME=$WORKER_IFACE \
     -e NCCL_SOCKET_IFNAME=$WORKER_IFACE \
     -e TP_SOCKET_IFNAME=$WORKER_IFACE \
@@ -920,6 +1009,7 @@ docker run \
     $WORKER_HF_MOUNT \
     -v $REMOTE_HOME/.cache/vllm:/root/.cache/vllm \
     $IMAGE \
+    -c 'renice -n -19 \$\$ 2>/dev/null || true; exec vllm serve "\$0" "\$@"' \
     $MODEL_ID \
     $VLLM_ARGS_STR \
     --node-rank 1 \
@@ -961,6 +1051,8 @@ docker run \
     --gpus all --network host --ipc host \
     --cap-add SYS_NICE --ulimit memlock=-1 --ulimit stack=67108864 \
     --device /dev/infiniband:/dev/infiniband \
+    $CPUSET_ARG \
+    --entrypoint /bin/sh \
     -e GLOO_SOCKET_IFNAME=$IFACE \
     -e NCCL_SOCKET_IFNAME=$IFACE \
     -e TP_SOCKET_IFNAME=$IFACE \
@@ -982,6 +1074,7 @@ docker run \
     -v $HF_CACHE_DIR:/root/.cache/huggingface \
     -v $HOME/.cache/vllm:/root/.cache/vllm \
     $IMAGE \
+    -c 'renice -n -19 \$\$ 2>/dev/null || true; exec vllm serve "\$0" "\$@"' \
     $MODEL_ID \
     $VLLM_ARGS_STR \
     --node-rank 0 \
@@ -1021,6 +1114,7 @@ LAUNCH_EOF
             kill $LOGPID 2>/dev/null || true
             echo ""
             ok "vLLM is ready and serving on port $PORT!"
+            apply_tuning
             info ""
             info "Test with:"
             info "  curl http://localhost:$PORT/v1/chat/completions \\"
