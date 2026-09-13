@@ -17,7 +17,20 @@ cd "$REPO_ROOT"
 
 WORK="$(mktemp -d)"
 export WORK
-trap '[[ -n "${SERVER_PID:-}" ]] && kill "$SERVER_PID" 2>/dev/null || true; rm -rf "$WORK" .env' EXIT
+HAD_LOCAL_ENV=false
+if [[ -e .env ]]; then
+    cp -p .env "$WORK/original.env"
+    HAD_LOCAL_ENV=true
+fi
+cleanup() {
+    [[ -n "${SERVER_PID:-}" ]] && kill "$SERVER_PID" 2>/dev/null || true
+    rm -f .env
+    if $HAD_LOCAL_ENV && [[ -f "$WORK/original.env" ]]; then
+        cp -p "$WORK/original.env" .env
+    fi
+    rm -rf "$WORK"
+}
+trap cleanup EXIT
 
 # --- fixture: tiny model in the standard hub layout -------------------------
 HF_HOME="$WORK/hf"
