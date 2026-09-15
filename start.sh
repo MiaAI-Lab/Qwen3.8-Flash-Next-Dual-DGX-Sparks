@@ -92,6 +92,17 @@ KV_CACHE_DTYPE="${KV_CACHE_DTYPE:-fp8}"   # fp8 needs files/patch_qsa_fp8_kv.py,
 # vLLM pick a smaller attention block. Empty keeps the checkpoint's float32.
 MAMBA_SSM_CACHE_DTYPE="${MAMBA_SSM_CACHE_DTYPE:-}"
 PLE_OFFLOAD="${PLE_OFFLOAD:-false}"
+# TP2 memory safety (see tp1/start.sh for the same rails at TP1). On unified
+# memory an exhausted pool hangs the kernel instead of OOM-killing, and the head node
+# has NO swap, so these are load-bearing whenever PLE offload is on.
+#   CONTAINER_MEM_GIB     hard cgroup cap per container (host-side footprint:
+#                         Python procs, pinned buffers, page cache). GPU side is
+#                         bounded separately by --gpu-memory-utilization.
+#   MEMWATCH_MIN_GIB      watchdog floor: kill the container when host
+#                         MemAvailable drops below this (a polller cannot catch
+#                         a GiB/s collapse alone; the cgroup cap is the real bound).
+CONTAINER_MEM_GIB="${CONTAINER_MEM_GIB:-0}"       # 0 = no cap (previous behaviour)
+MEMWATCH_MIN_GIB="${MEMWATCH_MIN_GIB:-6}"
 # Vision MLP intermediate_size=4304 is not divisible by 16 after TP split (4304/2=2152).
 # NVFP4 kernels require input features % 16 == 0, so replicate the encoder on each GPU.
 MM_ENCODER_TP_MODE="${MM_ENCODER_TP_MODE:-data}"
@@ -684,6 +695,91 @@ if $DO_LAUNCH; then
     WORKER_MODELOPT_MOUNT="-v /tmp/modelopt_patched.py:$MODEL_OPT_PKG:ro"
 
     # ---------------------------------------------------------------------------
+    # 6c. PLE CPU-offload wiring (PLE_OFFLOAD=true).
+    #     The offload worker/connector patches in files/ple_offload/ are bind-mounted
+    #     over the image's package (patch_ple_offload.py: reads ple_offload/orig/,
+    #     writes ple_offload/, carries the GB10 host-handshake fix -- GB10 reports
+    #     CAN_USE_STREAM_MEM_OPS=0, so the stock stream-memory handshake hangs after
+    #     CUDA graph capture). VLLM_PLE_PACKED_TABLE_DIR points the worker at the
+    #     pre-packed, mmap-able table so the 51B PLE table stays in the page cache
+    #     instead of anonymous RAM.
+    #
+    #     The table format is quant-dependent:
+    #       NVFP4 -> build_ple_packed_table.py     (codes + block scales, 90 B rows)
+    #       FP8   -> build_ple_packed_table_fp8.py (raw F8_E4M3 rows, head_dim wide)
+    # ---------------------------------------------------------------------------
+    HEAD_PLE_OFFLOAD_MOUNTS=""
+    WORKER_PLE_OFFLOAD_MOUNTS=""
+    PLE_PACKED_ENV=""
+    if [[ "$PLE_OFFLOAD" == "true" ]]; then
+        info "=== Step 6c: PLE CPU-offload wiring ==="
+
+        # Patch the offload worker/connector from the image's originals.
+        if [[ ! -d "$SCRIPT_DIR/files/ple_offload/orig" ]] || [[ -z "$(ls -A "$SCRIPT_DIR/files/ple_offload/orig" 2>/dev/null)" ]]; then
+            info "Extracting PLE offload sources from image..."
+            mkdir -p "$SCRIPT_DIR/files/ple_offload/orig"
+            tmp_container=$(docker create "$IMAGE" /bin/true)
+            docker cp "$tmp_container:/usr/local/lib/python3.12/dist-packages/vllm/v1/ple_offload/." "$SCRIPT_DIR/files/ple_offload/orig/"
+            docker cp "$tmp_container:/usr/local/lib/python3.12/dist-packages/vllm/model_executor/layers/ple_offload_layer.py" "$SCRIPT_DIR/files/ple_offload/orig/"
+            docker rm "$tmp_container" >/dev/null 2>&1
+        fi
+        python3 "$SCRIPT_DIR/files/patch_ple_offload.py" >/dev/null || err "patch_ple_offload.py failed"
+
+
+        PLE_OFFLOAD_PKG="$VLLM_PKG/v1/ple_offload"
+        PLE_LAYER_PKG="$VLLM_PKG/model_executor/layers/ple_offload_layer.py"
+        HEAD_PLE_OFFLOAD_MOUNTS="-v $SCRIPT_DIR/files/ple_offload/connector.py:$PLE_OFFLOAD_PKG/connector.py:ro -v $SCRIPT_DIR/files/ple_offload/protocol.py:$PLE_OFFLOAD_PKG/protocol.py:ro -v $SCRIPT_DIR/files/ple_offload/worker.py:$PLE_OFFLOAD_PKG/worker.py:ro -v $SCRIPT_DIR/files/ple_offload/ple_offload_layer.py:$PLE_LAYER_PKG:ro"
+        # The worker copies land in a flat /tmp dir (same convention as the overlays).
+        for _f in connector protocol worker ple_offload_layer; do
+            _src="$SCRIPT_DIR/files/ple_offload/$_f.py"
+            _dst="$PLE_OFFLOAD_PKG/$_f.py"
+            [[ "$_f" == "ple_offload_layer" ]] && _dst="$PLE_LAYER_PKG"
+            scp -q "$_src" "${WORKER_USER:+${WORKER_USER}@}${WORKER_IP}:/tmp/ple_offload_$_f.py"
+            WORKER_PLE_OFFLOAD_MOUNTS+=" -v /tmp/ple_offload_$_f.py:$_dst:ro"
+        done
+
+        # Node-local multi-node support: one offload worker per node, spawned
+        # from each node's first rank, seeing only that node's registrations.
+        # Stock vLLM rejects nnodes>1 and spawns from global rank 0 only, so
+        # the guard, the spawn condition and the registration count are
+        # patched here (the worker/connector/registration side lives in
+        # files/patch_ple_offload.py).
+        if [[ ! -f "$SCRIPT_DIR/files/gpu_worker/gpu_worker.py.orig" ]]; then
+            info "Extracting gpu_worker.py from image..."
+            _c=$(docker create "$IMAGE" /bin/true)
+            docker cp "$_c:/usr/local/lib/python3.12/dist-packages/vllm/v1/worker/gpu_worker.py" "$SCRIPT_DIR/files/gpu_worker/gpu_worker.py.orig"
+            docker rm "$_c" >/dev/null 2>&1
+        fi
+        python3 "$SCRIPT_DIR/files/patch_gpu_worker_ple_nnodes.py" >/dev/null || err "patch_gpu_worker_ple_nnodes.py failed"
+        _GW="$VLLM_PKG/v1/worker/gpu_worker.py"
+        HEAD_PLE_OFFLOAD_MOUNTS+=" -v $SCRIPT_DIR/files/gpu_worker/gpu_worker.py:$_GW:ro"
+        scp -q "$SCRIPT_DIR/files/gpu_worker/gpu_worker.py" "${WORKER_USER:+${WORKER_USER}@}${WORKER_IP}:/tmp/ple_offload_gpu_worker.py"
+        WORKER_PLE_OFFLOAD_MOUNTS+=" -v /tmp/ple_offload_gpu_worker.py:$_GW:ro"
+        ok "PLE offload gpu_worker patch applied (node-local workers)"
+
+        # Locate the packed table for this checkpoint's PLE dtype. The
+        # table must exist on BOTH nodes: each GPU worker spawns its own
+        # offload process, and that process mmaps the table locally.
+        if [[ -n "$PLE_PACKED_TABLE_DIR" ]]; then
+            if ! compgen -G "$PLE_PACKED_TABLE_DIR/*.packed_u8" >/dev/null; then
+                err "PLE_PACKED_TABLE_DIR=$PLE_PACKED_TABLE_DIR holds no .packed_u8 table on the head. Build it first: python3 files/build_ple_packed_table_fp8.py <snapshot_dir> $PLE_PACKED_TABLE_DIR"
+            fi
+            ssh_worker "mkdir -p '$PLE_PACKED_TABLE_DIR'" || err "could not create $PLE_PACKED_TABLE_DIR on worker"
+            if ! ssh_worker "test -s '$PLE_PACKED_TABLE_DIR'/\$(basename \$(compgen -G '$PLE_PACKED_TABLE_DIR/*.packed_u8' | head -1))"; then
+                info "Copying PLE packed table to worker (47.7 GiB, one time)..."
+                rsync -a "$PLE_PACKED_TABLE_DIR/" "${WORKER_USER:+${WORKER_USER}@}${WORKER_IP}:$PLE_PACKED_TABLE_DIR/" || err "rsync of PLE packed table to worker failed"
+            fi
+            WORKER_PLE_OFFLOAD_MOUNTS+=" -v $PLE_PACKED_TABLE_DIR:$PLE_PACKED_TABLE_DIR:ro"
+            HEAD_PLE_OFFLOAD_MOUNTS+=" -v $PLE_PACKED_TABLE_DIR:$PLE_PACKED_TABLE_DIR:ro"
+            PLE_PACKED_ENV="-e VLLM_PLE_PACKED_TABLE_DIR=$PLE_PACKED_TABLE_DIR"
+            ok "PLE packed table dir: $PLE_PACKED_TABLE_DIR (synced to worker)"
+        else
+            warn "PLE_OFFLOAD=true but PLE_PACKED_TABLE_DIR is unset -- the worker will load shards into RAM instead of mmapping"
+        fi
+        ok "PLE offload wiring ready (head + worker)"
+    fi
+
+    # ---------------------------------------------------------------------------
     # 7. Build vLLM args (shared between head and worker)
     # ---------------------------------------------------------------------------
     info "=== Step 7: Launch vLLM ==="
@@ -800,6 +896,12 @@ print(json.dumps({"text_config": tc}, separators=(",", ":")) if tc else "")
     if [[ -n "$HEAD_MODELOPT_MOUNT" ]]; then
         DOCKER_ARGS+=("$HEAD_MODELOPT_MOUNT")
     fi
+    if [[ -n "$HEAD_PLE_OFFLOAD_MOUNTS" ]]; then
+        for _m in $HEAD_PLE_OFFLOAD_MOUNTS; do DOCKER_ARGS+=("$_m"); done
+    fi
+    if [[ -n "$PLE_PACKED_ENV" ]]; then
+        DOCKER_ARGS+=("$PLE_PACKED_ENV")
+    fi
     DOCKER_ARGS+=("-e HF_HOME=/root/.cache/huggingface")
     DOCKER_ARGS+=("-v $HF_CACHE_DIR:/root/.cache/huggingface")
     DOCKER_ARGS+=("-v $HOME/.cache/vllm:/root/.cache/vllm")
@@ -890,6 +992,14 @@ print(json.dumps({"text_config": tc}, separators=(",", ":")) if tc else "")
     PLE_OFFLOAD_ENV=""
     [[ "$PLE_OFFLOAD" == "true" ]] && PLE_OFFLOAD_ENV="-e VLLM_PLE_CPU_OFFLOAD=1"
 
+    # Container cgroup cap (both nodes) when set. GPU allocations are NOT
+    # charged to the cgroup on GB10, so this bounds the host-side footprint.
+    MEM_CAP_FLAG=""
+    if [[ "$CONTAINER_MEM_GIB" -gt 0 ]]; then
+        MEM_CAP_FLAG="--memory ${CONTAINER_MEM_GIB}g --memory-swap ${CONTAINER_MEM_GIB}g"
+        info "  container cgroup cap: ${CONTAINER_MEM_GIB} GiB/node"
+    fi
+
     # Write worker launch script to a temp file and scp it (avoids SSH JSON quoting issues)
     WORKER_SCRIPT=$(mktemp /tmp/vllm_worker_XXXXXX.sh)
     cat > "$WORKER_SCRIPT" <<LAUNCH_EOF
@@ -898,6 +1008,7 @@ docker run \
     -d --name vllm-fn \
     --gpus all --network host --ipc host \
     --cap-add SYS_NICE --ulimit memlock=-1 --ulimit stack=67108864 \
+    $MEM_CAP_FLAG \
     --device /dev/infiniband:/dev/infiniband \
     -e GLOO_SOCKET_IFNAME=$WORKER_IFACE \
     -e NCCL_SOCKET_IFNAME=$WORKER_IFACE \
@@ -915,6 +1026,8 @@ docker run \
     -e HF_HOME=/root/.cache/huggingface \
     $WORKER_PLE_MOUNT \
     $WORKER_MODELOPT_MOUNT \
+    $WORKER_PLE_OFFLOAD_MOUNTS \
+    $PLE_PACKED_ENV \
     $WORKER_OVERLAY_MOUNTS \
     $OVERLAY_ENV_STR \
     $WORKER_HF_MOUNT \
@@ -960,6 +1073,7 @@ docker run \
     -d --name vllm-fn \
     --gpus all --network host --ipc host \
     --cap-add SYS_NICE --ulimit memlock=-1 --ulimit stack=67108864 \
+    $MEM_CAP_FLAG \
     --device /dev/infiniband:/dev/infiniband \
     -e GLOO_SOCKET_IFNAME=$IFACE \
     -e NCCL_SOCKET_IFNAME=$IFACE \
@@ -977,6 +1091,8 @@ docker run \
     -e HF_HOME=/root/.cache/huggingface \
     $HEAD_PLE_MOUNT \
     $HEAD_MODELOPT_MOUNT \
+    $HEAD_PLE_OFFLOAD_MOUNTS \
+    $PLE_PACKED_ENV \
     $HEAD_OVERLAY_MOUNTS \
     $OVERLAY_ENV_STR \
     -v $HF_CACHE_DIR:/root/.cache/huggingface \
@@ -997,6 +1113,23 @@ LAUNCH_EOF
 
     info "  (starting head container...)"
     bash "$HEAD_SCRIPT"
+    ok "Head container started."
+
+
+    # ---- Memory watchdog (both nodes) ----
+    # Unified memory: an exhausted pool HANGS the kernel instead of OOM-killing,
+    # and the head node has no swap. Second line of defence behind the cgroup cap; kills
+    # the container if host MemAvailable drops below the floor.
+    if [[ "$MEMWATCH_MIN_GIB" -gt 0 ]]; then
+        mkdir -p "$SCRIPT_DIR/logs"
+        pkill -f "memwatch.sh vllm-fn" 2>/dev/null || true
+        nohup bash "$SCRIPT_DIR/files/memwatch.sh" vllm-fn "$MEMWATCH_MIN_GIB" > "$SCRIPT_DIR/logs/memwatch-head.log" 2>&1 &
+        ok "Head watchdog running (kills vllm-fn if MemAvailable < ${MEMWATCH_MIN_GIB} GiB)"
+        if scp -q "$SCRIPT_DIR/files/memwatch.sh" "${WORKER_USER:+${WORKER_USER}@}${WORKER_IP}:/tmp/memwatch.sh"; then
+            ssh_worker "pkill -f memwatch.sh 2>/dev/null; nohup bash /tmp/memwatch.sh vllm-fn $MEMWATCH_MIN_GIB > /tmp/memwatch.log 2>&1 &" >/dev/null 2>&1
+            ok "Worker watchdog running (/tmp/memwatch.log)"
+        fi
+    fi
     rm -f "$HEAD_SCRIPT"
     ok "Head container started."
     info ""

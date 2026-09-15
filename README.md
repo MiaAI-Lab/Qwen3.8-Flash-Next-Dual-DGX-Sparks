@@ -177,6 +177,8 @@ every measurement in this README.
 | `ENABLE_EXPERT_PARALLEL` | `true` | `true` | EP for the NVFP4 experts (required) |
 | `MTP_NUM_SPECULATIVE_TOKENS` | `3` | `3` | MTP draft tokens (`0` = disable) |
 | `PLE_OFFLOAD` | `false` | `false` | `true` → CPU-RAM offload of the 51 GB PLE table (**see gotcha**) |
+| `PLE_PACKED_TABLE_DIR` | *(empty → shards into RAM)* | — | When `PLE_OFFLOAD=true`: dir with the pre-packed mmap table (`<layer>.ngram_embedding.packed_u8` + `.json` sidecar) on **both** nodes, built once with `files/build_ple_packed_table.py` (NVFP4) or `files/build_ple_packed_table_fp8.py` (FP8) |
+| `SKIP_PLE_PATCH` | `false` | — | `true` → skip the PLE resolver patch in `start.sh` |
 | `IMAGE` | `vllm/vllm-openai:qwen38-flash-next` | same | Day-0 image |
 | `VLLM_ALLOW_LONG_MAX_MODEL_LEN` | `1` | `1` | Required when `MAX_MODEL_LEN` > 262144 |
 | `MASTER_PORT` | `50000` | `50000` | Distributed coordination port |
@@ -504,6 +506,18 @@ quant-method lookup for the PLE embedding short-circuits to the image's own
 weight_scale" layout), bypassing the FP8-checkpoint and `ignored_layers` checks. Applied at
 runtime via bind-mount; no image rebuild needed. `start.sh` extracts and patches automatically;
 delete `files/ple_layer_patched.py` to force re-extraction after an image update.
+
+### PLE CPU offload on TP2 (multi-node)
+
+`PLE_OFFLOAD=true` adds a step 6c on top of this patch: the offload worker, connector and
+registration protocol are bind-mounted from `files/ple_offload/` on both nodes, and the
+worker spawn/registration count is made node-local via `files/patch_gpu_worker_ple_nnodes.py`.
+One worker runs per node and serves that node's local ranks — CUDA IPC output buffers and
+`file_system` shared memory never cross nodes, and each node mmaps its own copy of
+`PLE_PACKED_TABLE_DIR`. That is the only configuration where the official FP8 checkpoint
+fits the pair (~125 GiB of non-PLE weight vs a ~121.7 GiB UVM pool), which is what
+`start-fp8.sh` demonstrates. Full mechanics and boot evidence:
+`docs/FINDINGS-fp8-ple-offload-2026-09-14.md`.
 
 ## The MXFP8 Kernel-Fallback Patch
 
@@ -833,7 +847,9 @@ reference; the numbers above supersede these.
 - **`PLE_OFFLOAD=true` needs ~51 GB of free CPU RAM.** The launch log reported
   `Available RAM: 44.92 GiB` at target-weight load and `41.71 GiB` before the MTP drafter
   loads on this box — offloading will OOM or thrash swap. Keep it `false`
-  here; the FP8 PLE shard fits comfortably on the GPU.
+  here; the FP8 PLE shard fits comfortably on the GPU. (With `PLE_PACKED_TABLE_DIR` set the
+  worker mmaps file-backed pages instead of loading shards into anonymous RAM, which relaxes
+  but does not remove that floor.)
 - **Drop page caches before every launch** if you hit a `CUDA out of memory` that
   "worked yesterday" on unified memory: `sync && echo 3 | sudo tee /proc/sys/vm/drop_caches`
   on **both** nodes. `start.sh` does **not** do this for you (it needs no root).

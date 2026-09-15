@@ -51,3 +51,6 @@ files/qsa_gb10/qsa.py
 # Draft vocabularies are built from a corpus (files/build_draft_vocab.py);
 # see README "Reduced-vocabulary MTP drafting".
 files/draft_vocab_*.txt
+
+start.sh.bak-ple-offload
+.env.bak-*

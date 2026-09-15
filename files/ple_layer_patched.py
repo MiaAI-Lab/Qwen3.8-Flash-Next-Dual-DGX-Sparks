@@ -639,9 +639,20 @@ class Qwen3_8FlashNextNGramEmbedding(PleOffloadLayer):
                 row_width = packed.shape[-1]
                 total_width = ngram_ids.shape[-1] * row_width
                 output = output_buffer[:num_tokens, :total_width]
-                torch.index_select(
-                    packed, 0, ids, out=output.reshape(-1, row_width)
-                )
+                if output.dtype == torch.uint8:
+                    torch.index_select(
+                        packed, 0, ids, out=output.reshape(-1, row_width)
+                    )
+                else:
+                    # FP8: the buffer is float8_e4m3fn (the GPU side
+                    # dequantizes the bit-cast rows with the retained
+                    # scale), while the packed table is uint8 bytes.
+                    # Gather as bytes, then bit-view them as the
+                    # buffer's dtype before the copy.
+                    rows = torch.index_select(packed, 0, ids)
+                    output.reshape(-1, row_width).copy_(
+                        rows.view(output.dtype)
+                    )
                 return output
             if scales is not None and scales.dim() == 2:
                 codes = emb.weight

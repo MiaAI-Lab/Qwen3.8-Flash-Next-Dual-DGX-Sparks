@@ -24,6 +24,19 @@ Why this exists (measured on this box, see docs/HANDOFF-single-spark.md):
    ~77 GiB of non-evictable footprint. Set VLLM_PLE_PACKED_TABLE_DIR to the
    directory holding "<layer_name>.ngram_embedding.packed_u8".
 
+3. The offload worker is node-local by construction: CUDA IPC output
+   buffers, file_system shared memory and the zmq ipc path never cross
+   nodes. With nnodes>1 the correct topology is one worker per node serving
+   that node's local ranks. The stock code instead assumes one worker for
+   the whole world (spawn on global rank 0 only, `num_workers =
+   dp_size * tp_size`, a single sender per DP group). The edits below make
+   the registration accounting node-local (every registration carries its
+   global rank; the worker validates the local rank set and picks the
+   lowest-rank local member of each DP group as the input/request leader)
+   and the connector sends requests from the local leader of each node
+   rather than from global TP rank zero. See
+   files/patch_gpu_worker_ple_nnodes.py for the matching spawn/guard edits.
+
 Inputs:  files/ple_offload/orig/*.py   (extracted from the image)
 Outputs: files/ple_offload/*.py        (bind-mounted over the package)
 """
@@ -71,6 +84,18 @@ patch("protocol.py", [
         "    num_tokens: int\n"
         "    num_reqs: int\n"
         "    seq: int = 0\n",
+    ),
+    (
+        "    worker_id: int\n"
+        "    tp_rank: int\n"
+        "    dp_rank: int\n",
+        "    worker_id: int\n"
+        "    tp_rank: int\n"
+        "    dp_rank: int\n"
+        "    # Global rank of the registering GPU worker. The offload worker is\n"
+        "    # node-local, so this is how it validates that every rank on its\n"
+        "    # node registered and picks the input/request leader per DP group.\n"
+        "    rank: int\n",
     ),
 ])
 
@@ -250,6 +275,69 @@ patch("connector.py", [
         "            self._registration_socket.close(linger=0)\n"
         "            self._registration_socket = None\n",
     ),
+    # Node-local leader: the lowest-rank local member of this DP group stages
+    # the inputs and drives the request for every local rank on this node.
+    (
+        "        self.device = device\n"
+        "        self.dp_rank = get_dp_group().rank_in_group\n"
+        "        self.tp_rank = get_tp_group().rank_in_group\n"
+        "        self._layers = self._setup_layers(vllm_config, model)\n",
+        "        self.device = device\n"
+        "        self.dp_rank = get_dp_group().rank_in_group\n"
+        "        self.tp_rank = get_tp_group().rank_in_group\n"
+        "        # One offload worker runs per node and serves only that node's\n"
+        "        # local ranks: CUDA IPC output buffers and file_system shared\n"
+        "        # memory never cross nodes. The lowest-rank local member of each\n"
+        "        # DP group is the node-local leader; it stages inputs and sends\n"
+        "        # the per-step request for every local rank of its group (inputs\n"
+        "        # are TP-replicated, so any local copy is equivalent).\n"
+        "        parallel_config = vllm_config.parallel_config\n"
+        "        self.rank = parallel_config.rank\n"
+        "        node_start = (\n"
+        "            parallel_config.node_rank_within_dp\n"
+        "            * parallel_config.local_world_size\n"
+        "        )\n"
+        "        node_end = node_start + parallel_config.local_world_size\n"
+        "        local_dp_ranks = sorted(\n"
+        "            rank\n"
+        "            for rank in get_dp_group().ranks\n"
+        "            if node_start <= rank < node_end\n"
+        "        )\n"
+        "        self.is_local_leader = local_dp_ranks[0] == self.rank\n"
+        "        self._layers = self._setup_layers(vllm_config, model)\n",
+    ),
+    (
+        "            if self.tp_rank == 0:\n"
+        "                # ForkingPickler may replace CPU storage while converting its\n"
+        "                # sharing strategy, so register only the final addresses.\n",
+        "            if self.is_local_leader:\n"
+        "                # ForkingPickler may replace CPU storage while converting its\n"
+        "                # sharing strategy, so register only the final addresses.\n",
+    ),
+    (
+        "            ngram_context_buf=self._ngram_context_buf,\n"
+        "            done_flag=self._done_flag,\n"
+        "        )\n",
+        "            ngram_context_buf=self._ngram_context_buf,\n"
+        "            rank=self.rank,\n"
+        "            done_flag=self._done_flag,\n"
+        "        )\n",
+    ),
+    (
+        "        # Inputs are replicated across TP ranks. One request per DP rank drives\n"
+        "        # the CPU result fan-out to every registered TP output buffer. Every\n"
+        "        # rank then blocks until its own output buffer is complete.\n"
+        "        self._seq += 1\n"
+        "        seq = self._seq\n"
+        "        if self.tp_rank == 0:\n",
+        "        # Inputs are replicated across TP ranks. One request per node and\n"
+        "        # DP rank drives the CPU result fan-out to every output buffer\n"
+        "        # registered on that node. Every rank then blocks until its own\n"
+        "        # output buffer is complete.\n"
+        "        self._seq += 1\n"
+        "        seq = self._seq\n"
+        "        if self.is_local_leader:\n",
+    ),
 ])
 
 # --------------------------------------------------------------------------
@@ -411,6 +499,105 @@ patch("worker.py", [
         "                        flags.append(target.done_flag)\n"
         "            for flag in flags:\n"
         "                flag[0] = request.seq\n",
+    ),
+    # Node-local registration accounting: a worker only ever receives
+    # registrations from the ranks of its own node.
+    (
+        "        dp_size = self.vllm_config.parallel_config.data_parallel_size\n"
+        "        tp_size = self.vllm_config.parallel_config.tensor_parallel_size\n"
+        "        if num_workers != dp_size * tp_size:\n"
+        "            raise RuntimeError(\n"
+        "                f\"Expected {dp_size * tp_size} registrations for DP={dp_size}, \"\n"
+        "                f\"TP={tp_size}, got {num_workers}\"\n"
+        "            )\n"
+        "\n"
+        "        registrations_by_dp: dict[int, list[PleOffloadRegistration]] = {}\n",
+        "        parallel_config = self.vllm_config.parallel_config\n"
+        "        dp_size = parallel_config.data_parallel_size\n"
+        "        tp_size = parallel_config.tensor_parallel_size\n"
+        "        node_start = (\n"
+        "            parallel_config.node_rank_within_dp\n"
+        "            * parallel_config.local_world_size\n"
+        "        )\n"
+        "        local_ranks = set(\n"
+        "            range(node_start, node_start + parallel_config.local_world_size)\n"
+        "        )\n"
+        "        if num_workers != len(local_ranks):\n"
+        "            raise RuntimeError(\n"
+        "                \"PLE offload worker is node-local: expected \"\n"
+        "                f\"{len(local_ranks)} registration(s), got {num_workers}\"\n"
+        "            )\n"
+        "        received_ranks = {registration.rank for registration in registrations}\n"
+        "        if received_ranks != local_ranks:\n"
+        "            raise RuntimeError(\n"
+        "                \"PLE offload worker is node-local: expected \"\n"
+        "                f\"registrations from ranks {sorted(local_ranks)}, got \"\n"
+        "                f\"{sorted(received_ranks)}\"\n"
+        "            )\n"
+        "        registered_slots: set[tuple[int, int]] = set()\n"
+        "        for registration in registrations:\n"
+        "            slot = (registration.dp_rank, registration.tp_rank)\n"
+        "            if slot in registered_slots:\n"
+        "                raise RuntimeError(\n"
+        "                    \"Duplicate PLE registration for \"\n"
+        "                    f\"dp_rank={slot[0]}, tp_rank={slot[1]}\"\n"
+        "                )\n"
+        "            registered_slots.add(slot)\n"
+        "\n"
+        "        registrations_by_dp: dict[int, list[PleOffloadRegistration]] = {}\n",
+    ),
+    (
+        "        if set(registrations_by_dp) != set(range(dp_size)):\n"
+        "            raise RuntimeError(\n"
+        "                f\"Expected DP ranks {set(range(dp_size))}, \"\n"
+        "                f\"got {set(registrations_by_dp)}\"\n"
+        "            )\n"
+        "        for dp_rank, dp_registrations in registrations_by_dp.items():\n"
+        "            tp_ranks = {registration.tp_rank for registration in dp_registrations}\n"
+        "            if tp_ranks != set(range(tp_size)):\n"
+        "                raise RuntimeError(\n"
+        "                    f\"DP rank {dp_rank} expected TP ranks {set(range(tp_size))}, \"\n"
+        "                    f\"got {tp_ranks}\"\n"
+        "                )\n",
+        "        # A node sees only a subset of each DP group's TP ranks. The\n"
+        "        # lowest-rank local member of each group staged the inputs.\n"
+        "        local_leaders = {\n"
+        "            dp_rank: min(registration.rank for registration in dp_registrations)\n"
+        "            for dp_rank, dp_registrations in registrations_by_dp.items()\n"
+        "        }\n",
+    ),
+    (
+        "            # All TP ranks in one DP group receive the same input, so buffers\n"
+        "            # registered by TP rank zero are sufficient for that DP rank.\n"
+        "            if registration.tp_rank == 0:\n",
+        "            # All TP ranks in one DP group receive the same input, so the\n"
+        "            # local leader's shared buffers are sufficient for that group.\n"
+        "            if registration.rank == local_leaders[registration.dp_rank]:\n",
+    ),
+    (
+        "        if set(self._input_bufs) != set(range(dp_size)):\n"
+        "            raise RuntimeError(\n"
+        "                \"TP rank zero did not register PLE input buffers for every DP \"\n"
+        "                f\"rank: expected={set(range(dp_size))}, got={set(self._input_bufs)}\"\n"
+        "            )\n",
+        "        missing_leaders = set(registrations_by_dp) - set(self._input_bufs)\n"
+        "        if missing_leaders:\n"
+        "            raise RuntimeError(\n"
+        "                \"No PLE input buffers registered for DP ranks: \"\n"
+        "                f\"{sorted(missing_leaders)}\"\n"
+        "            )\n",
+    ),
+    (
+        "                if len(targets) != tp_size:\n"
+        "                    raise RuntimeError(\n"
+        "                        f\"PLE layer {layer_name} for DP rank {dp_rank} received \"\n"
+        "                        f\"{len(targets)} targets, expected {tp_size}\"\n"
+        "                    )\n",
+        "                if not targets:\n"
+        "                    raise RuntimeError(\n"
+        "                        f\"PLE layer {layer_name} for DP rank {dp_rank} has no \"\n"
+        "                        \"registered output targets\"\n"
+        "                    )\n",
     ),
 ])
 print("ok")

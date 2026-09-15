@@ -27,6 +27,10 @@ export OVERRIDE_MODEL_ID="${OVERRIDE_MODEL_ID:-Qwen/Qwen3.8-Flash-Next-FP8}"
 export OVERRIDE_SERVED_MODEL_NAME="${OVERRIDE_SERVED_MODEL_NAME:-qwen3.8-flash-next-fp8}"
 export OVERRIDE_MAX_MODEL_LEN="${OVERRIDE_MAX_MODEL_LEN:-262144}"
 export OVERRIDE_YARN_ENABLE="${OVERRIDE_YARN_ENABLE:-false}"
-export SKIP_PLE_PATCH=true
+# Keep the PLE dispatch patch ON when the lane asks for CPU offload: the
+# offload path (VLLM_PLE_PACKED_TABLE_DIR + the patched worker) needs it.
+# The patch is additive -- for a uniform FP8 checkpoint detect_ple_dtype.py
+# returns empty and the FP8 branch it already contains is the correct one.
+export SKIP_PLE_PATCH="${SKIP_PLE_PATCH:-false}"
 
 exec "$SCRIPT_DIR/start.sh" "$@"
