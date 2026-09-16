@@ -289,6 +289,28 @@ if [[ ! -d "$HEAD_MODEL_PATH" ]]; then
     err "Could not find HF repo cache at $HEAD_MODEL_PATH (resolved snapshot: ${MODEL_DIR:-none})"
 fi
 
+# This image ships huggingface_hub 1.28.0, whose offline branch reads
+# refs/main with a bare f.read() and no .strip(). A hand-staged ref written the
+# obvious way (`echo $SHA > refs/main`) carries a trailing newline, so offline
+# resolution builds `snapshots/<sha>\n`, os.path.exists() fails, and vLLM dies
+# at arg-parse with a repo-not-found error that names neither the file nor the
+# newline. hf download writes the ref clean, so this only bites the staging
+# flows this recipe advertises: NFS staging, rsync-your-own-hub-dir,
+# --no-download. Normalise it here instead. Rewrites only when the bytes
+# actually differ, so it is a no-op on hub-downloaded caches. Issue #36.
+normalize_ref_main() {
+    local ref="$1/refs/main"
+    [[ -f "$ref" ]] || return 0
+    local raw stripped
+    raw=$(cat "$ref"; printf x); raw="${raw%x}"      # preserve trailing bytes
+    stripped=$(printf '%s' "$raw" | tr -d '[:space:]')
+    [[ -n "$stripped" && "$raw" != "$stripped" ]] || return 0
+    printf '%s' "$stripped" > "$ref" || return 0
+    warn "Normalised trailing whitespace in $ref (hf_hub 1.28 offline resolution
+     reads this file without .strip(); see issue #36)"
+}
+normalize_ref_main "$HEAD_MODEL_PATH"
+
 # Every shard named by the safetensors index must exist. A hub dir from an
 # interrupted download is not enough — rsync would copy the hole to the worker
 # and vLLM would die minutes into load.
@@ -388,6 +410,18 @@ else
             ok "Rsync complete."
         fi
     fi
+    # Same hf_hub 1.28 refs/main hazard as the head (issue #36). Only the rsync
+    # path needs this: under NFS_SHARE the worker mounts the head's cache, so
+    # normalising the head above already covers it. Runs whether or not the
+    # sync ran, since a worker cache staged by hand is exactly the exposed case.
+    ssh_worker "ref='$REMOTE_HUB/models--${ORG}--${NAME}/refs/main'
+        if [ -f \"\$ref\" ]; then
+            s=\$(tr -d '[:space:]' < \"\$ref\")
+            if [ -n \"\$s\" ] && [ \"\$s\" != \"\$(cat \"\$ref\")\" ]; then
+                printf '%s' \"\$s\" > \"\$ref\" && echo normalized
+            fi
+        fi" 2>/dev/null | grep -q normalized \
+        && warn "Normalised trailing whitespace in the worker's refs/main (issue #36)"
 fi
 
 # ---------------------------------------------------------------------------
