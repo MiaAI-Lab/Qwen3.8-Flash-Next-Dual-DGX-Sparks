@@ -102,14 +102,134 @@ def _attach_draft_vocab(model: nn.Module) -> None:
         persistent=False,
     )
     tp_size = int(getattr(lm_head, "tp_size", 1))
+
+    # Optional draft-head STORAGE balancing (VLLM_MTP_DRAFT_VOCAB_BALANCE=1).
+    #
+    # WHICH tokens are in the draft vocabulary is a quality decision, already made
+    # above. WHICH rank stores a given row is purely a bandwidth decision, and the
+    # two are independent: get_top_tokens takes a local argmax and reduces with a
+    # (value, index) all-gather, so it is correct for ANY row-to-rank assignment as
+    # long as _draft_id_to_target_id maps local row -> global id.
+    #
+    # Slicing by the lm_head's own shard range ties them together, and byte-level
+    # BPE puts frequent tokens at low ids, so nearly every draft row lands on rank 0
+    # (measured on draft_vocab_32k.txt: 32,406 of 32,768 on rank 0, 362 on rank 1).
+    # A decode step waits for the slowest rank, so rank 1 idles at the all-gather
+    # while rank 0 reads ~90x more bytes, three times per step.
+    #
+    # This is NOT build_draft_vocab.py's --balance-shards, which balances the
+    # VOCABULARY by padding it with merge-order ids and cost acceptance
+    # 56.5% -> 47.8%. Balancing storage keeps the token set identical, so drafts
+    # are bit-identical and acceptance is unchanged.
+    #
+    # Runs after the buffers are registered so it is independent of how the weight
+    # slice was produced (bf16 directly, or dequantized from an FP8-dense head).
+    if tp_size > 1 and os.environ.get("VLLM_MTP_DRAFT_VOCAB_BALANCE", "") not in ("", "0"):
+        # Collectives must be executed by EVERY rank in the same order. A local
+        # try/except fallback around them is a deadlock: one rank bailing out to
+        # the except branch leaves the others blocked in all_gather forever, and
+        # a decode step simply waits. So decide GLOBALLY first, with one
+        # all_reduce every rank always reaches, and only then run the gathers.
+        group = None
+        local_ok = 1
+        try:
+            from vllm.distributed import get_tp_group
+
+            group = get_tp_group()
+            w = model._draft_lm_head_weight
+            gid = model._draft_id_to_target_id
+            if w.dim() != 2 or gid.dim() != 1 or gid.shape[0] != w.shape[0]:
+                local_ok = 0
+        except Exception as exc:
+            logger.warning("MTP draft vocab: cannot balance storage (%s).", exc)
+            local_ok = 0
+
+        agreed = False
+        if group is not None:
+            try:
+                flag = torch.tensor([local_ok], dtype=torch.long, device=weight.device)
+                torch.distributed.all_reduce(
+                    flag, op=torch.distributed.ReduceOp.MIN, group=group.device_group)
+                agreed = bool(int(flag.item()))
+            except Exception as exc:
+                # The agreement collective itself failed. Every rank calls it, so a
+                # failure here is not one-sided; skip balancing everywhere.
+                logger.warning(
+                    "MTP draft vocab: balance agreement failed (%s); "
+                    "keeping the shard-local assignment.", exc)
+                agreed = False
+            if local_ok and not agreed:
+                logger.warning(
+                    "MTP draft vocab: another rank cannot balance; all ranks keep "
+                    "the shard-local assignment.")
+
+        if agreed:
+            # Past this point every rank runs the identical collective sequence.
+            rank = int(group.rank_in_group)
+            w = model._draft_lm_head_weight
+            gid = model._draft_id_to_target_id
+
+            counts_t = torch.zeros(tp_size, dtype=torch.long, device=w.device)
+            counts_t[rank] = w.shape[0]
+            torch.distributed.all_reduce(counts_t, group=group.device_group)
+            counts = [int(c) for c in counts_t.tolist()]
+            n_max = max(counts)
+
+            pad_w = w.new_zeros((n_max, w.shape[1]))
+            pad_w[: w.shape[0]] = w
+            pad_i = torch.full((n_max,), -1, dtype=torch.long, device=w.device)
+            pad_i[: gid.shape[0]] = gid
+
+            all_w = group.all_gather(pad_w.unsqueeze(0), dim=0)
+            all_i = group.all_gather(pad_i.unsqueeze(0), dim=0)
+
+            keep_w = [all_w[r, : counts[r]] for r in range(tp_size) if counts[r]]
+            keep_i = [all_i[r, : counts[r]] for r in range(tp_size) if counts[r]]
+            full_w = torch.cat(keep_w, dim=0)
+            full_i = torch.cat(keep_i, dim=0)
+            order = torch.argsort(full_i)
+            full_w, full_i = full_w[order], full_i[order]
+
+            # Postconditions: the reassembled set must be exactly the input ids,
+            # with no padding sentinel and no duplicate. A silent violation here
+            # would drop or double-count draft candidates on some rank.
+            n_total = int(full_i.numel())
+            if (n_total != len(ids) or int(full_i.min()) < 0
+                    or int(torch.unique(full_i).numel()) != n_total):
+                raise RuntimeError(
+                    f"MTP draft vocab: balance produced {n_total} ids "
+                    f"(expected {len(ids)}, min {int(full_i.min())}, "
+                    f"unique {int(torch.unique(full_i).numel())})")
+
+            # Install transactionally: build both buffers, then swap them in
+            # together. A failure part-way through must not leave the weight and
+            # its id map describing different row sets.
+            take = torch.arange(rank, n_total, tp_size, device=w.device)
+            new_w = full_w.index_select(0, take).contiguous()
+            new_i = full_i.index_select(0, take).contiguous()
+            if new_w.shape[0] != new_i.shape[0]:
+                raise RuntimeError(
+                    f"MTP draft vocab: balanced weight rows {new_w.shape[0]} != "
+                    f"id map {new_i.shape[0]}")
+            model._draft_lm_head_weight = new_w
+            model._draft_id_to_target_id = new_i
+            local_ids = [int(i) for i in new_i.tolist()]
+            del full_w, full_i, all_w, all_i, pad_w, pad_i
+            balanced = True
+        else:
+            balanced = False
+    else:
+        balanced = False
+
     esize = weight.element_size()
     full_gib = weight.numel() * esize / 2**30
     cut_gib = model._draft_lm_head_weight.numel() * esize / 2**30
     logger.info(
-        "MTP draft vocab: %d of %d tokens (%.1f%%), %d on this rank of %d; "
-        "draft lm_head shard %.2f -> %.2f GiB per draft step",
-        len(ids), org_vocab, 100.0 * len(ids) / org_vocab, len(local_ids),
-        tp_size, full_gib, cut_gib,
+        "MTP draft vocab: %d of %d tokens (%.1f%%), %d on this rank of %d "
+        "(balanced=%s); draft lm_head shard %.2f -> %.2f GiB per draft step",
+        len(ids), org_vocab, 100.0 * len(ids) / org_vocab,
+        int(model._draft_id_to_target_id.shape[0]), tp_size, balanced,
+        full_gib, cut_gib,
     )
 
 '''

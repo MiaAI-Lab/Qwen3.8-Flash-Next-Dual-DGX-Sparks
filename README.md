@@ -173,10 +173,13 @@ every measurement in this README.
 | `MAX_NUM_BATCHED_TOKENS` | `8192` | `8192` | Prefill chunk / cudagraph ceiling |
 | `PORT` | `8888` | `8888` | API server port (`--network host`) |
 | **`KV_CACHE_DTYPE`** | `fp8` | **`fp8`** | **Default. 3.65M cache tokens (13.93× at 262K) via `files/patch_qsa_fp8_kv.py`, applied automatically. `auto` = bf16 = 2.13M (8.13×)** |
+| `KV_CACHE_METRICS_SAMPLE` | `1.0` | `1.0` | Fraction of physical KV blocks tracked for residency/reuse metrics |
 | `TENSOR_PARALLEL_SIZE` | `2` | `2` | 1 GB10 per node × 2 nodes |
 | `ENABLE_EXPERT_PARALLEL` | `true` | `true` | EP for the NVFP4 experts (required) |
 | `MTP_NUM_SPECULATIVE_TOKENS` | `3` | `3` | MTP draft tokens (`0` = disable) |
 | `PLE_OFFLOAD` | `false` | `false` | `true` → CPU-RAM offload of the 51 GB PLE table (**see gotcha**) |
+| `PLE_PACKED_TABLE_DIR` | *(empty → shards into RAM)* | — | When `PLE_OFFLOAD=true`: dir with the pre-packed mmap table (`<layer>.ngram_embedding.packed_u8` + `.json` sidecar) on **both** nodes, built once with `files/build_ple_packed_table.py` (NVFP4) or `files/build_ple_packed_table_fp8.py` (FP8) |
+| `SKIP_PLE_PATCH` | `false` | — | `true` → skip the PLE resolver patch in `start.sh` |
 | `IMAGE` | `vllm/vllm-openai:qwen38-flash-next` | same | Day-0 image |
 | `VLLM_ALLOW_LONG_MAX_MODEL_LEN` | `1` | `1` | Required when `MAX_MODEL_LEN` > 262144 |
 | `MASTER_PORT` | `50000` | `50000` | Distributed coordination port |
@@ -376,6 +379,27 @@ of thumb for extrapolating: **1 GiB of KV pool ≈ 71–74K tokens ≈ +0.07× a
 measured 15,192 B/token, and from the 0.835 → 0.85 delta (+1.24 GiB → +91,331 tokens). Block/page
 rounding in the hybrid allocator means it is ±5%, not exact.
 
+### Prefix caching and cache statistics
+
+`start.sh` explicitly passes `--enable-prefix-caching`. This model has multiple KV groups
+(full attention plus GDN state), so vLLM derives a safe cache-match unit from their physical page
+geometry. Do not force a finer `--prefix-match-unit` on this image: live A/B testing with 32-token
+matching produced zero hits, while the derived page-aligned mode reused cached prefixes. With
+`MAMBA_SSM_CACHE_DTYPE=bfloat16`, the live page was 1,616 tokens at MTP=1 and 1,664 at MTP=3;
+trust the startup log rather than hard-coding either value.
+
+KV residency statistics are enabled with `--kv-cache-metrics`. The standard hit counters and the
+additional block lifetime/idle/reuse histograms are exposed at `/metrics`:
+
+```bash
+curl -s localhost:8888/metrics | grep -E \
+  'prefix_cache_(queries|hits)|request_prefill_kv_computed|kv_block_(lifetime|idle|reuse)'
+```
+
+`KV_CACHE_METRICS_SAMPLE=1.0` tracks every physical page. Reduce it to `0.01` if using a model
+with a much larger number of physical blocks. Prefix-cache counters are token counts, so the hit
+rate is `prefix_cache_hits_total / prefix_cache_queries_total`.
+
 ## Default runtime
 
 `docker inspect vllm-fn` on the head:
@@ -389,6 +413,8 @@ vllm serve RadixArk/Qwen3.8-Flash-Next-NVFP4 \
   --enable-expert-parallel --all2all-backend allgather_reducescatter \
   --gpu-memory-utilization 0.835 --max-num-seqs 8 --max-num-batched-tokens 8192 \
   --max-model-len 1000000 --kv-cache-dtype auto \
+  --enable-prefix-caching --enable-prompt-tokens-details \
+  --kv-cache-metrics --kv-cache-metrics-sample 1.0 \
   --load-format safetensors --safetensors-load-strategy lazy \
   --enable-chunked-prefill --reasoning-parser qwen3 \
   --enable-auto-tool-choice --tool-call-parser qwen3_coder \
@@ -429,7 +455,7 @@ Container runs as root — the mount target must be `/root`, or offline HF looku
 | MXFP8 linear | `FlashInferCutlassMxfp8LinearKernel`, except `linear_attn.in_proj_a/b` (`[48, 2560]`) and all `visual.*` → `EmulationMxfp8LinearKernel` (BF16, dequantized at load time) — see [The MXFP8 Kernel-Fallback Patch](#the-mxfp8-kernel-fallback-patch) |
 | Sampling | FlashInfer top-k/top-p; generation_config defaults `temp 1.0, top_p 0.95, top_k 20` |
 | Prefix caching | on (shared across requests) |
-| KV block size | attention page = **1600 tokens** (raised so it matches/pads the GDN page) |
+| KV block size | derived from the GDN page; **1616 tokens at MTP=1 / 1664 at MTP=3** with BF16 SSM state in the live A/B |
 | CUDA graphs | `FULL_DECODE_ONLY`, sizes 1–64, 0.39 GiB |
 
 **Cold start ≈ 10m55s** (21:47:41 → API up 21:58:36 UTC): NCCL setup ~40 s, weight load 458 s
@@ -504,6 +530,18 @@ quant-method lookup for the PLE embedding short-circuits to the image's own
 weight_scale" layout), bypassing the FP8-checkpoint and `ignored_layers` checks. Applied at
 runtime via bind-mount; no image rebuild needed. `start.sh` extracts and patches automatically;
 delete `files/ple_layer_patched.py` to force re-extraction after an image update.
+
+### PLE CPU offload on TP2 (multi-node)
+
+`PLE_OFFLOAD=true` adds a step 6c on top of this patch: the offload worker, connector and
+registration protocol are bind-mounted from `files/ple_offload/` on both nodes, and the
+worker spawn/registration count is made node-local via `files/patch_gpu_worker_ple_nnodes.py`.
+One worker runs per node and serves that node's local ranks — CUDA IPC output buffers and
+`file_system` shared memory never cross nodes, and each node mmaps its own copy of
+`PLE_PACKED_TABLE_DIR`. That is the only configuration where the official FP8 checkpoint
+fits the pair (~125 GiB of non-PLE weight vs a ~121.7 GiB UVM pool), which is what
+`start-fp8.sh` demonstrates. Full mechanics and boot evidence:
+`docs/FINDINGS-fp8-ple-offload-2026-09-14.md`.
 
 ## The MXFP8 Kernel-Fallback Patch
 
@@ -833,7 +871,9 @@ reference; the numbers above supersede these.
 - **`PLE_OFFLOAD=true` needs ~51 GB of free CPU RAM.** The launch log reported
   `Available RAM: 44.92 GiB` at target-weight load and `41.71 GiB` before the MTP drafter
   loads on this box — offloading will OOM or thrash swap. Keep it `false`
-  here; the FP8 PLE shard fits comfortably on the GPU.
+  here; the FP8 PLE shard fits comfortably on the GPU. (With `PLE_PACKED_TABLE_DIR` set the
+  worker mmaps file-backed pages instead of loading shards into anonymous RAM, which relaxes
+  but does not remove that floor.)
 - **Drop page caches before every launch** if you hit a `CUDA out of memory` that
   "worked yesterday" on unified memory: `sync && echo 3 | sudo tee /proc/sys/vm/drop_caches`
   on **both** nodes. `start.sh` does **not** do this for you (it needs no root).

@@ -58,6 +58,25 @@ class PleOffloadConnector:
         self.device = device
         self.dp_rank = get_dp_group().rank_in_group
         self.tp_rank = get_tp_group().rank_in_group
+        # One offload worker runs per node and serves only that node's
+        # local ranks: CUDA IPC output buffers and file_system shared
+        # memory never cross nodes. The lowest-rank local member of each
+        # DP group is the node-local leader; it stages inputs and sends
+        # the per-step request for every local rank of its group (inputs
+        # are TP-replicated, so any local copy is equivalent).
+        parallel_config = vllm_config.parallel_config
+        self.rank = parallel_config.rank
+        node_start = (
+            parallel_config.node_rank_within_dp
+            * parallel_config.local_world_size
+        )
+        node_end = node_start + parallel_config.local_world_size
+        local_dp_ranks = sorted(
+            rank
+            for rank in get_dp_group().ranks
+            if node_start <= rank < node_end
+        )
+        self.is_local_leader = local_dp_ranks[0] == self.rank
         self._layers = self._setup_layers(vllm_config, model)
 
         # Both runner paths stage into the same shared buffers. TP0 registers
@@ -121,7 +140,7 @@ class PleOffloadConnector:
             self._registration_socket.connect(ipc_addr)
             self._register_with_offload_worker(vllm_config, ipc_addr)
 
-            if self.tp_rank == 0:
+            if self.is_local_leader:
                 # ForkingPickler may replace CPU storage while converting its
                 # sharing strategy, so register only the final addresses.
                 with torch.accelerator.device_index(self.device.index):
@@ -227,6 +246,7 @@ class PleOffloadConnector:
             input_ids_buf=self._input_ids_buf,
             query_start_loc_buf=self._query_start_loc_buf,
             ngram_context_buf=self._ngram_context_buf,
+            rank=self.rank,
             done_flag=self._done_flag,
         )
 
@@ -385,12 +405,13 @@ class PleOffloadConnector:
         num_tokens: int,
     ) -> None:
         """Queue one batch while keeping staging off the model thread."""
-        # Inputs are replicated across TP ranks. One request per DP rank drives
-        # the CPU result fan-out to every registered TP output buffer. Every
-        # rank then blocks until its own output buffer is complete.
+        # Inputs are replicated across TP ranks. One request per node and
+        # DP rank drives the CPU result fan-out to every output buffer
+        # registered on that node. Every rank then blocks until its own
+        # output buffer is complete.
         self._seq += 1
         seq = self._seq
-        if self.tp_rank == 0:
+        if self.is_local_leader:
             if self._uses_cuda_inputs:
                 assert self._input_ready_event is not None
                 # The D2H stream waits for runner input production (and for

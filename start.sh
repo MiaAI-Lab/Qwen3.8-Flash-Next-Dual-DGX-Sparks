@@ -35,6 +35,69 @@ warn()  { echo -e "\033[1;33m[WARN]\033[0m  $*"; }
 err()   { echo -e "\033[1;31m[ERR ]\033[0m  $*"; exit 1; }
 
 # ---------------------------------------------------------------------------
+# GB10 tuning applied once the engine is up (both nodes). Values are not kept
+# across a reboot, so they live here instead of a separate step. Measured on
+# this cluster (paired A/B, see CHANGELOG):
+#   mlx5 IRQ → X925  : TTFT median 202.9 → 161.8 ms (−20.3%), decode unchanged
+#   vLLM nice −19    : 8-conc aggregate +3.3%, TTFT median −4.8%, decode flat
+#   SCHED_FIFO 99    : TTFT median 316.6 ms (+64%, 10/20 samples at the 400 ms
+#                      step) — not used; the ~300 vLLM threads stop yielding.
+# Core numbers are hardcoded for DGX Spark (GB10 = 10×X925 + 10×A725); only the
+# IRQ numbers are looked up live because they shift with PCI enumeration order.
+# ---------------------------------------------------------------------------
+# The body is a plain string handed straight to bash (`-c` here, `-s`/stdin on the
+# worker) — no temp file, no scp, nothing to clean up. After the wrapper below, the
+# only root writes left are the /proc/irq ones; the cpu list and the niceness are
+# container-level now (--cpuset-cpus on the run line + entrypoint `renice`, and the
+# container already carries CAP_SYS_NICE).
+TUNE_BODY=$(
+    cat <<'EOS'
+BIG=(5 6 7 8 9 15 16 17 18 19)
+nb=${#BIG[@]}; i=0
+for irq in $(awk '/mlx5_comp/{print $1}' /proc/interrupts | tr -d :); do
+    echo ${BIG[$((i % nb))]} > /proc/irq/$irq/smp_affinity_list 2>/dev/null
+    i=$((i + 1))
+done
+for irq in $(awk '/mlx5_async/{print $1}' /proc/interrupts | tr -d :); do
+    echo ${BIG[0]} > /proc/irq/$irq/smp_affinity_list 2>/dev/null
+done
+printf 'tuned: big=[%s] mlx5_vecs=%s\n' "${BIG[*]}" "$i"
+printf '  first vecs:'; for irq in $(awk '/mlx5_comp/{print $1}' /proc/interrupts | tr -d : | head -3); do
+    printf ' %s→%s' "$irq" "$(cat /proc/irq/$irq/smp_affinity_list)"; done; echo
+printf '  vllm:'; for p in $(pgrep -f 'vllm serve|VLLM::'); do
+    printf ' %s[%s/nice%s]' "$p" "$(awk '/Cpus_allowed_list/{print $2}' /proc/$p/status)" "$(awk '{print $19}' /proc/$p/stat)"; done; echo
+EOS
+)
+
+# Privilege ladder, first match wins (no secret once the drop-in exists):
+#   1) already root           → plain bash
+#   2) NOPASSWD drop-in       → sudo -n        (preferred)
+#   3) SUDO_ASKPASS helper    → sudo -A
+#   4) SUDO_PASS in .env      → printf … | sudo -S
+# One-time drop-in per node, e.g.
+#   echo '<user> ALL=(ALL) NOPASSWD: /usr/bin/bash -c *, /usr/bin/bash -s' \
+#     > /etc/sudoers.d/vllm-tuning
+apply_tuning() {
+    info "=== Tuning: mlx5 IRQ -> X925 big cores (cpuset+nice already set by docker) ==="
+    if [[ "$(id -u)" == "0" ]]; then
+        bash -c "$TUNE_BODY"
+    elif sudo -n bash -c "$TUNE_BODY"; then
+        :
+    elif [[ -n "${SUDO_ASKPASS:-}" ]]; then
+        sudo -A bash -c "$TUNE_BODY"
+    else
+        printf '%s\n' "$SUDO_PASS" | sudo -S bash -c "$TUNE_BODY"
+    fi
+    # Worker: same body on stdin over the key-auth ssh. Probe -n first so the
+    # password is only used when no NOPASSWD rule exists.
+    if ssh_worker "sudo -n bash -c :" 2>/dev/null; then
+        printf '%s\n' "$TUNE_BODY" | ssh_worker "sudo -n bash -s" | sed 's/^/  worker: /'
+    else
+        printf '%s\n' "$TUNE_BODY" | ssh_worker "printf '%s\n' '$SUDO_PASS' | sudo -S bash -s" | sed 's/^/  worker: /'
+    fi
+}
+
+# ---------------------------------------------------------------------------
 # Load .env
 # Environment wins over .env for ABLIT / HF_TOKEN (same 0/1 pattern as
 # MiaAI-Lab/Qwen3.8-Flash-Next-Single-DGX-Spark). Other knobs still follow
@@ -91,12 +154,32 @@ KV_CACHE_DTYPE="${KV_CACHE_DTYPE:-fp8}"   # fp8 needs files/patch_qsa_fp8_kv.py,
 # costs to read and write every step, and halves the mamba page, which lets
 # vLLM pick a smaller attention block. Empty keeps the checkpoint's float32.
 MAMBA_SSM_CACHE_DTYPE="${MAMBA_SSM_CACHE_DTYPE:-}"
+# Prefix caching is especially important for agent tool loops. Let vLLM derive
+# the safe match unit for this hybrid QSA/GDN layout.
+KV_CACHE_METRICS_SAMPLE="${KV_CACHE_METRICS_SAMPLE:-1.0}"
 PLE_OFFLOAD="${PLE_OFFLOAD:-false}"
+# TP2 memory safety (see tp1/start.sh for the same rails at TP1). On unified
+# memory an exhausted pool hangs the kernel instead of OOM-killing, and the head node
+# has NO swap, so these are load-bearing whenever PLE offload is on.
+#   CONTAINER_MEM_GIB     hard cgroup cap per container (host-side footprint:
+#                         Python procs, pinned buffers, page cache). GPU side is
+#                         bounded separately by --gpu-memory-utilization.
+#   MEMWATCH_MIN_GIB      watchdog floor: kill the container when host
+#                         MemAvailable drops below this (a polller cannot catch
+#                         a GiB/s collapse alone; the cgroup cap is the real bound).
+CONTAINER_MEM_GIB="${CONTAINER_MEM_GIB:-0}"       # 0 = no cap (previous behaviour)
+MEMWATCH_MIN_GIB="${MEMWATCH_MIN_GIB:-6}"
 # Vision MLP intermediate_size=4304 is not divisible by 16 after TP split (4304/2=2152).
 # NVFP4 kernels require input features % 16 == 0, so replicate the encoder on each GPU.
 MM_ENCODER_TP_MODE="${MM_ENCODER_TP_MODE:-data}"
 EXTRA_VLLM_ARGS="${EXTRA_VLLM_ARGS:-}"
 EXTRA_DOCKER_ARGS="${EXTRA_DOCKER_ARGS:-}"
+# Optional JSON overrides: full --speculative-config JSON (empty = MTP with
+# MTP_NUM_SPECULATIVE_TOKENS, 0 = off) and the --compilation-config JSON. Both
+# are used verbatim when set; an empty COMPILATION_CONFIG_JSON is assembled from
+# COMPILATION_MODE / CUDAGRAPH_MODE further down.
+SPEC_CONFIG_JSON="${SPEC_CONFIG_JSON:-}"
+COMPILATION_CONFIG_JSON="${COMPILATION_CONFIG_JSON:-}"
 HF_TOKEN="${HF_TOKEN:-}"
 # Weight distribution. false (default) = each node keeps its own ~/.cache/huggingface
 # copy, worker seeded by rsync from the head. true = head exports its cache over NFS
@@ -119,6 +202,9 @@ if [[ -n "${OVERRIDE_YARN_ENABLE:-}" ]]; then
     YARN_ENABLE="$OVERRIDE_YARN_ENABLE"
 fi
 SKIP_PLE_PATCH="${SKIP_PLE_PATCH:-false}"
+# Read under `set -u` by the PLE offload step below, so it needs a default even
+# when .env predates it (see .env.sample).
+PLE_PACKED_TABLE_DIR="${PLE_PACKED_TABLE_DIR:-}"
 # FP8-dense hybrid checkpoint (NVFP4 experts + FP8 per-channel dense projections,
 # built by files/fp8dense/make_fp8_dense_checkpoint.py). Needs the vLLM overlay
 # patches in files/overlay (bind-mounted, no image rebuild).
@@ -144,8 +230,39 @@ fi
 MTP_DRAFT_VOCAB="${MTP_DRAFT_VOCAB:-}"
 # QSA Triton launch profile: stock | gb10 | path to JSON from files/qsa_gb10/bench_qsa_kernels.py
 QSA_PROFILE="${QSA_PROFILE:-stock}"
+MTP_DRAFT_SAMPLE_METHOD="${MTP_DRAFT_SAMPLE_METHOD:-}"
+# VLLM_EXTRA_ENV: space-separated KEY=VALUE pairs injected into BOTH containers.
+# Prefer it over EXTRA_DOCKER_ARGS for anything that changes kernel selection or
+# numerics -- a bare -e inside EXTRA_DOCKER_ARGS is easy to apply to one rank
+# only, and the two ranks must run identical kernels, because a decode step
+# waits for the slower one.
+VLLM_EXTRA_ENV="${VLLM_EXTRA_ENV:-}"
+COMPILATION_MODE="${COMPILATION_MODE:-0}"
+CUDAGRAPH_MODE="${CUDAGRAPH_MODE:-FULL_DECODE_ONLY}"
 # Refuse to launch when another process already holds the GPU (both nodes).
 REQUIRE_IDLE_GPU="${REQUIRE_IDLE_GPU:-true}"
+
+# -- Local tuning knobs (DGX Spark / GB10 only) ------------------------------
+# CPUSET_CPUS              : --cpuset-cpus value for both containers; empty or
+#                            "off" = no pinning. On GB10 the X925 big cores are
+#                            5-9,15-19 (A725 small cores are 0-4,10-14).
+# VLLM_EXTRA_ENV           : space-separated KEY=VAL list, injected as -e into
+#                            both containers.
+# VLLM_USE_V2_MODEL_RUNNER : 1 → -e VLLM_USE_V2_MODEL_RUNNER=1.
+# SUDO_PASS                : empty by design — the secret lives only in .env (or the
+#                            environment), not in this tracked file. Preferred setup is a
+#                            passwordless sudoers drop-in, then the ladder resolves with
+#                            `sudo -n` and SUDO_PASS is never read:
+#                              echo '<user> ALL=(ALL) NOPASSWD: /usr/bin/bash -c *, /usr/bin/bash -s' \
+#                                > /etc/sudoers.d/vllm-tuning     # one per node
+CPUSET_CPUS="${CPUSET_CPUS:-}"
+VLLM_USE_V2_MODEL_RUNNER="${VLLM_USE_V2_MODEL_RUNNER:-}"
+SUDO_PASS="${SUDO_PASS:-}"          # no literal here; .env is the only place it lives
+
+CPUSET_ARG=""
+[[ -n "$CPUSET_CPUS" && "$CPUSET_CPUS" != "off" ]] && CPUSET_ARG="--cpuset-cpus $CPUSET_CPUS"
+# VLLM_EXTRA_ENV / VLLM_USE_V2_MODEL_RUNNER are turned into -e flags further down,
+# where the two launch scripts are rendered (see EXTRA_ENV_FLAGS).
 
 # YaRN only makes sense ABOVE the native 262144 context. At or below native,
 # rope scaling degrades quality for zero benefit — force it off.
@@ -467,18 +584,42 @@ extract_from_image() {   # extract_from_image <container path> <host dest>
 if $DO_LAUNCH && [[ "$FP8_DENSE" == "true" ]]; then
     info "=== Step 4c: FP8-dense overlay ==="
     OV="$SCRIPT_DIR/files/overlay"
-    [[ -f "$OV/modelopt.py" ]] || python3 "$OV/apply_patches.py"
-    add_overlay "$OV/modelopt.py"        "$VLLM_PKG/model_executor/layers/quantization/modelopt.py"
+    # Idempotent; extracts the .orig files from the image on first use.
+    python3 "$OV/apply_patches.py"
+    # modelopt.py is deliberately NOT mounted from here: step 6b always mounts
+    # files/modelopt_patched.py at that container path (docker refuses two -v on
+    # one destination), so files/stack_modelopt_fp8dense.py folds the fp8dense
+    # hunks into that file in step 6b instead.
     add_overlay "$OV/model.py"           "$VLLM_PKG/models/qwen3_8_flash_next/nvidia/model.py"
     add_overlay "$OV/hyperconnection.py" "$VLLM_PKG/models/qwen3_8_flash_next/nvidia/hyperconnection.py"
-    add_overlay "$OV/mtp.py"             "$VLLM_PKG/models/qwen3_8_flash_next/nvidia/mtp.py"
-    ok "FP8-dense overlay: 4 files"
+    if [[ -n "$MTP_DRAFT_VOCAB" ]]; then
+        # Both the FP8 hunks and the reduced-vocabulary drafter patch nvidia/mtp.py.
+        # They are textually disjoint; the stacker applies both and bridges the one
+        # semantic collision (an FP8 lm_head slice must be dequantized with its
+        # per-row weight_scale). Step 4e then only mounts the vocab file + env.
+        python3 "$SCRIPT_DIR/files/stack_mtp_fp8_draftvocab.py" "$SCRIPT_DIR"
+        add_overlay "$OV/mtp_draftvocab.py" "$VLLM_PKG/models/qwen3_8_flash_next/nvidia/mtp.py"
+        ok "FP8-dense overlay: model, hyperconnection, mtp+draft-vocab (modelopt folded in step 6b)"
+    else
+        add_overlay "$OV/mtp.py"         "$VLLM_PKG/models/qwen3_8_flash_next/nvidia/mtp.py"
+        ok "FP8-dense overlay: model, hyperconnection, mtp (modelopt folded in step 6b)"
+    fi
 fi
-if $DO_LAUNCH && [[ "$QSA_PROFILE" != "stock" ]]; then
+# When KV_CACHE_DTYPE is fp8, step 4f owns the ops/qsa.py mount and stacks the
+# GB10 launch profile on top of the FP8-KV patch (see files/stack_qsa_fp8_gb10.py).
+# Mounting it here too would give docker two -v for the same destination.
+if $DO_LAUNCH && [[ "$QSA_PROFILE" != "stock" && "$KV_CACHE_DTYPE" != fp8* ]]; then
     info "=== Step 4d: QSA profile overlay ($QSA_PROFILE) ==="
     QO="$SCRIPT_DIR/files/qsa_gb10"
+    # apply_patch.py reads qsa.py.orig, which nothing else extracts (and *.orig is
+    # gitignored), so a clean checkout would die here without this.
+    [[ -f "$QO/qsa.py.orig" ]] || extract_from_image \
+        "$VLLM_PKG/models/qwen3_8_flash_next/nvidia/ops/qsa.py" "$QO/qsa.py.orig"
     [[ -f "$QO/qsa.py" ]] || python3 "$QO/apply_patch.py"
     add_overlay "$QO/qsa.py" "$VLLM_PKG/models/qwen3_8_flash_next/nvidia/ops/qsa.py"
+fi
+# The profile env must reach both nodes whichever path mounted the file.
+if $DO_LAUNCH && [[ "$QSA_PROFILE" != "stock" ]]; then
     if [[ -f "$QSA_PROFILE" ]]; then
         add_overlay "$QSA_PROFILE" "/etc/vllm-qsa-profile.json"
         OVERLAY_ENV+=("-e VLLM_QSA_PROFILE_JSON=/etc/vllm-qsa-profile.json")
@@ -502,13 +643,15 @@ if $DO_LAUNCH && [[ -n "$MTP_DRAFT_VOCAB" ]]; then
     [[ -f "$MTP_DRAFT_VOCAB" ]] || err "MTP_DRAFT_VOCAB file not found: $MTP_DRAFT_VOCAB
        Build one with: python3 files/build_draft_vocab.py <corpus.jsonl> --out draft_vocab.txt --size 65536"
     if [[ "$FP8_DENSE" == "true" ]]; then
-        err "MTP_DRAFT_VOCAB and FP8_DENSE both overlay nvidia/mtp.py - pick one."
+        # nvidia/mtp.py is already mounted from files/overlay/mtp_draftvocab.py (step 4c).
+        info "  FP8_DENSE=true: drafter stacked on the FP8 mtp.py overlay in step 4c"
+    else
+        extract_from_image "$VLLM_PKG/models/qwen3_8_flash_next/nvidia/mtp.py" \
+                           "$SCRIPT_DIR/files/mtp_patched.py.orig"
+        python3 "$SCRIPT_DIR/files/patch_mtp_draft_vocab.py"
+        add_overlay "$SCRIPT_DIR/files/mtp_patched.py" \
+                    "$VLLM_PKG/models/qwen3_8_flash_next/nvidia/mtp.py"
     fi
-    extract_from_image "$VLLM_PKG/models/qwen3_8_flash_next/nvidia/mtp.py" \
-                       "$SCRIPT_DIR/files/mtp_patched.py.orig"
-    python3 "$SCRIPT_DIR/files/patch_mtp_draft_vocab.py"
-    add_overlay "$SCRIPT_DIR/files/mtp_patched.py" \
-                "$VLLM_PKG/models/qwen3_8_flash_next/nvidia/mtp.py"
     add_overlay "$MTP_DRAFT_VOCAB" "/etc/vllm-draft-vocab.txt"
     OVERLAY_ENV+=("-e VLLM_MTP_DRAFT_VOCAB=/etc/vllm-draft-vocab.txt")
     ok "Draft vocab: $(wc -l < "$MTP_DRAFT_VOCAB") ids from $MTP_DRAFT_VOCAB"
@@ -522,16 +665,25 @@ fi
 # ---------------------------------------------------------------------------
 if $DO_LAUNCH && [[ "$KV_CACHE_DTYPE" == fp8* ]]; then
     info "=== Step 4f: FP8 KV cache patch ($KV_CACHE_DTYPE) ==="
-    if [[ "$QSA_PROFILE" != "stock" ]]; then
-        err "KV_CACHE_DTYPE=$KV_CACHE_DTYPE and QSA_PROFILE=$QSA_PROFILE both overlay ops/qsa.py - pick one."
-    fi
     extract_from_image "$VLLM_PKG/models/qwen3_8_flash_next/nvidia/ops/qsa.py" \
                        "$SCRIPT_DIR/files/qsa_ops_patched.py.orig"
     extract_from_image "$VLLM_PKG/models/qwen3_8_flash_next/nvidia/qsa.py" \
                        "$SCRIPT_DIR/files/qsa_nvidia_patched.py.orig"
     python3 "$SCRIPT_DIR/files/patch_qsa_fp8_kv.py"
-    add_overlay "$SCRIPT_DIR/files/qsa_ops_patched.py" \
-                "$VLLM_PKG/models/qwen3_8_flash_next/nvidia/ops/qsa.py"
+    # The FP8-KV patch and the GB10 launch profile both rewrite ops/qsa.py and
+    # collide on exactly one anchor (the MQA scorer launch, where FP8 inserts
+    # KV_QUANT_MODE above num_warps). Stacking them FP8-first with a
+    # KV_QUANT_MODE-aware anchor keeps both. Precedent: patch_modelopt_fp8_block_moe
+    # already stacks on the MXFP8 patch.
+    if [[ "$QSA_PROFILE" != "stock" ]]; then
+        info "  stacking GB10 QSA launch profile on top of the FP8-KV patch"
+        python3 "$SCRIPT_DIR/files/stack_qsa_fp8_gb10.py" "$SCRIPT_DIR"
+        add_overlay "$SCRIPT_DIR/files/qsa_gb10/qsa.py" \
+                    "$VLLM_PKG/models/qwen3_8_flash_next/nvidia/ops/qsa.py"
+    else
+        add_overlay "$SCRIPT_DIR/files/qsa_ops_patched.py" \
+                    "$VLLM_PKG/models/qwen3_8_flash_next/nvidia/ops/qsa.py"
+    fi
     add_overlay "$SCRIPT_DIR/files/qsa_nvidia_patched.py" \
                 "$VLLM_PKG/models/qwen3_8_flash_next/nvidia/qsa.py"
     warn "FP8 KV is a quality trade on sparse attention - validate reasoning on your workload."
@@ -679,9 +831,100 @@ if $DO_LAUNCH; then
     # Stacks on top: adds the FP8_BLOCK_SCALES routed-expert branch that neither
     # this image nor upstream vLLM has, which is what MTP needs on this checkpoint.
     python3 "$SCRIPT_DIR/files/patch_modelopt_fp8_block_moe.py"
+    if [[ "$FP8_DENSE" == "true" ]]; then
+        # Third layer on the same file: the FP8-dense MIXED_PRECISION dispatch
+        # (FP8_PER_CHANNEL_PER_TOKEN / FP8_PB_WO + extra prefix spellings).
+        python3 "$SCRIPT_DIR/files/stack_modelopt_fp8dense.py" "$SCRIPT_DIR"
+        ok "FP8-dense modelopt hunks stacked on the MXFP8 + FP8-block-MoE patch"
+    fi
     ok "MXFP8 fallback patch ready: $PATCHED_MODELOPT"
     HEAD_MODELOPT_MOUNT="-v $PATCHED_MODELOPT:$MODEL_OPT_PKG:ro"
     WORKER_MODELOPT_MOUNT="-v /tmp/modelopt_patched.py:$MODEL_OPT_PKG:ro"
+
+    # ---------------------------------------------------------------------------
+    # 6c. PLE CPU-offload wiring (PLE_OFFLOAD=true).
+    #     The offload worker/connector patches in files/ple_offload/ are bind-mounted
+    #     over the image's package (patch_ple_offload.py: reads ple_offload/orig/,
+    #     writes ple_offload/, carries the GB10 host-handshake fix -- GB10 reports
+    #     CAN_USE_STREAM_MEM_OPS=0, so the stock stream-memory handshake hangs after
+    #     CUDA graph capture). VLLM_PLE_PACKED_TABLE_DIR points the worker at the
+    #     pre-packed, mmap-able table so the 51B PLE table stays in the page cache
+    #     instead of anonymous RAM.
+    #
+    #     The table format is quant-dependent:
+    #       NVFP4 -> build_ple_packed_table.py     (codes + block scales, 90 B rows)
+    #       FP8   -> build_ple_packed_table_fp8.py (raw F8_E4M3 rows, head_dim wide)
+    # ---------------------------------------------------------------------------
+    HEAD_PLE_OFFLOAD_MOUNTS=""
+    WORKER_PLE_OFFLOAD_MOUNTS=""
+    PLE_PACKED_ENV=""
+    if [[ "$PLE_OFFLOAD" == "true" ]]; then
+        info "=== Step 6c: PLE CPU-offload wiring ==="
+
+        # Patch the offload worker/connector from the image's originals.
+        if [[ ! -d "$SCRIPT_DIR/files/ple_offload/orig" ]] || [[ -z "$(ls -A "$SCRIPT_DIR/files/ple_offload/orig" 2>/dev/null)" ]]; then
+            info "Extracting PLE offload sources from image..."
+            mkdir -p "$SCRIPT_DIR/files/ple_offload/orig"
+            tmp_container=$(docker create "$IMAGE" /bin/true)
+            docker cp "$tmp_container:/usr/local/lib/python3.12/dist-packages/vllm/v1/ple_offload/." "$SCRIPT_DIR/files/ple_offload/orig/"
+            docker cp "$tmp_container:/usr/local/lib/python3.12/dist-packages/vllm/model_executor/layers/ple_offload_layer.py" "$SCRIPT_DIR/files/ple_offload/orig/"
+            docker rm "$tmp_container" >/dev/null 2>&1
+        fi
+        python3 "$SCRIPT_DIR/files/patch_ple_offload.py" >/dev/null || err "patch_ple_offload.py failed"
+
+
+        PLE_OFFLOAD_PKG="$VLLM_PKG/v1/ple_offload"
+        PLE_LAYER_PKG="$VLLM_PKG/model_executor/layers/ple_offload_layer.py"
+        HEAD_PLE_OFFLOAD_MOUNTS="-v $SCRIPT_DIR/files/ple_offload/connector.py:$PLE_OFFLOAD_PKG/connector.py:ro -v $SCRIPT_DIR/files/ple_offload/protocol.py:$PLE_OFFLOAD_PKG/protocol.py:ro -v $SCRIPT_DIR/files/ple_offload/worker.py:$PLE_OFFLOAD_PKG/worker.py:ro -v $SCRIPT_DIR/files/ple_offload/ple_offload_layer.py:$PLE_LAYER_PKG:ro"
+        # The worker copies land in a flat /tmp dir (same convention as the overlays).
+        for _f in connector protocol worker ple_offload_layer; do
+            _src="$SCRIPT_DIR/files/ple_offload/$_f.py"
+            _dst="$PLE_OFFLOAD_PKG/$_f.py"
+            [[ "$_f" == "ple_offload_layer" ]] && _dst="$PLE_LAYER_PKG"
+            scp -q "$_src" "${WORKER_USER:+${WORKER_USER}@}${WORKER_IP}:/tmp/ple_offload_$_f.py"
+            WORKER_PLE_OFFLOAD_MOUNTS+=" -v /tmp/ple_offload_$_f.py:$_dst:ro"
+        done
+
+        # Node-local multi-node support: one offload worker per node, spawned
+        # from each node's first rank, seeing only that node's registrations.
+        # Stock vLLM rejects nnodes>1 and spawns from global rank 0 only, so
+        # the guard, the spawn condition and the registration count are
+        # patched here (the worker/connector/registration side lives in
+        # files/patch_ple_offload.py).
+        if [[ ! -f "$SCRIPT_DIR/files/gpu_worker/gpu_worker.py.orig" ]]; then
+            info "Extracting gpu_worker.py from image..."
+            _c=$(docker create "$IMAGE" /bin/true)
+            docker cp "$_c:/usr/local/lib/python3.12/dist-packages/vllm/v1/worker/gpu_worker.py" "$SCRIPT_DIR/files/gpu_worker/gpu_worker.py.orig"
+            docker rm "$_c" >/dev/null 2>&1
+        fi
+        python3 "$SCRIPT_DIR/files/patch_gpu_worker_ple_nnodes.py" >/dev/null || err "patch_gpu_worker_ple_nnodes.py failed"
+        _GW="$VLLM_PKG/v1/worker/gpu_worker.py"
+        HEAD_PLE_OFFLOAD_MOUNTS+=" -v $SCRIPT_DIR/files/gpu_worker/gpu_worker.py:$_GW:ro"
+        scp -q "$SCRIPT_DIR/files/gpu_worker/gpu_worker.py" "${WORKER_USER:+${WORKER_USER}@}${WORKER_IP}:/tmp/ple_offload_gpu_worker.py"
+        WORKER_PLE_OFFLOAD_MOUNTS+=" -v /tmp/ple_offload_gpu_worker.py:$_GW:ro"
+        ok "PLE offload gpu_worker patch applied (node-local workers)"
+
+        # Locate the packed table for this checkpoint's PLE dtype. The
+        # table must exist on BOTH nodes: each GPU worker spawns its own
+        # offload process, and that process mmaps the table locally.
+        if [[ -n "$PLE_PACKED_TABLE_DIR" ]]; then
+            if ! compgen -G "$PLE_PACKED_TABLE_DIR/*.packed_u8" >/dev/null; then
+                err "PLE_PACKED_TABLE_DIR=$PLE_PACKED_TABLE_DIR holds no .packed_u8 table on the head. Build it first: python3 files/build_ple_packed_table_fp8.py <snapshot_dir> $PLE_PACKED_TABLE_DIR"
+            fi
+            ssh_worker "mkdir -p '$PLE_PACKED_TABLE_DIR'" || err "could not create $PLE_PACKED_TABLE_DIR on worker"
+            if ! ssh_worker "test -s '$PLE_PACKED_TABLE_DIR'/\$(basename \$(compgen -G '$PLE_PACKED_TABLE_DIR/*.packed_u8' | head -1))"; then
+                info "Copying PLE packed table to worker (47.7 GiB, one time)..."
+                rsync -a "$PLE_PACKED_TABLE_DIR/" "${WORKER_USER:+${WORKER_USER}@}${WORKER_IP}:$PLE_PACKED_TABLE_DIR/" || err "rsync of PLE packed table to worker failed"
+            fi
+            WORKER_PLE_OFFLOAD_MOUNTS+=" -v $PLE_PACKED_TABLE_DIR:$PLE_PACKED_TABLE_DIR:ro"
+            HEAD_PLE_OFFLOAD_MOUNTS+=" -v $PLE_PACKED_TABLE_DIR:$PLE_PACKED_TABLE_DIR:ro"
+            PLE_PACKED_ENV="-e VLLM_PLE_PACKED_TABLE_DIR=$PLE_PACKED_TABLE_DIR"
+            ok "PLE packed table dir: $PLE_PACKED_TABLE_DIR (synced to worker)"
+        else
+            warn "PLE_OFFLOAD=true but PLE_PACKED_TABLE_DIR is unset -- the worker will load shards into RAM instead of mmapping"
+        fi
+        ok "PLE offload wiring ready (head + worker)"
+    fi
 
     # ---------------------------------------------------------------------------
     # 7. Build vLLM args (shared between head and worker)
@@ -697,6 +940,10 @@ if $DO_LAUNCH; then
     VLLM_ARGS+=("--max-model-len" "$MAX_MODEL_LEN")
     VLLM_ARGS+=("--kv-cache-dtype" "$KV_CACHE_DTYPE")
     [[ -n "$MAMBA_SSM_CACHE_DTYPE" ]] && VLLM_ARGS+=("--mamba-ssm-cache-dtype" "$MAMBA_SSM_CACHE_DTYPE")
+    VLLM_ARGS+=("--enable-prefix-caching")
+    VLLM_ARGS+=("--enable-prompt-tokens-details")
+    VLLM_ARGS+=("--kv-cache-metrics")
+    VLLM_ARGS+=("--kv-cache-metrics-sample" "$KV_CACHE_METRICS_SAMPLE")
     VLLM_ARGS+=("--load-format" "safetensors")
     VLLM_ARGS+=("--safetensors-load-strategy" "lazy")
     VLLM_ARGS+=("--enable-chunked-prefill")
@@ -714,9 +961,25 @@ if $DO_LAUNCH; then
         VLLM_ARGS+=("--all2all-backend" "allgather_reducescatter")
     fi
 
-    # JSON args: use printf to build properly quoted strings for the heredoc
-    if [[ "$MTP_NUM_SPECULATIVE_TOKENS" -gt 0 ]]; then
-        if [[ -n "$MTP_DRAFT_VOCAB" ]]; then
+    # JSON args: use printf to build properly quoted strings for the heredoc.
+    # SPEC_CONFIG_JSON is the escape hatch: a full --speculative-config payload
+    # used verbatim (empty = derive it from the MTP knobs below).
+    if [[ -n "$SPEC_CONFIG_JSON" ]]; then
+        VLLM_ARGS+=("--speculative-config" "'$SPEC_CONFIG_JSON'")
+    elif [[ "$MTP_NUM_SPECULATIVE_TOKENS" -gt 0 ]]; then
+        # draft_sample_method=probabilistic samples from the draft distribution and
+        # uses the true target/draft probability ratio at verification, which keeps
+        # the output distribution identical while recovering acceptance that the
+        # greedy one-hot path loses under temperature>0. It is mutually exclusive
+        # with use_local_argmax_reduction (speculator.py:293), and that flag is the
+        # only path to the reduced draft vocabulary -- so the two levers cannot be
+        # combined. Refuse loudly rather than silently dropping one.
+        if [[ -n "$MTP_DRAFT_SAMPLE_METHOD" && "$MTP_DRAFT_SAMPLE_METHOD" != "greedy" ]]; then
+            if [[ -n "$MTP_DRAFT_VOCAB" ]]; then
+                err "MTP_DRAFT_SAMPLE_METHOD=$MTP_DRAFT_SAMPLE_METHOD is incompatible with MTP_DRAFT_VOCAB (use_local_argmax_reduction) - pick one."
+            fi
+            VLLM_ARGS+=("--speculative-config" "$(printf "'{\"method\":\"mtp\",\"num_speculative_tokens\":%s,\"draft_sample_method\":\"%s\"}'" "$MTP_NUM_SPECULATIVE_TOKENS" "$MTP_DRAFT_SAMPLE_METHOD")")
+        elif [[ -n "$MTP_DRAFT_VOCAB" ]]; then
             # get_top_tokens (added by patch_mtp_draft_vocab.py) is only reached
             # through this flag; it also cuts the draft all-gather from
             # O(vocab_size) to O(2*tp_size) per token.
@@ -726,7 +989,16 @@ if $DO_LAUNCH; then
         fi
     fi
 
-    VLLM_ARGS+=("--compilation-config" "$(printf "'{\"mode\":0,\"cudagraph_mode\":\"FULL_DECODE_ONLY\"}'")")
+    # COMPILATION_CONFIG_JSON is the full override and wins when set. Otherwise the
+    # payload is assembled from COMPILATION_MODE / CUDAGRAPH_MODE, whose defaults
+    # reproduce the historical {"mode":0,"cudagraph_mode":"FULL_DECODE_ONLY"}.
+    # COMPILATION_MODE: 0=eager (NONE), 3=VLLM_COMPILE (Inductor). Mode 0 was the
+    # historical default here with no recorded rationale; 3 enables Inductor fusion
+    # of the elementwise/norm/quant glue between weight-streaming GEMMs.
+    if [[ -z "$COMPILATION_CONFIG_JSON" ]]; then
+        COMPILATION_CONFIG_JSON=$(printf '{"mode":%s,"cudagraph_mode":"%s"}' "$COMPILATION_MODE" "$CUDAGRAPH_MODE")
+    fi
+    VLLM_ARGS+=("--compilation-config" "'$COMPILATION_CONFIG_JSON'")
 
     # hf-overrides: ONE merged payload, nested under "text_config".
     # vLLM's ModelConfig._apply_dict_overrides only recurses into keys that are
@@ -800,9 +1072,27 @@ print(json.dumps({"text_config": tc}, separators=(",", ":")) if tc else "")
     if [[ -n "$HEAD_MODELOPT_MOUNT" ]]; then
         DOCKER_ARGS+=("$HEAD_MODELOPT_MOUNT")
     fi
+    if [[ -n "$HEAD_PLE_OFFLOAD_MOUNTS" ]]; then
+        for _m in $HEAD_PLE_OFFLOAD_MOUNTS; do DOCKER_ARGS+=("$_m"); done
+    fi
+    if [[ -n "$PLE_PACKED_ENV" ]]; then
+        DOCKER_ARGS+=("$PLE_PACKED_ENV")
+    fi
     DOCKER_ARGS+=("-e HF_HOME=/root/.cache/huggingface")
     DOCKER_ARGS+=("-v $HF_CACHE_DIR:/root/.cache/huggingface")
     DOCKER_ARGS+=("-v $HOME/.cache/vllm:/root/.cache/vllm")
+    # VLLM_EXTRA_ENV (plus the V2 runner switch) goes to both nodes; see the
+    # declarations above. The head and worker are each launched from their own
+    # heredoc with an explicit -e list (DOCKER_ARGS does not build them), so the
+    # flags must be spliced into both.
+    EXTRA_ENV_FLAGS=""
+    if [[ -n "$VLLM_EXTRA_ENV" ]]; then
+        for _kv in $VLLM_EXTRA_ENV; do
+            EXTRA_ENV_FLAGS+=" -e $_kv"
+        done
+        info "  Extra env (both nodes): $VLLM_EXTRA_ENV"
+    fi
+    [[ "$VLLM_USE_V2_MODEL_RUNNER" == "1" ]] && EXTRA_ENV_FLAGS+=" -e VLLM_USE_V2_MODEL_RUNNER=1"
     if [[ -n "$EXTRA_DOCKER_ARGS" ]]; then
         # shellcheck disable=SC2206
         DOCKER_ARGS+=($EXTRA_DOCKER_ARGS)
@@ -890,6 +1180,19 @@ print(json.dumps({"text_config": tc}, separators=(",", ":")) if tc else "")
     PLE_OFFLOAD_ENV=""
     [[ "$PLE_OFFLOAD" == "true" ]] && PLE_OFFLOAD_ENV="-e VLLM_PLE_CPU_OFFLOAD=1"
 
+    # Engine knobs that must be identical on both ranks. Both launch scripts are
+    # rendered from the single VLLM_ARGS_STR built above, so there is nothing left
+    # to resolve per rank -- this line is only the launch-log echo.
+    info "  engine knobs: EP=$ENABLE_EXPERT_PARALLEL SPEC=[$SPEC_CONFIG_JSON] COMPILE=[$COMPILATION_CONFIG_JSON] EXTRA=[$EXTRA_VLLM_ARGS] DOCKER_EXTRA=[$EXTRA_DOCKER_ARGS]"
+
+    # Container cgroup cap (both nodes) when set. GPU allocations are NOT
+    # charged to the cgroup on GB10, so this bounds the host-side footprint.
+    MEM_CAP_FLAG=""
+    if [[ "$CONTAINER_MEM_GIB" -gt 0 ]]; then
+        MEM_CAP_FLAG="--memory ${CONTAINER_MEM_GIB}g --memory-swap ${CONTAINER_MEM_GIB}g"
+        info "  container cgroup cap: ${CONTAINER_MEM_GIB} GiB/node"
+    fi
+
     # Write worker launch script to a temp file and scp it (avoids SSH JSON quoting issues)
     WORKER_SCRIPT=$(mktemp /tmp/vllm_worker_XXXXXX.sh)
     cat > "$WORKER_SCRIPT" <<LAUNCH_EOF
@@ -898,7 +1201,11 @@ docker run \
     -d --name vllm-fn \
     --gpus all --network host --ipc host \
     --cap-add SYS_NICE --ulimit memlock=-1 --ulimit stack=67108864 \
+    $MEM_CAP_FLAG \
     --device /dev/infiniband:/dev/infiniband \
+    $EXTRA_DOCKER_ARGS \
+    $CPUSET_ARG \
+    --entrypoint /bin/sh \
     -e GLOO_SOCKET_IFNAME=$WORKER_IFACE \
     -e NCCL_SOCKET_IFNAME=$WORKER_IFACE \
     -e TP_SOCKET_IFNAME=$WORKER_IFACE \
@@ -907,6 +1214,7 @@ docker run \
     -e NCCL_IB_GID_INDEX=$IB_GID_INDEX \
     -e NCCL_IB_AUTO_DETECT=0 \
     -e NCCL_DEBUG=WARN \
+    $EXTRA_ENV_FLAGS \
     -e HF_HUB_OFFLINE=1 \
     -e TRANSFORMERS_OFFLINE=1 \
     -e VLLM_HOST_IP=$WORKER_IP \
@@ -915,12 +1223,15 @@ docker run \
     -e HF_HOME=/root/.cache/huggingface \
     $WORKER_PLE_MOUNT \
     $WORKER_MODELOPT_MOUNT \
+    $WORKER_PLE_OFFLOAD_MOUNTS \
+    $PLE_PACKED_ENV \
     $WORKER_OVERLAY_MOUNTS \
     $OVERLAY_ENV_STR \
     $WORKER_HF_MOUNT \
     -v $REMOTE_HOME/.cache/vllm:/root/.cache/vllm \
     $IMAGE \
-    $MODEL_ID \
+    -c 'renice -n -19 \$\$ 2>/dev/null || true; exec vllm serve "\$0" "\$@"' \
+    /root/.cache/huggingface/hub/models--${ORG}--${NAME}/snapshots/${SNAPSHOT_SHA} \
     $VLLM_ARGS_STR \
     --node-rank 1 \
     --headless
@@ -960,7 +1271,11 @@ docker run \
     -d --name vllm-fn \
     --gpus all --network host --ipc host \
     --cap-add SYS_NICE --ulimit memlock=-1 --ulimit stack=67108864 \
+    $MEM_CAP_FLAG \
     --device /dev/infiniband:/dev/infiniband \
+    $EXTRA_DOCKER_ARGS \
+    $CPUSET_ARG \
+    --entrypoint /bin/sh \
     -e GLOO_SOCKET_IFNAME=$IFACE \
     -e NCCL_SOCKET_IFNAME=$IFACE \
     -e TP_SOCKET_IFNAME=$IFACE \
@@ -972,17 +1287,21 @@ docker run \
     -e HF_HUB_OFFLINE=1 \
     -e TRANSFORMERS_OFFLINE=1 \
     -e VLLM_HOST_IP=$HEAD_IP \
+    $EXTRA_ENV_FLAGS \
     ${VLLM_ALLOW_LONG_MAX_MODEL_LEN:+-e VLLM_ALLOW_LONG_MAX_MODEL_LEN=$VLLM_ALLOW_LONG_MAX_MODEL_LEN} \
     $PLE_OFFLOAD_ENV \
     -e HF_HOME=/root/.cache/huggingface \
     $HEAD_PLE_MOUNT \
     $HEAD_MODELOPT_MOUNT \
+    $HEAD_PLE_OFFLOAD_MOUNTS \
+    $PLE_PACKED_ENV \
     $HEAD_OVERLAY_MOUNTS \
     $OVERLAY_ENV_STR \
     -v $HF_CACHE_DIR:/root/.cache/huggingface \
     -v $HOME/.cache/vllm:/root/.cache/vllm \
     $IMAGE \
-    $MODEL_ID \
+    -c 'renice -n -19 \$\$ 2>/dev/null || true; exec vllm serve "\$0" "\$@"' \
+    /root/.cache/huggingface/hub/models--${ORG}--${NAME}/snapshots/${SNAPSHOT_SHA} \
     $VLLM_ARGS_STR \
     --node-rank 0 \
     --host 0.0.0.0 \
@@ -997,6 +1316,23 @@ LAUNCH_EOF
 
     info "  (starting head container...)"
     bash "$HEAD_SCRIPT"
+    ok "Head container started."
+
+
+    # ---- Memory watchdog (both nodes) ----
+    # Unified memory: an exhausted pool HANGS the kernel instead of OOM-killing,
+    # and the head node has no swap. Second line of defence behind the cgroup cap; kills
+    # the container if host MemAvailable drops below the floor.
+    if [[ "$MEMWATCH_MIN_GIB" -gt 0 ]]; then
+        mkdir -p "$SCRIPT_DIR/logs"
+        pkill -f "memwatch.sh vllm-fn" 2>/dev/null || true
+        nohup bash "$SCRIPT_DIR/files/memwatch.sh" vllm-fn "$MEMWATCH_MIN_GIB" > "$SCRIPT_DIR/logs/memwatch-head.log" 2>&1 &
+        ok "Head watchdog running (kills vllm-fn if MemAvailable < ${MEMWATCH_MIN_GIB} GiB)"
+        if scp -q "$SCRIPT_DIR/files/memwatch.sh" "${WORKER_USER:+${WORKER_USER}@}${WORKER_IP}:/tmp/memwatch.sh"; then
+            ssh_worker "pkill -f memwatch.sh 2>/dev/null; nohup bash /tmp/memwatch.sh vllm-fn $MEMWATCH_MIN_GIB > /tmp/memwatch.log 2>&1 &" >/dev/null 2>&1
+            ok "Worker watchdog running (/tmp/memwatch.log)"
+        fi
+    fi
     rm -f "$HEAD_SCRIPT"
     ok "Head container started."
     info ""
@@ -1021,6 +1357,7 @@ LAUNCH_EOF
             kill $LOGPID 2>/dev/null || true
             echo ""
             ok "vLLM is ready and serving on port $PORT!"
+            apply_tuning
             info ""
             info "Test with:"
             info "  curl http://localhost:$PORT/v1/chat/completions \\"
