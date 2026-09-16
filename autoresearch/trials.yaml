@@ -1,0 +1,29 @@
+# Autoresearch trial definitions.
+# Each trial is a set of .env overrides applied on top of the baseline .env.
+# `args` entries are appended to EXTRA_VLLM_ARGS.
+# Anything not listed is inherited from the current .env.
+#
+# Record of settled results lives in autoresearch/RESULTS.md.
+
+baseline:
+  # The current known-good winner (R2/R4). Never edit this except to promote
+  # a confirmed improvement.
+  env:
+    COMPILATION_MODE: "0"
+    MAX_NUM_BATCHED_TOKENS: "8192"
+    KV_CACHE_DTYPE: "fp8"
+    MTP_NUM_SPECULATIVE_TOKENS: "3"
+    MTP_DRAFT_VOCAB: "./draft_vocab_32k.txt"
+  args: "--kv-cache-memory=24000000000"
+
+trials:
+  # Baseline: FP8-dense + MTP-quantized + 32k balanced draft vocab, k=3, max_num_seqs=48.
+  - name: k4_after_mtp_quant
+    why: "k=4 lost (58.2 vs 60.9) BEFORE the MTP layer was quantized. That halved the drafter's per-position cost (0.586 -> 0.29 GiB/step), so the marginal test for adding position 4 has moved. A published single-Spark recipe got its largest win exactly this way: make drafting ~3x cheaper, then raise k."
+    env:
+      MTP_NUM_SPECULATIVE_TOKENS: "4"
+
+  - name: k5_after_mtp_quant
+    why: "if k=4 now pays, probe further. Hard ceiling is k<=7: MAX_FUSED_GDN_MTP_TOKENS=8 (qwen_gdn_linear_attn.py:89), above which the fused GDN MTP decode kernel is SILENTLY bypassed for a slower path."
+    env:
+      MTP_NUM_SPECULATIVE_TOKENS: "5"
