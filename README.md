@@ -97,9 +97,26 @@ sets `OVERRIDE_MODEL_ID`.
    `ENABLE_EXPERT_PARALLEL=false` and `MTP_NUM_SPECULATIVE_TOKENS=0` are honored). The head's
    rendered script is kept as `.last_head_launch.sh` for inspection.
 
-> **Not done for you: dropping page caches.** `start.sh` needs no root and does
-> **not** drop page caches. Do it yourself on **both** nodes before a launch —
-> it matters on GB10 unified memory (see [Gotchas](#gotchas)):
+> **Page cache.** On GB10 the page cache shares one unified-memory pool with
+> the model, so a checkpoint left resident from a download, an rsync or a
+> previous launch can push weight loading into a `CUDA out of memory` on an
+> otherwise idle box (see [Gotchas](#gotchas)).
+>
+> `start.sh` now releases **the checkpoint's own** clean pages on both nodes
+> before launching, via `posix_fadvise(POSIX_FADV_DONTNEED)`
+> (`files/evict_page_cache.py`). That needs no root, and touches only this
+> checkpoint. Measured: 4.15 GiB → 0.00 GiB resident for a single shard, byte
+> -identical on re-read. Set `EVICT_PAGE_CACHE=false` to skip it.
+>
+> Both nodes are covered in **both** distribution modes. Under `NFS_SHARE=false`
+> the worker's copy is evicted over ssh; under `NFS_SHARE=true` the worker has
+> no local copy — its pages are NFS client cache, so the pass runs inside a
+> throwaway container holding the same volume. `fadvise` evicts over NFS 4.2
+> exactly as it does locally (measured 3.00 GiB → 0.00 GiB resident).
+>
+> It does **not** drop the system-wide cache — that still needs root, and is
+> still worth doing yourself if something *other than the checkpoint* has
+> filled it:
 >
 > ```bash
 > sync && echo 3 | sudo tee /proc/sys/vm/drop_caches
