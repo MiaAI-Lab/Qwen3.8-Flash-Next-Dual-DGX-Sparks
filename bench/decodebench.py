@@ -16,7 +16,7 @@ Findings that motivated the shape of this script:
 """
 import json, time, argparse, urllib.request
 
-BASE, MODEL = "http://localhost:8888", "qwen3.8-flash-next"
+BASE = "http://localhost:8888"
 FILLER = ("Entry {i:06d}: the quarterly logistics audit recorded a routine "
           "variance in the northbound depot inventory.\n")
 TASKS = {
@@ -38,8 +38,8 @@ def post(path, payload, timeout=3600):
 def build_ctx(t):
     return "".join(FILLER.format(i=i) for i in range(max(1, int(t / 25))))
 
-def run(ctx, task, n, temp):
-    payload = {"model": MODEL, "messages": [{"role": "user", "content": ctx + "\n\n" + task}],
+def run(ctx, task, n, temp, model):
+    payload = {"model": model, "messages": [{"role": "user", "content": ctx + "\n\n" + task}],
                "max_tokens": n, "min_tokens": n, "ignore_eos": True,
                "temperature": temp, "stream": True,
                "stream_options": {"include_usage": True}}
@@ -66,6 +66,7 @@ def main():
     ap.add_argument("--decode", type=int, default=600)
     ap.add_argument("--contexts", default="1000,600000")
     ap.add_argument("--temps", default="0.0,0.8")
+    ap.add_argument("--model", default="qwen3.8-flash-next")
     a = ap.parse_args()
     print(f"{'context':>9} {'temp':>5} {'content':<8} {'ptok':>9} {'ctok':>6} {'TTFT s':>9} {'dec tok/s':>10}")
     print("-" * 62)
@@ -73,7 +74,7 @@ def main():
         ctx = build_ctx(c)
         for t in [float(x) for x in a.temps.split(",")]:
             for name, task in TASKS.items():
-                p, ct, tt, dec = run(ctx, task, a.decode, t)
+                p, ct, tt, dec = run(ctx, task, a.decode, t, a.model)
                 print(f"{c:>9,} {t:>5.1f} {name:<8} {p:>9,} {ct:>6,} {tt:>9.2f} {dec:>10.1f}", flush=True)
 
 main()

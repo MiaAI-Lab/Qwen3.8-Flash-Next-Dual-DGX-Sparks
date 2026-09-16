@@ -19,6 +19,10 @@ class PleOffloadRegistration:
     worker_id: int
     tp_rank: int
     dp_rank: int
+    # Global rank of the registering GPU worker. The offload worker is
+    # node-local, so this is how it validates that every rank on its
+    # node registered and picks the input/request leader per DP group.
+    rank: int
     # CUDA tensors are serialized through PyTorch CUDA IPC.
     gpu_output_buffers: dict[str, torch.Tensor]
     sem_flag_tensors: dict[str, torch.Tensor]

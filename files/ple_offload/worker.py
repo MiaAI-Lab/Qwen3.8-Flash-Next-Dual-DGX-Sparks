@@ -562,31 +562,49 @@ class PleOffloadRunner:
                 sorted(item.gpu_output_buffers),
             )
 
-        dp_size = self.vllm_config.parallel_config.data_parallel_size
-        tp_size = self.vllm_config.parallel_config.tensor_parallel_size
-        if num_workers != dp_size * tp_size:
+        parallel_config = self.vllm_config.parallel_config
+        dp_size = parallel_config.data_parallel_size
+        tp_size = parallel_config.tensor_parallel_size
+        node_start = (
+            parallel_config.node_rank_within_dp
+            * parallel_config.local_world_size
+        )
+        local_ranks = set(
+            range(node_start, node_start + parallel_config.local_world_size)
+        )
+        if num_workers != len(local_ranks):
             raise RuntimeError(
-                f"Expected {dp_size * tp_size} registrations for DP={dp_size}, "
-                f"TP={tp_size}, got {num_workers}"
+                "PLE offload worker is node-local: expected "
+                f"{len(local_ranks)} registration(s), got {num_workers}"
             )
+        received_ranks = {registration.rank for registration in registrations}
+        if received_ranks != local_ranks:
+            raise RuntimeError(
+                "PLE offload worker is node-local: expected "
+                f"registrations from ranks {sorted(local_ranks)}, got "
+                f"{sorted(received_ranks)}"
+            )
+        registered_slots: set[tuple[int, int]] = set()
+        for registration in registrations:
+            slot = (registration.dp_rank, registration.tp_rank)
+            if slot in registered_slots:
+                raise RuntimeError(
+                    "Duplicate PLE registration for "
+                    f"dp_rank={slot[0]}, tp_rank={slot[1]}"
+                )
+            registered_slots.add(slot)
 
         registrations_by_dp: dict[int, list[PleOffloadRegistration]] = {}
         for registration in registrations:
             registrations_by_dp.setdefault(registration.dp_rank, []).append(
                 registration
             )
-        if set(registrations_by_dp) != set(range(dp_size)):
-            raise RuntimeError(
-                f"Expected DP ranks {set(range(dp_size))}, "
-                f"got {set(registrations_by_dp)}"
-            )
-        for dp_rank, dp_registrations in registrations_by_dp.items():
-            tp_ranks = {registration.tp_rank for registration in dp_registrations}
-            if tp_ranks != set(range(tp_size)):
-                raise RuntimeError(
-                    f"DP rank {dp_rank} expected TP ranks {set(range(tp_size))}, "
-                    f"got {tp_ranks}"
-                )
+        # A node sees only a subset of each DP group's TP ranks. The
+        # lowest-rank local member of each group staged the inputs.
+        local_leaders = {
+            dp_rank: min(registration.rank for registration in dp_registrations)
+            for dp_rank, dp_registrations in registrations_by_dp.items()
+        }
 
         for registration in registrations:
             if set(registration.gpu_output_buffers) != set(self.layer_names):
@@ -607,19 +625,20 @@ class PleOffloadRunner:
                     done_flag=registration.done_flag,
                 )
                 targets_for_dp.setdefault(layer_name, []).append(target)
-            # All TP ranks in one DP group receive the same input, so buffers
-            # registered by TP rank zero are sufficient for that DP rank.
-            if registration.tp_rank == 0:
+            # All TP ranks in one DP group receive the same input, so the
+            # local leader's shared buffers are sufficient for that group.
+            if registration.rank == local_leaders[registration.dp_rank]:
                 self._input_bufs[registration.dp_rank] = PleOffloadInputBuffers(
                     input_ids_buf=registration.input_ids_buf,
                     query_start_loc_buf=registration.query_start_loc_buf,
                     ngram_context_buf=registration.ngram_context_buf,
                 )
 
-        if set(self._input_bufs) != set(range(dp_size)):
+        missing_leaders = set(registrations_by_dp) - set(self._input_bufs)
+        if missing_leaders:
             raise RuntimeError(
-                "TP rank zero did not register PLE input buffers for every DP "
-                f"rank: expected={set(range(dp_size))}, got={set(self._input_bufs)}"
+                "No PLE input buffers registered for DP ranks: "
+                f"{sorted(missing_leaders)}"
             )
 
         config = self.vllm_config.model_config.hf_text_config
@@ -628,10 +647,10 @@ class PleOffloadRunner:
         for dp_rank, layer_targets in self._worker_targets.items():
             self._pinned_bufs[dp_rank] = {}
             for layer_name, targets in layer_targets.items():
-                if len(targets) != tp_size:
+                if not targets:
                     raise RuntimeError(
-                        f"PLE layer {layer_name} for DP rank {dp_rank} received "
-                        f"{len(targets)} targets, expected {tp_size}"
+                        f"PLE layer {layer_name} for DP rank {dp_rank} has no "
+                        "registered output targets"
                     )
                 targets.sort(key=lambda target: target.tp_rank)
                 self._pinned_bufs[dp_rank][layer_name] = torch.empty(

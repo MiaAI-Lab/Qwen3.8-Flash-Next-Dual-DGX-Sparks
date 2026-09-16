@@ -12,7 +12,7 @@ NOTE: this build streams reasoning in delta["reasoning"], NOT
 """
 import json, time, argparse, urllib.request, uuid
 
-BASE, MODEL = "http://localhost:8888", "qwen3.8-flash-next"
+BASE = "http://localhost:8888"
 FILLER = ("Entry {i:06d}: the quarterly logistics audit recorded a routine "
           "variance in the northbound depot inventory.\n")   # 25 tokens/line
 NEEDLES = [(0.05, "alpha", "7391-CORAL"),
@@ -25,8 +25,8 @@ def post(path, payload, timeout=3600, stream=False):
     r = urllib.request.urlopen(req, timeout=timeout)
     return r if stream else json.loads(r.read())
 
-def count_tokens(text):
-    return post("/tokenize", {"model": MODEL, "prompt": text})["count"]
+def count_tokens(text, model):
+    return post("/tokenize", {"model": model, "prompt": text})["count"]
 
 def build(n):
     lines = [FILLER.format(i=i) for i in range(n)]
@@ -39,18 +39,19 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--target", type=int, default=600_000)
     ap.add_argument("--max-tokens", type=int, default=1024)
+    ap.add_argument("--model", default="qwen3.8-flash-next")
     args = ap.parse_args()
 
     q = ("\n\nQuestion: three SECRET RECORD lines are hidden in the log above. "
          "List the alpha, bravo and charlie access codes, one per line. "
          "Answer directly with just the three codes.")
-    per_line = count_tokens(build(2000)) / 2000
+    per_line = count_tokens(build(2000), args.model) / 2000
     n = int(args.target / per_line)
     # unique salt at the front kills prefix-cache reuse across runs
     prompt = f"Run identifier {uuid.uuid4()} -- session log begins.\n" + build(n) + q
     print(f"[calib] {per_line:.2f} tok/line -> {n} lines; exact={count_tokens(prompt):,}", flush=True)
 
-    payload = {"model": MODEL, "messages": [{"role": "user", "content": prompt}],
+    payload = {"model": args.model, "messages": [{"role": "user", "content": prompt}],
                "max_tokens": args.max_tokens, "temperature": 0.0,
                "stream": True, "stream_options": {"include_usage": True}}
     t0 = time.time()

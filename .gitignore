@@ -55,3 +55,7 @@ files/draft_vocab_*.txt
 
 # autoresearch runtime snapshot (per-machine; the sweep regenerates it)
 autoresearch/baseline.env
+
+# Backups written by the PLE offload / modelopt patchers
+start.sh.bak-ple-offload
+.env.bak-*
