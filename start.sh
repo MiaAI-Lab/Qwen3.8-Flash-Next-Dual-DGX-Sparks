@@ -414,10 +414,14 @@ else
     # path needs this: under NFS_SHARE the worker mounts the head's cache, so
     # normalising the head above already covers it. Runs whether or not the
     # sync ran, since a worker cache staged by hand is exactly the exposed case.
+    # Compare byte count to stripped length. Do NOT compare against
+    # "$(cat "$ref")": command substitution strips trailing newlines, so the
+    # comparison is blind to exactly the byte this is meant to catch.
     ssh_worker "ref='$REMOTE_HUB/models--${ORG}--${NAME}/refs/main'
         if [ -f \"\$ref\" ]; then
             s=\$(tr -d '[:space:]' < \"\$ref\")
-            if [ -n \"\$s\" ] && [ \"\$s\" != \"\$(cat \"\$ref\")\" ]; then
+            n=\$(wc -c < \"\$ref\")
+            if [ -n \"\$s\" ] && [ \"\$n\" -ne \"\${#s}\" ]; then
                 printf '%s' \"\$s\" > \"\$ref\" && echo normalized
             fi
         fi" 2>/dev/null | grep -q normalized \
