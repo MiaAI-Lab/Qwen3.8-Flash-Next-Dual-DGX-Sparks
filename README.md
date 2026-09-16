@@ -97,13 +97,28 @@ sets `OVERRIDE_MODEL_ID`.
    `ENABLE_EXPERT_PARALLEL=false` and `MTP_NUM_SPECULATIVE_TOKENS=0` are honored). The head's
    rendered script is kept as `.last_head_launch.sh` for inspection.
 
-> **Not done for you: dropping page caches.** `start.sh` needs no root and does
-> **not** drop page caches. Do it yourself on **both** nodes before a launch —
-> it matters on GB10 unified memory (see [Gotchas](#gotchas)):
+> **Page cache.** On GB10 the page cache shares one unified-memory pool with
+> the model, so a checkpoint left resident from a download, an rsync or a
+> previous launch can push weight loading into a `CUDA out of memory` on an
+> otherwise idle box (see [Gotchas](#gotchas)).
+>
+> `start.sh` now releases **the checkpoint's own** clean pages on both nodes
+> before launching, via `posix_fadvise(POSIX_FADV_DONTNEED)`
+> (`files/evict_page_cache.py`). That needs no root, and touches only this
+> checkpoint. Measured: 4.15 GiB → 0.00 GiB resident for a single shard, byte
+> -identical on re-read. Set `EVICT_PAGE_CACHE=false` to skip it.
+>
+> It does **not** drop the system-wide cache — that still needs root, and is
+> still worth doing yourself if something else has filled the cache:
 >
 > ```bash
 > sync && echo 3 | sudo tee /proc/sys/vm/drop_caches
 > ```
+>
+> One limit: under `NFS_SHARE=true` the worker reads the checkpoint over NFS,
+> so its resident pages are NFS-client cache that this pass does not reach.
+> The eviction is effective on the head in both modes, and on the worker in
+> the default rsync mode.
 
 Both containers are named **`vllm-fn`** (head and worker); `./stop.sh` removes both.
 

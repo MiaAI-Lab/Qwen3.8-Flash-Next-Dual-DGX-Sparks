@@ -475,6 +475,54 @@ if $DO_LAUNCH && [[ "$REQUIRE_IDLE_GPU" == "true" ]]; then
 fi
 
 # ---------------------------------------------------------------------------
+# 4b-2. Release the checkpoint's own page cache (issue #35)
+#
+# On GB10 the page cache shares one unified-memory pool with the model. A
+# checkpoint that was just written -- hf download, the rsync above, or an NFS
+# read on a previous launch -- leaves its bytes resident as clean pages, and
+# weight loading can then die partway with CUDA OOM on an otherwise idle box.
+#
+# `echo 3 > /proc/sys/vm/drop_caches` needs root, which these nodes do not have
+# passwordless; that is why the README tells you to do it yourself rather than
+# claiming start.sh does it. posix_fadvise(POSIX_FADV_DONTNEED) drops clean
+# pages of files we can open, needs no privileges, and touches only this
+# checkpoint instead of the whole system's cache.
+#
+# Best-effort by construction: evicting the cache is an optimisation, so a
+# failure here must never block a launch that would otherwise work.
+# EVICT_PAGE_CACHE=false opts out.
+EVICT_PAGE_CACHE="${EVICT_PAGE_CACHE:-true}"
+if $DO_LAUNCH && [[ "$EVICT_PAGE_CACHE" == "true" ]]; then
+    info "=== Step 4b-2: Release checkpoint page cache ==="
+    python3 "$SCRIPT_DIR/files/evict_page_cache.py" "$HEAD_MODEL_PATH" 2>&1 \
+        | sed 's/^/  HEAD   /' || true
+    # The worker reads the same bytes over NFS or from its own copy, so it
+    # holds its own cache either way and needs its own pass.
+    ssh_worker "python3 - '$REMOTE_HUB/models--${ORG}--${NAME}' <<'PY' 2>&1
+import os, sys
+tot = n = 0
+for root, _d, fs in os.walk(sys.argv[1]):
+    for f in fs:
+        if not f.endswith(('.safetensors', '.bin', '.pt', '.gguf')):
+            continue
+        try:
+            fd = os.open(os.path.join(root, f), os.O_RDONLY)
+        except OSError:
+            continue
+        try:
+            tot += os.fstat(fd).st_size
+            os.posix_fadvise(fd, 0, 0, os.POSIX_FADV_DONTNEED)
+            n += 1
+        except OSError:
+            pass
+        finally:
+            os.close(fd)
+if n:
+    print(f'page cache: released {tot / 2**30:.1f} GiB across {n} file(s)')
+PY" 2>/dev/null | sed 's/^/  WORKER /' || true
+fi
+
+# ---------------------------------------------------------------------------
 # 4c. vLLM overlay patches (bind-mounted files, no image rebuild).
 #     files/overlay/*.py   -> FP8-dense loader support (only with FP8_DENSE=true)
 #     files/qsa_gb10/qsa.py -> QSA launch-profile override (only with QSA_PROFILE != stock)
