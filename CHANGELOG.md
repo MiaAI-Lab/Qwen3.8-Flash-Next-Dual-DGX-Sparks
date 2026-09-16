@@ -2,6 +2,33 @@
 
 Notable changes to this deployment. Format follows [Keep a Changelog](https://keepachangelog.com/1.1.0/).
 
+## 2026-09-16
+
+### Added
+
+- **Independent re-measurement of the drafting default** —
+  `docs/bench/rerun-20260916.md`. Three arms in one session (bf16 KV + full
+  head → fp8 KV + full head → fp8 KV + 47k vocab), one launch each, everything
+  else identical, 24/24 rows per arm.
+
+  Reduced-vocabulary drafting measures **+8.4% mean** (+7.4% prose, +9.3%
+  code), again entirely step time with acceptance unchanged (prose S=1
+  59.3 → 51.9 ms, code S=1 60.7 → 54.0 ms). Same direction and magnitude as the
+  2026-09-11 A/B below, but the per-cell spread exceeds the 3-repeat stdev, so
+  the mean reproduces and the individual cells do not.
+
+  Two things the re-run surfaced that are not properties of this change:
+
+  - **fp8 KV is a capacity/throughput trade, not a free win.** It costs −5.3%
+    mean throughput (−1.4% prose, −9.2% code, growing with concurrency) and
+    buys 1.80× the KV cache. `tok/step` falls in 8 of 8 cells, consistent with
+    the QSA sparse-indexer perturbation already noted below. The table in the
+    2026-09-05 entry presents only the capacity side.
+  - **The `code` bench prompt is a synthetic high-acceptance case** (50
+    byte-identical `clamp_NN` helpers; `p1/p2/p3 = 1.00/0.99/0.99`). Valid for
+    A/B deltas, not representative as an absolute. This qualifies the code
+    column in the 2026-09-10 table below, which does not state it.
+
 ## 2026-09-10
 
 ### Changed
