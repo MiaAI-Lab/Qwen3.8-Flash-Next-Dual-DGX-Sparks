@@ -794,6 +794,7 @@ if $DO_LAUNCH; then
     info "=== Step 7: Launch vLLM ==="
 
     VLLM_ARGS=()
+    VLLM_ARGS+=("--enable-prompt-tokens-details")
     VLLM_ARGS+=("--served-model-name" "$SERVED_MODEL_NAME")
     VLLM_ARGS+=("--tensor-parallel-size" "$TENSOR_PARALLEL_SIZE")
     VLLM_ARGS+=("--gpu-memory-utilization" "$GPU_MEMORY_UTILIZATION")
