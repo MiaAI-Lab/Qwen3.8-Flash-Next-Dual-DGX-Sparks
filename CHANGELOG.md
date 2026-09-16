@@ -2,6 +2,80 @@
 
 Notable changes to this deployment. Format follows [Keep a Changelog](https://keepachangelog.com/1.1.0/).
 
+## 2026-09-10
+
+### Changed
+
+- **Reduced-vocabulary MTP drafting is now the shipped default** (`.env.sample`, `start.sh`,
+  `files/draft_vocab_en_code_47k.txt`). `.env.sample` now sets
+  `MTP_DRAFT_VOCAB=files/draft_vocab_en_code_47k.txt` (47,149 code-tuned ids, vendored unchanged
+  from the single-Spark recipe's PR #39, where it measured +13.1% mean), `start.sh` resolves
+  relative vocab paths against the repo root (the overlay bind-mount needs an absolute host path;
+  a relative path passed the `[[ -f ]]` guard and then broke `docker run -v`) and warns when MTP
+  runs without a vocab. Empty the knob to restore full 248,320-token drafting.
+
+  Measured live on this kit 2026-09-11 with `bench/sweep.py` driving sparkDash (prose and code,
+  600 tokens, S=1/2/4/8, three repeats each in alternating order, one launch per arm at
+  `MAX_NUM_SEQS=8`, everything else identical: nvidia NVFP4, NFS-shared weights, TP2+EP,
+  MTP 3, fp8 KV, BF16 SSM, 262k native, FULL decode graphs). Aggregate decode tok/s, means of
+  three:
+
+  | | baseline (full head) | tuned (47k vocab) | change |
+  |---|---|---|---|
+  | code, 1 stream | 62.0 | **71.5** | **+15.3%** |
+  | code, 2 streams | 113.8 | 124.9 | +9.7% |
+  | code, 4 streams | 193.4 | 211.1 | +9.1% |
+  | code, 8 streams | 312.4 | 325.0 | +4.0% |
+  | prose, 1 stream | 49.2 | **56.8** | **+15.5%** |
+  | prose, 2 streams | 84.1 | 91.6 | +8.9% |
+  | prose, 4 streams | 134.8 | 146.0 | +8.3% |
+  | prose, 8 streams | 213.4 | 225.3 | +5.6% |
+
+  **+9.6% mean across the eight cells.** The gain is all step time — code 61.2 → 54.0 ms at one
+  stream, prose 59.9 → 53.3 — with tokens per step unchanged (code 3.80 → 3.85, prose ~2.9 both):
+  the byte saving with acceptance preserved. Server log confirms
+  `47149 of 248320 tokens (19.0%), 45734 on this rank of 2; draft lm_head shard 0.59 -> 0.22 GiB
+  per draft step`. The win is smaller than single-Spark's +13.1% for two structural reasons: at
+  TP=2 each rank holds only half the head, and the 47k ids land ~97% in rank 0's id range, so the
+  step's critical rank reads 0.22 GiB where the single-Spark GPU went 1.18 → 0.22 — rank 1's
+  slice shrinks to ~0.01 GiB but the step waits for the slowest rank, so that saving is not on the
+  critical path. The win tapers with concurrency as the batch itself fills the step (+4.0% at
+  code S=8). In six of eight cells the tuned arm's worst repeat beats the baseline arm's best
+  (code S=4, 193.4 vs 194.5, and S=8, 318.0 vs 321.8, overlap at the extremes; the means stay
+  separated).
+
+  Caveats, stated plainly: the shipped file is code-tuned (30 MiB host code+docs, 100% corpus,
+  99.58% held-out in the single-Spark build), so non-code traffic — especially Chinese — may
+  draft worse; correctness is unaffected (rejection sampling), watch per-position acceptance in
+  `/metrics` and rebuild with `files/build_draft_vocab.py` if it drops. This A/B ran on
+  nvidia/Qwen3.8-Flash-Next-NVFP4 (133G; staged from the 2026-09-05 gigabyte download into hub
+  layout under `HF_HOME` — the worker cache held refs only — so the head serves it over NFS).
+  Zero `NV_ERR_NO_MEMORY` kernel lines on either arm; minimum host `MemAvailable` 2.38 vs
+  2.33 GiB (tighter than serving the smaller Mia-AiLab checkpoint — the bigger weights leave less
+  headroom). No level failed and no streams failed on either arm. KV pool 4,241,167 vs
+  4,238,238 tokens between the two launches (restart variation). Raw rows:
+  `logs/sweep-nvidia-{baseline,tuned}.jsonl` (local, same convention as the single-Spark
+  repo's PR #39 sweeps).
+
+### Fixed
+
+- **`files/nfs-share.sh` silently reused a foreign NFSv4 server** (this kit runs a kernel
+  nfsd exporting `/home/jvr0x/models`), so `nfs_ensure_server` declared the share "already up"
+  while the worker volume mounted the server's v4 pseudoroot — the host filesystem root, not the
+  HF cache — and the pre-launch visibility check failed. The worker volume now mounts the cache
+  by its absolute path (`device=:$HF_CACHE_DIR`) whenever a live NFSv4 responder is not this
+  repo's own `$NFS_CONTAINER`, and the "already up" message says whose server it is. Nothing
+  changes when the repo's own container server is running.
+
+### Added
+
+- **`bench/sweep.py`** — the sparkDash decode-sweep harness ported from the single-Spark repo
+  (AGPL-3.0-or-later, same-org port). One sparkDash bench job per concurrency level so vLLM
+  `/metrics` counters can be snapshotted immediately around each level (ms/step, tokens/step,
+  per-position acceptance), with per-level host `MemAvailable` minima and `journalctl -k`
+  `NV_ERR_NO_MEMORY` counting, one JSON row per level. Retries on sparkDash's 409 busy and 429
+  inter-job cooldown — this deployment's sparkDash enforces a cooldown the original did not.
+
 ## [Unreleased] — working tree since `4014cc6` (2026-08-31)
 
 Everything below is **uncommitted**. The headline is the switch to
