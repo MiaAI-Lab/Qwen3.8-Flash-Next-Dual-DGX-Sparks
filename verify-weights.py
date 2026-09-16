@@ -416,7 +416,7 @@ def find_extras(tree_dir: str, manifest: dict[str, dict]) -> list[str]:
 
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--repo", default=None, help="HF repo id, e.g. RadixArk/Qwen3.8-Flash-Next-NVFP4")
+    parser.add_argument("--repo", default=None, help="HF repo id, e.g. nvidia/Qwen3.8-Flash-Next-NVFP4")
     parser.add_argument("--path", default=None, help="Local model directory (defaults to $HF_HOME/hub/models--ORG--NAME)")
     parser.add_argument("--revision", default="main", help="HF revision (default: main)")
     parser.add_argument("--manifest", default=None, help="Use this saved manifest file instead of fetching the API")
