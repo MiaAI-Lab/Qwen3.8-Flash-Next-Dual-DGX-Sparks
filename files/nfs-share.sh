@@ -18,6 +18,15 @@ nfs_detect_server_ip() {
     [[ -n "$NFS_SERVER_IP" ]] || err "Could not detect NFS_SERVER_IP from IFACE=$IFACE. Set NFS_SERVER_IP in .env (head ConnectX address, e.g. 10.0.22.1)."
 }
 
+# True when the repo's own $NFS_CONTAINER is the process serving 2049. A foreign
+# kernel NFSv4 server (e.g. a host-level export of /home/jvr0x/models) exposes
+# the v4 pseudoroot as the host fs root, so a worker volume mounted at ":" sees
+# "/" instead of the HF cache — the cache is reachable only by its absolute
+# path (see nfs_ensure_worker_volume).
+nfs_server_is_ours() {
+    docker ps --format '{{.Names}}' | grep -qx "$NFS_CONTAINER"
+}
+
 nfs_clients() {
     local cidr net mask addr
     cidr=$(ip -4 -o addr show dev "$IFACE" 2>/dev/null | awk '{print $4}' | head -1)
@@ -44,7 +53,12 @@ nfs_ensure_server() {
     # Kernel nfsd in a privileged container can leave rpcbind in D-state, which
     # makes `docker rm -f` hang. Recreate only when nothing is listening.
     if timeout 3 rpcinfo -t "$NFS_SERVER_IP" nfs 4 >/dev/null 2>&1; then
-        ok "NFS share already up on ${NFS_SERVER_IP}:2049 → $HF_CACHE_DIR"
+        if nfs_server_is_ours; then
+            ok "NFS share already up on ${NFS_SERVER_IP}:2049 → $HF_CACHE_DIR"
+        else
+            ok "Foreign NFSv4 server on ${NFS_SERVER_IP}:2049 (not $NFS_CONTAINER) — reusing it"
+            info "  Worker will mount :$HF_CACHE_DIR (foreign v4 pseudoroot = host fs root)"
+        fi
         return 0
     fi
 
@@ -79,14 +93,21 @@ nfs_ensure_worker_volume() {
         ok "Worker volume $NFS_VOLUME already exists"
         return 0
     fi
-    info "Creating worker NFS volume $NFS_VOLUME → ${NFS_SERVER_IP}:/"
+    # Our container server exports $HF_CACHE_DIR as the root (":/"). A foreign
+    # kernel NFSv4 server exports directories by absolute path, so the worker
+    # must mount the cache subtree itself, not the pseudoroot.
+    local device=":/"
+    if ! nfs_server_is_ours && timeout 3 rpcinfo -t "$NFS_SERVER_IP" nfs 4 >/dev/null 2>&1; then
+        device=":$HF_CACHE_DIR"
+    fi
+    info "Creating worker NFS volume $NFS_VOLUME → ${NFS_SERVER_IP}${device#:}"
     ssh_worker "docker volume rm '$NFS_VOLUME' >/dev/null 2>&1 || true"
     ssh_worker "docker volume create --driver local \
         --opt type=nfs \
         --opt o=addr=${NFS_SERVER_IP},nfsvers=4.2,ro,nconnect=8,rsize=1048576,wsize=1048576,hard,timeo=600 \
-        --opt device=:/ \
+        --opt device=${device} \
         '$NFS_VOLUME' >/dev/null"
-    ok "Worker volume $NFS_VOLUME → nfs://${NFS_SERVER_IP}/"
+    ok "Worker volume $NFS_VOLUME → nfs://${NFS_SERVER_IP}${device#:}"
 }
 
 nfs_worker_has_model() {
