@@ -660,7 +660,11 @@ Concurrency and prefill numbers for this configuration are in
 
 ## Reduced-vocabulary MTP drafting
 
-**Off by default** — set `MTP_DRAFT_VOCAB` to a token-id list to enable it.
+**On by default since 2026-09-10** — `.env.sample` ships
+`MTP_DRAFT_VOCAB=files/draft_vocab_en_code_47k.txt` (47,149 code-tuned ids, vendored from the
+single-Spark recipe). Empty the knob to draft over the full vocabulary. `start.sh` resolves
+relative paths against the repo root (the overlay mount needs an absolute host path) and warns
+when MTP runs without a vocab.
 
 This checkpoint's vocabulary is **248,320 tokens**, and the MTP drafter carries its *own* BF16
 `ParallelLMHead` over all of it (`tie_word_embeddings` is false): 248320 × 2560 × 2 B = **1.18 GiB,
@@ -672,6 +676,40 @@ Slicing that head down for drafting is the largest single bandwidth lever in the
 against the target model, so a token outside the subset is simply rejected, exactly like any other
 bad draft. The cost is acceptance, not correctness.
 
+Measured live on this kit 2026-09-11 (nvidia NVFP4, NFS-shared weights, TP2+EP, MTP 3, fp8 KV,
+BF16 SSM, `bench/sweep.py` driving sparkDash: prose and code, 600 tokens, S=1/2/4/8, three repeats
+in alternating order, one launch per arm). Aggregate decode tok/s, means of three:
+
+| | baseline (full head) | tuned (47k vocab) | change |
+|---|---|---|---|
+| code, 1 stream | 62.0 | **71.5** | **+15.3%** |
+| code, 2 streams | 113.8 | 124.9 | +9.7% |
+| code, 4 streams | 193.4 | 211.1 | +9.1% |
+| code, 8 streams | 312.4 | 325.0 | +4.0% |
+| prose, 1 stream | 49.2 | **56.8** | **+15.5%** |
+| prose, 2 streams | 84.1 | 91.6 | +8.9% |
+| prose, 4 streams | 134.8 | 146.0 | +8.3% |
+| prose, 8 streams | 213.4 | 225.3 | +5.6% |
+
+**+9.6% mean across the eight cells.** The gain is all step time — code 61.2 → 54.0 ms at one
+stream, prose 59.9 → 53.3 — with tokens per step unchanged (code 3.80 → 3.85, prose ~2.9 both):
+the byte saving with acceptance preserved, the same mechanism the single-Spark recipe measured at
++13.1% mean. The dual win is smaller for two reasons: at TP=2 each rank holds only half the head
+(0.59 GiB), and the 47k ids land ~97% in rank 0's id range, so the step's critical rank reads
+0.22 GiB where single-Spark's only GPU went 1.18 → 0.22 — rank 1's slice shrinks to ~0.01 GiB,
+but a step waits for the slowest rank, so that does not shorten it. The win tapers with concurrency
+as the batch itself fills the step (+4.0% at code S=8). In six of the eight cells the tuned arm's
+worst repeat beats the baseline arm's best (code S=4, 193.4 vs 194.5, and S=8, 318.0 vs 321.8,
+overlap at the extremes; the means stay separated).
+
+Zero `NV_ERR_NO_MEMORY` kernel lines on either arm; minimum host `MemAvailable` 2.38 vs 2.33 GiB,
+no level failed and no streams failed. Host memory on this kit runs tight under the nvidia weights
+(tighter than the 4.8+ GiB seen serving the smaller Mia-AiLab checkpoint) — worth watching
+regardless of the draft vocab; see the GMU notes in `.env.sample`.
+
+Build your own vocabulary if your traffic is not code-heavy — the shipped file was tuned on host
+code+docs and may draft worse for other languages:
+
 ```bash
 python3 bench/gen_draft_corpus.py --out corpus.jsonl          # the model's own output
 python3 files/build_draft_vocab.py corpus.jsonl \
@@ -679,8 +717,13 @@ python3 files/build_draft_vocab.py corpus.jsonl \
 MTP_DRAFT_VOCAB=$PWD/draft_vocab.txt ./start.sh --launch
 ```
 
+Watch per-position acceptance in `/metrics` (`spec_decode_num_accepted_tokens_per_pos_total`);
+rebuild from your own output if coverage drops.
+
 `start.sh` then patches `nvidia/mtp.py` (step 4e) and sets `use_local_argmax_reduction`, which is
 the only path that reaches the reduced head — `compute_logits` keeps the full vocabulary.
+
+### History: the 65,536-id experiments (2026-09-05, bf16-KV era)
 
 **Balance the vocabulary across TP ranks.** A vocab-parallel lm_head splits by *id range*, and a
 decode step waits for the slowest rank. Filling with the lowest-numbered ids put 65,392 of 65,536
@@ -713,7 +756,9 @@ full-vocabulary argmax restricted to the draft set — run it after touching the
 
 > **Credit.** The idea and `files/build_draft_vocab.py` come from
 > [MiaAI-Lab/Qwen3.8-Flash-Next-Single-DGX-Spark](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Next-Single-DGX-Spark) (AGPL-3.0-or-later),
-> which implements it for TP=1. `files/patch_mtp_draft_vocab.py` is a TP-aware rewrite:
+> which implements it for TP=1. The shipped `files/draft_vocab_en_code_47k.txt` is vendored
+> unchanged from that repo (its PR #39, where it measured +13.1% mean single-Spark);
+> `files/patch_mtp_draft_vocab.py` is a TP-aware rewrite:
 > upstream refuses to engage at `tp_size != 1`, since its reduced head is a plain matmul rather
 > than a vocab-parallel one. FR-Spec is the general technique.
 
@@ -751,9 +796,13 @@ answers, and fall back to `MAX_MODEL_LEN=262144` / `YARN_ENABLE=false` for compa
 
 Measured with [**sparkDash**](https://github.com/MiaAI-Lab/sparkDash) against the running server.
 Configuration at capture: **fp8 KV** (the shipped default) **plus the 65,536-id balanced MTP draft
-vocabulary** — the draft vocab is *not* a default, it was passed via `MTP_DRAFT_VOCAB` (see
-[Reduced-vocabulary MTP drafting](#reduced-vocabulary-mtp-drafting)). Drop that and expect the
-decode column to move; the prefill column should not.
+vocabulary** — at capture time the draft vocab was *not* a default, it was passed via
+`MTP_DRAFT_VOCAB` (see
+[Reduced-vocabulary MTP drafting](#reduced-vocabulary-mtp-drafting)). Since 2026-09-10 the shipped
+default is the 47,149-id vocabulary, so these tables no longer describe a fresh clone: drop the
+draft vocab and expect the decode column to move further; the prefill column should not. The
+47k-default A/B on this kit (measured on the nvidia checkpoint, NFS weights) is tabulated in
+the draft-vocab section above.
 
 ### Decode — prose, concurrency sweep
 

@@ -141,7 +141,13 @@ if [[ "$ABLIT" == "1" ]]; then
 fi
 # Reduced-vocabulary MTP drafting: path to a token-id list from
 # files/build_draft_vocab.py, or empty to draft over the full 248,320 vocabulary.
+# Relative paths resolve against the repo root: the overlay mount below needs an
+# absolute host path for docker -v, and `cd $SCRIPT_DIR` alone is not enough for
+# callers that pass a path from a different working directory.
 MTP_DRAFT_VOCAB="${MTP_DRAFT_VOCAB:-}"
+if [[ -n "$MTP_DRAFT_VOCAB" && "$MTP_DRAFT_VOCAB" != /* ]]; then
+    MTP_DRAFT_VOCAB="$SCRIPT_DIR/$MTP_DRAFT_VOCAB"
+fi
 # QSA Triton launch profile: stock | gb10 | path to JSON from files/qsa_gb10/bench_qsa_kernels.py
 QSA_PROFILE="${QSA_PROFILE:-stock}"
 # Refuse to launch when another process already holds the GPU (both nodes).
@@ -512,6 +518,10 @@ if $DO_LAUNCH && [[ -n "$MTP_DRAFT_VOCAB" ]]; then
     add_overlay "$MTP_DRAFT_VOCAB" "/etc/vllm-draft-vocab.txt"
     OVERLAY_ENV+=("-e VLLM_MTP_DRAFT_VOCAB=/etc/vllm-draft-vocab.txt")
     ok "Draft vocab: $(wc -l < "$MTP_DRAFT_VOCAB") ids from $MTP_DRAFT_VOCAB"
+elif $DO_LAUNCH && [[ "$MTP_NUM_SPECULATIVE_TOKENS" != "0" ]]; then
+    warn "MTP=$MTP_NUM_SPECULATIVE_TOKENS is drafting over the FULL 248,320-token head"
+    warn "     (0.59 GiB/rank at TP=2, read once per draft step). Setting MTP_DRAFT_VOCAB"
+    warn "     to files/draft_vocab_en_code_47k.txt cuts that ~5x; see .env.sample."
 fi
 
 # ---------------------------------------------------------------------------

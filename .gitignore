@@ -51,3 +51,7 @@ files/qsa_gb10/qsa.py
 # Draft vocabularies are built from a corpus (files/build_draft_vocab.py);
 # see README "Reduced-vocabulary MTP drafting".
 files/draft_vocab_*.txt
+# ...except the shipped code-tuned vocabulary (47,149 ids), which makes the
+# MTP_DRAFT_VOCAB default in .env.sample work out of the box. Generated
+# vocabularies stay untracked.
+!files/draft_vocab_en_code_47k.txt
