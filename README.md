@@ -108,17 +108,19 @@ sets `OVERRIDE_MODEL_ID`.
 > checkpoint. Measured: 4.15 GiB → 0.00 GiB resident for a single shard, byte
 > -identical on re-read. Set `EVICT_PAGE_CACHE=false` to skip it.
 >
+> Both nodes are covered in **both** distribution modes. Under `NFS_SHARE=false`
+> the worker's copy is evicted over ssh; under `NFS_SHARE=true` the worker has
+> no local copy — its pages are NFS client cache, so the pass runs inside a
+> throwaway container holding the same volume. `fadvise` evicts over NFS 4.2
+> exactly as it does locally (measured 3.00 GiB → 0.00 GiB resident).
+>
 > It does **not** drop the system-wide cache — that still needs root, and is
-> still worth doing yourself if something else has filled the cache:
+> still worth doing yourself if something *other than the checkpoint* has
+> filled it:
 >
 > ```bash
 > sync && echo 3 | sudo tee /proc/sys/vm/drop_caches
 > ```
->
-> One limit: under `NFS_SHARE=true` the worker reads the checkpoint over NFS,
-> so its resident pages are NFS-client cache that this pass does not reach.
-> The eviction is effective on the head in both modes, and on the worker in
-> the default rsync mode.
 
 Both containers are named **`vllm-fn`** (head and worker); `./stop.sh` removes both.
 

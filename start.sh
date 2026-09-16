@@ -494,32 +494,41 @@ fi
 EVICT_PAGE_CACHE="${EVICT_PAGE_CACHE:-true}"
 if $DO_LAUNCH && [[ "$EVICT_PAGE_CACHE" == "true" ]]; then
     info "=== Step 4b-2: Release checkpoint page cache ==="
-    python3 "$SCRIPT_DIR/files/evict_page_cache.py" "$HEAD_MODEL_PATH" 2>&1 \
-        | sed 's/^/  HEAD   /' || true
-    # The worker reads the same bytes over NFS or from its own copy, so it
-    # holds its own cache either way and needs its own pass.
-    ssh_worker "python3 - '$REMOTE_HUB/models--${ORG}--${NAME}' <<'PY' 2>&1
-import os, sys
-tot = n = 0
-for root, _d, fs in os.walk(sys.argv[1]):
-    for f in fs:
-        if not f.endswith(('.safetensors', '.bin', '.pt', '.gguf')):
-            continue
-        try:
-            fd = os.open(os.path.join(root, f), os.O_RDONLY)
-        except OSError:
-            continue
-        try:
-            tot += os.fstat(fd).st_size
-            os.posix_fadvise(fd, 0, 0, os.POSIX_FADV_DONTNEED)
-            n += 1
-        except OSError:
-            pass
-        finally:
-            os.close(fd)
-if n:
-    print(f'page cache: released {tot / 2**30:.1f} GiB across {n} file(s)')
-PY" 2>/dev/null | sed 's/^/  WORKER /' || true
+    EVICT_PY="$SCRIPT_DIR/files/evict_page_cache.py"
+    python3 "$EVICT_PY" "$HEAD_MODEL_PATH" 2>&1 | sed 's/^/  HEAD   /' || true
+
+    # Both nodes hold their own cache, but in different places:
+    #
+    #   rsync mode : the worker has its own copy on local disk, so fadvise
+    #                runs over ssh against that path.
+    #   NFS mode   : the worker has NO local copy. Its resident pages are NFS
+    #                client cache, reachable only through the mount, and that
+    #                mount exists only inside a container. So the pass runs in
+    #                a throwaway container holding the same volume, the way
+    #                nfs_worker_has_model() already probes it. Verified on
+    #                NFS 4.2: fadvise evicts there exactly as it does locally
+    #                (3.00 GiB -> 0.00 GiB resident, measured with mincore).
+    #
+    # One copy of the script on the worker serves both modes.
+    if scp -q "$EVICT_PY" \
+        "${WORKER_USER:+${WORKER_USER}@}${WORKER_IP}:/tmp/evict_page_cache.py" 2>/dev/null
+    then
+        if [[ "$NFS_SHARE" == "true" ]]; then
+            ssh_worker "docker run --name vllm-fn-evict-\$\$ \
+                -v '${NFS_VOLUME}:/hf:ro' \
+                -v /tmp/evict_page_cache.py:/evict.py:ro \
+                --entrypoint python3 '$IMAGE' \
+                /evict.py '/hf/hub/models--${ORG}--${NAME}'; \
+                rc=\$?; docker rm -f vllm-fn-evict-\$\$ >/dev/null 2>&1; exit \$rc" 2>&1 \
+                | sed 's/^/  WORKER /' || true
+        else
+            ssh_worker "python3 /tmp/evict_page_cache.py \
+                '$REMOTE_HUB/models--${ORG}--${NAME}'" 2>&1 \
+                | sed 's/^/  WORKER /' || true
+        fi
+    else
+        warn "  Could not copy the evictor to the worker; skipping its pass."
+    fi
 fi
 
 # ---------------------------------------------------------------------------
