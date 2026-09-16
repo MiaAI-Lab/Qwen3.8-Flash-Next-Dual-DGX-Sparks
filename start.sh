@@ -97,6 +97,10 @@ PLE_OFFLOAD="${PLE_OFFLOAD:-false}"
 MM_ENCODER_TP_MODE="${MM_ENCODER_TP_MODE:-data}"
 EXTRA_VLLM_ARGS="${EXTRA_VLLM_ARGS:-}"
 EXTRA_DOCKER_ARGS="${EXTRA_DOCKER_ARGS:-}"
+# Optional JSON overrides: full --speculative-config JSON (empty = MTP with
+# MTP_NUM_SPECULATIVE_TOKENS, 0 = off) and the --compilation-config JSON.
+SPEC_CONFIG_JSON="${SPEC_CONFIG_JSON:-}"
+if [[ -z "${COMPILATION_CONFIG_JSON:-}" ]]; then COMPILATION_CONFIG_JSON='{"mode":0,"cudagraph_mode":"FULL_DECODE_ONLY"}'; fi
 HF_TOKEN="${HF_TOKEN:-}"
 # Weight distribution. false (default) = each node keeps its own ~/.cache/huggingface
 # copy, worker seeded by rsync from the head. true = head exports its cache over NFS
@@ -714,8 +718,12 @@ if $DO_LAUNCH; then
         VLLM_ARGS+=("--all2all-backend" "allgather_reducescatter")
     fi
 
-    # JSON args: use printf to build properly quoted strings for the heredoc
-    if [[ "$MTP_NUM_SPECULATIVE_TOKENS" -gt 0 ]]; then
+    # JSON args: use printf to build properly quoted strings for the heredoc.
+    # SPEC_CONFIG_JSON is the escape hatch: a full --speculative-config payload
+    # used verbatim (empty = derive it from MTP_NUM_SPECULATIVE_TOKENS below).
+    if [[ -n "$SPEC_CONFIG_JSON" ]]; then
+        VLLM_ARGS+=("--speculative-config" "'$SPEC_CONFIG_JSON'")
+    elif [[ "$MTP_NUM_SPECULATIVE_TOKENS" -gt 0 ]]; then
         if [[ -n "$MTP_DRAFT_VOCAB" ]]; then
             # get_top_tokens (added by patch_mtp_draft_vocab.py) is only reached
             # through this flag; it also cuts the draft all-gather from
@@ -726,7 +734,9 @@ if $DO_LAUNCH; then
         fi
     fi
 
-    VLLM_ARGS+=("--compilation-config" "$(printf "'{\"mode\":0,\"cudagraph_mode\":\"FULL_DECODE_ONLY\"}'")")
+    # COMPILATION_CONFIG_JSON carries the default ({"mode":0,...FULL_DECODE_ONLY})
+    # and is overridable from .env.
+    VLLM_ARGS+=("--compilation-config" "'$COMPILATION_CONFIG_JSON'")
 
     # hf-overrides: ONE merged payload, nested under "text_config".
     # vLLM's ModelConfig._apply_dict_overrides only recurses into keys that are
@@ -890,6 +900,11 @@ print(json.dumps({"text_config": tc}, separators=(",", ":")) if tc else "")
     PLE_OFFLOAD_ENV=""
     [[ "$PLE_OFFLOAD" == "true" ]] && PLE_OFFLOAD_ENV="-e VLLM_PLE_CPU_OFFLOAD=1"
 
+    # Engine knobs that must be identical on both ranks. Both launch scripts are
+    # rendered from the single VLLM_ARGS_STR built above, so there is nothing left
+    # to resolve per rank -- this line is only the launch-log echo.
+    info "  engine knobs: EP=$ENABLE_EXPERT_PARALLEL SPEC=[$SPEC_CONFIG_JSON] COMPILE=[$COMPILATION_CONFIG_JSON] EXTRA=[$EXTRA_VLLM_ARGS] DOCKER_EXTRA=[$EXTRA_DOCKER_ARGS]"
+
     # Write worker launch script to a temp file and scp it (avoids SSH JSON quoting issues)
     WORKER_SCRIPT=$(mktemp /tmp/vllm_worker_XXXXXX.sh)
     cat > "$WORKER_SCRIPT" <<LAUNCH_EOF
@@ -899,6 +914,7 @@ docker run \
     --gpus all --network host --ipc host \
     --cap-add SYS_NICE --ulimit memlock=-1 --ulimit stack=67108864 \
     --device /dev/infiniband:/dev/infiniband \
+    $EXTRA_DOCKER_ARGS \
     -e GLOO_SOCKET_IFNAME=$WORKER_IFACE \
     -e NCCL_SOCKET_IFNAME=$WORKER_IFACE \
     -e TP_SOCKET_IFNAME=$WORKER_IFACE \
@@ -961,6 +977,7 @@ docker run \
     --gpus all --network host --ipc host \
     --cap-add SYS_NICE --ulimit memlock=-1 --ulimit stack=67108864 \
     --device /dev/infiniband:/dev/infiniband \
+    $EXTRA_DOCKER_ARGS \
     -e GLOO_SOCKET_IFNAME=$IFACE \
     -e NCCL_SOCKET_IFNAME=$IFACE \
     -e TP_SOCKET_IFNAME=$IFACE \
