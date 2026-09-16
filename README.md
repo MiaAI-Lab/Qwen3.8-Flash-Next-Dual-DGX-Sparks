@@ -7,7 +7,10 @@
   <a href="https://x.com/MiaAI_lab" target="_blank" rel="noopener noreferrer" style="display:inline-block;margin:0 8px;vertical-align:middle;"><img src="https://img.shields.io/badge/Follow%20me%20on%20X-000000?style=for-the-badge&logo=x&logoColor=white" alt="Follow Mia on X" height="28" style="height:28px;width:auto;vertical-align:middle;border:0;" /></a>
 </p>
 
-Multi-node inference for [RadixArk/Qwen3.8-Flash-Next-NVFP4](https://huggingface.co/RadixArk/Qwen3.8-Flash-Next-NVFP4) across 2 DGX Sparks using vLLM with TP2+EP+MTP3.
+Multi-node inference for [nvidia/Qwen3.8-Flash-Next-NVFP4](https://huggingface.co/nvidia/Qwen3.8-Flash-Next-NVFP4) across 2 DGX Sparks using vLLM with TP2+EP+MTP3.
+[local-inference-lab](https://huggingface.co/local-inference-lab/Qwen3.8-Flash-Next-NVFP4) and
+[RadixArk](https://huggingface.co/RadixArk/Qwen3.8-Flash-Next-NVFP4) builds are also supported —
+see `MODEL_ID` in `.env.sample`.
 
 Based on [getrefined/Qwen3.8-Flash-Next-NVFP4-vLLM-DGX-Spark](https://github.com/getrefined/Qwen3.8-Flash-Next-NVFP4-vLLM-DGX-Spark).
 
@@ -381,7 +384,7 @@ rounding in the hybrid allocator means it is ±5%, not exact.
 `docker inspect vllm-fn` on the head:
 
 ```bash
-vllm serve RadixArk/Qwen3.8-Flash-Next-NVFP4 \
+vllm serve nvidia/Qwen3.8-Flash-Next-NVFP4 \
   --served-model-name qwen3.8-flash-next \
   --tensor-parallel-size 2 --nnodes 2 --node-rank 0 \
   --master-addr 10.0.0.1 --master-port 50000 \
@@ -440,6 +443,11 @@ warmup), graph capture ~7 s. First request after launch is slow while FlashInfer
 `/detokenize`, `/metrics`, `/health`, `/version`, `/docs` on `http://$HEAD_IP:8888`.
 
 ## FP8-dense hybrid checkpoint (`FP8_DENSE=true`)
+
+> This experimental lane builds from `RadixArk/Qwen3.8-Flash-Next-NVFP4`, not the `nvidia/…`
+> default the rest of this README describes (`SRC_REPO` in `files/fp8dense/build.sh`). Download
+> that checkpoint first, or point `SRC_REPO` at another NVFP4 build. The byte figures below were
+> measured on the RadixArk layout.
 
 The routed experts are the only NVFP4 tensors in `RadixArk/Qwen3.8-Flash-Next-NVFP4`; every dense
 projection (GDN in/out, attention q/k/v/o, both HyperConnections per layer, shared experts, lm_head —
@@ -923,7 +931,7 @@ reference; the numbers above supersede these.
   home, and the same file is shipped to the worker:
 
   ```bash
-  python3 verify-weights.py --repo RadixArk/Qwen3.8-Flash-Next-NVFP4 \
+  python3 verify-weights.py --repo nvidia/Qwen3.8-Flash-Next-NVFP4 \
       --save-manifest manifest.json --fetch-only     # where the API is reachable
   ./check-weights.sh --manifest manifest.json        # on the head node
   ```

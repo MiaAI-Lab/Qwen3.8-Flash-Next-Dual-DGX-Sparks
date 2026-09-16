@@ -26,7 +26,7 @@ assignees: ""
 - Hardware / nodes: <!-- e.g. 2x DGX Spark (GB10, 128 GB unified memory), or 1x DGX Station, ... -->
 - Interconnect: <!-- e.g. ConnectX RoCE/IB, 10GbE, ... -->
 - Image / vLLM version: <!-- `docker images | grep vllm` or `docker inspect vllm-fn` -->
-- Model (`MODEL_ID`): <!-- e.g. RadixArk/Qwen3.8-Flash-Next-NVFP4 -->
+- Model (`MODEL_ID`): <!-- e.g. nvidia/Qwen3.8-Flash-Next-NVFP4 -->
 - `start.sh` flags used: <!-- e.g. `./start.sh --no-download --launch` -->
 - Relevant `.env` values: <!-- e.g. MAX_MODEL_LEN, KV_CACHE_DTYPE, GPU_MEMORY_UTILIZATION, TENSOR_PARALLEL_SIZE, MTP_NUM_SPECULATIVE_TOKENS, PLE_OFFLOAD -->
 

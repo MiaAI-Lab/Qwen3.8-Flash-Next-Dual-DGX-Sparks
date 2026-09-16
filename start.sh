@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ============================================================================
-# start.sh — Serve RadixArk/Qwen3.8-Flash-Next-NVFP4 across a 2-node
+# start.sh — Serve nvidia/Qwen3.8-Flash-Next-NVFP4 across a 2-node
 #             DGX Spark cluster with vLLM TP2+EP+MTP3.
 #
 # Based on: https://github.com/getrefined/Qwen3.8-Flash-Next-NVFP4-vLLM-DGX-Spark
