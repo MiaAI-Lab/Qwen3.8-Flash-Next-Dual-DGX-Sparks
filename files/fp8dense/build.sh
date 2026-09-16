@@ -8,7 +8,27 @@ IMAGE="${IMAGE:-vllm/vllm-openai:qwen38-flash-next}"
 SRC_REPO="${SRC_REPO:-RadixArk/Qwen3.8-Flash-Next-NVFP4}"
 DST_REPO="${DST_REPO:-MiaAI-Lab/Qwen3.8-Flash-Next-NVFP4-FP8dense}"
 src_dir="$HF_CACHE_DIR/hub/models--${SRC_REPO%%/*}--${SRC_REPO##*/}"
-rev=$(cat "$src_dir/refs/main")
+# SRC_REPO defaults to the RadixArk build this converter was written and
+# measured against, which is NOT the nvidia/... checkpoint start.sh serves by
+# default -- so on most installs it is absent, or present only as a refs/main
+# stub left by a cancelled download. Reading refs/main directly then dies deep
+# inside the container ("no model.safetensors.index.json") with nothing naming
+# the real cause. Resolve it the way start.sh does instead: same completeness
+# rule, same preference for refs/main.
+rev=""; rc=0
+rev="$(python3 "$SCRIPT_DIR/../resolve_snapshot.py" "$src_dir" 2>/dev/null)" || rc=$?
+if [[ "$rc" -ne 0 || -z "$rev" ]]; then
+    echo "ERROR: no complete snapshot of $SRC_REPO in the HF cache." >&2
+    echo "  Looked in: $src_dir" >&2
+    case "$rc" in
+        1) echo "  A snapshot exists but is missing indexed weight shards (partial download)." >&2 ;;
+        *) echo "  No snapshot directory at all." >&2 ;;
+    esac
+    echo "  Fetch or resume it:  hf download $SRC_REPO" >&2
+    echo "  Cache root:          HF_HOME=$HF_CACHE_DIR" >&2
+    echo "  Or point SRC_REPO at another NVFP4 build already in the cache." >&2
+    exit 1
+fi
 dst_dir="$HF_CACHE_DIR/hub/models--${DST_REPO%%/*}--${DST_REPO##*/}"
 dst_rev="fp8dense-${rev:0:8}"
 mkdir -p "$dst_dir/refs" "$dst_dir/snapshots/$dst_rev"
