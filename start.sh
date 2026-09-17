@@ -91,6 +91,9 @@ KV_CACHE_DTYPE="${KV_CACHE_DTYPE:-fp8}"   # fp8 needs files/patch_qsa_fp8_kv.py,
 # costs to read and write every step, and halves the mamba page, which lets
 # vLLM pick a smaller attention block. Empty keeps the checkpoint's float32.
 MAMBA_SSM_CACHE_DTYPE="${MAMBA_SSM_CACHE_DTYPE:-}"
+# Prefix caching is especially important for agent tool loops. Let vLLM derive
+# the safe match unit for this hybrid QSA/GDN layout.
+KV_CACHE_METRICS_SAMPLE="${KV_CACHE_METRICS_SAMPLE:-1.0}"
 PLE_OFFLOAD="${PLE_OFFLOAD:-false}"
 # Vision MLP intermediate_size=4304 is not divisible by 16 after TP split (4304/2=2152).
 # NVFP4 kernels require input features % 16 == 0, so replicate the encoder on each GPU.
@@ -802,6 +805,10 @@ if $DO_LAUNCH; then
     VLLM_ARGS+=("--max-model-len" "$MAX_MODEL_LEN")
     VLLM_ARGS+=("--kv-cache-dtype" "$KV_CACHE_DTYPE")
     [[ -n "$MAMBA_SSM_CACHE_DTYPE" ]] && VLLM_ARGS+=("--mamba-ssm-cache-dtype" "$MAMBA_SSM_CACHE_DTYPE")
+    VLLM_ARGS+=("--enable-prefix-caching")
+    VLLM_ARGS+=("--enable-prompt-tokens-details")
+    VLLM_ARGS+=("--kv-cache-metrics")
+    VLLM_ARGS+=("--kv-cache-metrics-sample" "$KV_CACHE_METRICS_SAMPLE")
     VLLM_ARGS+=("--load-format" "safetensors")
     VLLM_ARGS+=("--safetensors-load-strategy" "lazy")
     VLLM_ARGS+=("--enable-chunked-prefill")
