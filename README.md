@@ -685,6 +685,26 @@ Concurrency and prefill numbers for this configuration are in
 
 ## Reduced-vocabulary MTP drafting
 
+### Optional adaptive MTP depth (TP2)
+
+`MTP_ADAPTIVE=true` selects K=1/2/3/4 using online acceptance and step cost.
+It is **off by default**. Enable it together with `MTP_INDEX_SHARE=true` and
+`MTP_NUM_SPECULATIVE_TOKENS=4` (the allocation/capture maximum, not a fixed K).
+The launcher source-checks the runtime patch and mounts the same files on both
+nodes; unknown image sources fail before serving containers are replaced.
+
+This changes MTP strategy only, not weights, quantization precision, or target
+verification/sampling rules. In a same-load paired TP2 run, Chinese prose improved
+18.9% (single stream) / 23.0% (four streams), repetitive code improved 5.7–15.4%,
+and mixed rolling throughput improved 4.8%. English prose/thinking had small or
+unresolved differences; no across-the-board speedup or bitwise-output guarantee
+is claimed. Both benchmark arms already enabled IndexShare and the max-K4 runner.
+
+See [configuration and CPU checks](docs/adaptive-mtp.md) and the
+[complete paired benchmark report](docs/benchmarks/adaptive-mtp-20260922/report.md).
+
+### Default reduced draft vocabulary
+
 **On by default since 2026-09-10** — `.env.sample` ships
 `MTP_DRAFT_VOCAB=files/draft_vocab_en_code_47k.txt` (47,149 code-tuned ids, vendored from the
 single-Spark recipe). Empty the knob to draft over the full vocabulary. `start.sh` resolves

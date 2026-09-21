@@ -84,6 +84,11 @@ WORKER_IB_HCA="${WORKER_IB_HCA:-$IB_HCA}"
 SERVED_MODEL_NAME="${SERVED_MODEL_NAME:-qwen3.8-flash-next}"
 ENABLE_EXPERT_PARALLEL="${ENABLE_EXPERT_PARALLEL:-true}"
 MTP_NUM_SPECULATIVE_TOKENS="${MTP_NUM_SPECULATIVE_TOKENS:-3}"
+MTP_INDEX_SHARE="${MTP_INDEX_SHARE:-false}"
+MTP_ADAPTIVE="${MTP_ADAPTIVE:-false}"
+# shellcheck source=files/mtp_adaptive/launch.sh
+source "$SCRIPT_DIR/files/mtp_adaptive/launch.sh"
+mtp_adaptive_validate
 KV_CACHE_DTYPE="${KV_CACHE_DTYPE:-fp8}"   # fp8 needs files/patch_qsa_fp8_kv.py, applied automatically in step 4f; auto = bf16
 # dtype of the GDN recurrent (SSM) state. The checkpoint asks for float32; the
 # fused GDN kernel also accepts bfloat16 (FUSED_GDN_STATE_DTYPES in
@@ -788,6 +793,10 @@ if $DO_LAUNCH; then
     HEAD_MODELOPT_MOUNT="-v $PATCHED_MODELOPT:$MODEL_OPT_PKG:ro"
     WORKER_MODELOPT_MOUNT="-v /tmp/modelopt_patched.py:$MODEL_OPT_PKG:ro"
 
+    # Optional, source-checked variable-depth MTP overlays. This only prepares
+    # files; the existing overlay mechanism copies/mounts them on BOTH nodes.
+    mtp_adaptive_prepare
+
     # ---------------------------------------------------------------------------
     # 7. Build vLLM args (shared between head and worker)
     # ---------------------------------------------------------------------------
@@ -820,14 +829,18 @@ if $DO_LAUNCH; then
     fi
 
     # JSON args: use printf to build properly quoted strings for the heredoc
+    MTP_INDEX_SHARE_FIELD=""
+    if [[ "$MTP_INDEX_SHARE" == true ]]; then
+        MTP_INDEX_SHARE_FIELD='"index_share_for_mtp_iteration":true,'
+    fi
     if [[ "$MTP_NUM_SPECULATIVE_TOKENS" -gt 0 ]]; then
         if [[ -n "$MTP_DRAFT_VOCAB" ]]; then
             # get_top_tokens (added by patch_mtp_draft_vocab.py) is only reached
             # through this flag; it also cuts the draft all-gather from
             # O(vocab_size) to O(2*tp_size) per token.
-            VLLM_ARGS+=("--speculative-config" "$(printf "'{\"method\":\"mtp\",\"num_speculative_tokens\":%s,\"use_local_argmax_reduction\":true}'" "$MTP_NUM_SPECULATIVE_TOKENS")")
+            VLLM_ARGS+=("--speculative-config" "$(printf "'{\"method\":\"mtp\",%s\"num_speculative_tokens\":%s,\"use_local_argmax_reduction\":true}'" "$MTP_INDEX_SHARE_FIELD" "$MTP_NUM_SPECULATIVE_TOKENS")")
         else
-            VLLM_ARGS+=("--speculative-config" "$(printf "'{\"method\":\"mtp\",\"num_speculative_tokens\":%s}'" "$MTP_NUM_SPECULATIVE_TOKENS")")
+            VLLM_ARGS+=("--speculative-config" "$(printf "'{\"method\":\"mtp\",%s\"num_speculative_tokens\":%s}'" "$MTP_INDEX_SHARE_FIELD" "$MTP_NUM_SPECULATIVE_TOKENS")")
         fi
     fi
 
@@ -934,6 +947,7 @@ print(json.dumps({"text_config": tc}, separators=(",", ":")) if tc else "")
     info "  Image:      $IMAGE"
     info "  Nodes:      $HEAD_IP (head, rank 0) + $WORKER_IP (worker, rank 1)"
     info "  TP=$TENSOR_PARALLEL_SIZE  EP=$( [[ "$ENABLE_EXPERT_PARALLEL" == "true" ]] && echo on || echo off )  MTP=$MTP_NUM_SPECULATIVE_TOKENS"
+    info "  MTP policy: adaptive=$MTP_ADAPTIVE  IndexShare=$MTP_INDEX_SHARE"
     info "  Context:    $MAX_MODEL_LEN tokens"
     info "  GMU:        $GPU_MEMORY_UTILIZATION"
     info "  Max seqs:   $MAX_NUM_SEQS"

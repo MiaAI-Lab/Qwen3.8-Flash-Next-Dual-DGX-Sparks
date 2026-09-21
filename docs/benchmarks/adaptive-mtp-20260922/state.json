@@ -1,0 +1,17 @@
+{
+  "complete": true,
+  "completed": 246,
+  "total": 246,
+  "phase": "complete",
+  "started": 1790020061.3629937,
+  "updated": 1790024426.5295317,
+  "control": {
+    "mode": "adaptive",
+    "k": 3
+  },
+  "arm": "adaptive",
+  "case": "mixed_rolling",
+  "concurrency": 4,
+  "rep": 3,
+  "finished": 1790024426.5295308
+}
