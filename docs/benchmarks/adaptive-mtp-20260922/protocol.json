@@ -1,0 +1,104 @@
+{
+  "repeats": 6,
+  "primary_matrix": [
+    [
+      "mia_prose",
+      1
+    ],
+    [
+      "mia_prose",
+      2
+    ],
+    [
+      "mia_prose",
+      4
+    ],
+    [
+      "mia_prose",
+      8
+    ],
+    [
+      "mia_code",
+      1
+    ],
+    [
+      "mia_code",
+      2
+    ],
+    [
+      "mia_code",
+      4
+    ],
+    [
+      "mia_code",
+      8
+    ],
+    [
+      "mia_json",
+      1
+    ],
+    [
+      "mia_json",
+      2
+    ],
+    [
+      "mia_json",
+      4
+    ],
+    [
+      "mia_json",
+      8
+    ],
+    [
+      "mia_structured",
+      1
+    ],
+    [
+      "mia_structured",
+      2
+    ],
+    [
+      "mia_structured",
+      4
+    ],
+    [
+      "mia_structured",
+      8
+    ],
+    [
+      "zh_prose",
+      1
+    ],
+    [
+      "zh_prose",
+      4
+    ],
+    [
+      "zh_long",
+      1
+    ],
+    [
+      "thinking",
+      1
+    ]
+  ],
+  "tokens": 600,
+  "temperature": 0,
+  "top_p": 1,
+  "seed": "unspecified (sparkDash protocol)",
+  "warmup_tokens": 32,
+  "baseline": "IndexShare ON + current maxK4 runner + fixedK3",
+  "candidate": "same loaded service + v3 adaptive K1/2/3/4",
+  "pair_orders": [
+    "AB",
+    "BA",
+    "AB",
+    "BA",
+    "BA",
+    "AB"
+  ],
+  "statistic": "all samples; paired geometric-mean ratio with bootstrap CI; trimmed range secondary",
+  "scope": "isolates controller only, not unmodified upstream; no retuning during run",
+  "rolling": "3 paired repetitions, 16 mixed jobs, 4 rolling slots; end-to-end throughput primary",
+  "stop_on": "API error, foreign traffic, preemption or STOP file; no model/config auto-rollback"
+}
