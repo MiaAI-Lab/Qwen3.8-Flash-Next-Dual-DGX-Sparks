@@ -618,6 +618,7 @@ if $DO_LAUNCH && [[ "$V030" == "true" ]]; then
     fi
     [[ "$VLLM_QSA_DET_TOPK" == "1" || "$VLLM_MOE_DET_FINALIZE" == "1" ]] && err "V030: the determinism knobs are not ported to vLLM 0.30."
     OVERLAY_ENV+=("-e VLLM_FLASHINFER_AUTOTUNE_CACHE_DIR=/tmp/fi_autotune")
+    OVERLAY_ENV+=("-e VLLM_USE_BREAKABLE_CUDAGRAPH=${V030_BREAKABLE_CUDAGRAPH:-0}")
 fi
 if $DO_LAUNCH && [[ -n "$MTP_DRAFT_VOCAB" && "$V030" == "true" ]]; then
     info "=== Step 4e: MTP reduced draft vocabulary (vLLM 0.30) ==="
