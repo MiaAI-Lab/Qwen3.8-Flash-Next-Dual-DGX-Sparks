@@ -2,6 +2,27 @@
 
 Notable changes to this deployment. Format follows [Keep a Changelog](https://keepachangelog.com/1.1.0/).
 
+## 2026-09-26 (PLE placement fix)
+
+### Fixed
+
+- **`PLE_OFFLOAD` is now rendered explicitly on both ranks.** Before this,
+  `false` meant *omitting* `VLLM_PLE_CPU_OFFLOAD` — and vLLM 0.30 defaults
+  that env var to `1` (`envs.py`), so the documented default silently kept
+  the 51B n-gram table in pinned CPU RAM. `start.sh` resolves
+  `true`/`false` to `-e VLLM_PLE_CPU_OFFLOAD=1/0` for both the worker and
+  head commands and aborts on any other value. `tests/test_ple_offload_env.py`
+  executes the real heredoc templates (stubbed `docker`) and asserts the
+  placement flag is the only launch difference.
+- Measured on a TP2+EP 1M/FP8-KV pair: pre-fix startup logs reported
+  `cpu_offload=True` / pinned-CPU lookup storage despite
+  `PLE_OFFLOAD=false`, with 0.98 / 2.38 GiB `MemAvailable` after a full
+  1M-token test; post-fix logs report `cpu_offload=False`,
+  `weight_device=cuda`, `pinned=False`, with 6.69 / 9.48 GiB available.
+  Swap stayed parked (5.60 / 2.53 GiB) but showed no writes in the final
+  sample. No throughput claim is attached to this fix alone — on that pair
+  it shipped bundled with draft improvements.
+
 ## 2026-09-25 (vLLM 0.30 lane, update)
 
 ### Changed
