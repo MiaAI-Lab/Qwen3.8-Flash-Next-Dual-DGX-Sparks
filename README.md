@@ -196,7 +196,7 @@ every measurement in this README.
 | `TENSOR_PARALLEL_SIZE` | `2` | `2` | 1 GB10 per node × 2 nodes |
 | `ENABLE_EXPERT_PARALLEL` | `true` | `true` | EP for the NVFP4 experts (required) |
 | `MTP_NUM_SPECULATIVE_TOKENS` | `3` | `3` | MTP draft tokens (`0` = disable) |
-| `MTP_DISABLE_BLOCK_DROP` | `1` | *(new)* | Keep the last prefix-cache block per turn (vllm#53388 backport). Fixes the zero-hit second turn (#62): turn 1 TTFT 3.24 → 0.58 s on 9.5k. See CHANGELOG 2026-09-25 |
+| `MTP_DISABLE_BLOCK_DROP` | `1` | *(new)* | Keep the last prefix-cache block per turn (vllm#53388 backport). Fixes the zero-hit second turn (#62): turn 1 TTFT 3.25 → 0.63 s on 9.5k (median of 3). See CHANGELOG 2026-09-25 |
 | `MTP_INDEX_SHARE` | `true` | *(new)* | Reuse the QSA top-k across MTP draft steps. Code decode +6% (S=1) to +27% (S=8), prose within noise |
 | `VLLM_QSA_DET_TOPK` / `VLLM_MOE_DET_FINALIZE` | unset | *(new)* | `1` + `1` = bit-identical greedy output across TP2+EP; about −4% prose decode and prefill |
 | `PLE_OFFLOAD` | `false` | `false` | `true` → CPU-RAM offload of the 51 GB PLE table (**see gotcha**) |

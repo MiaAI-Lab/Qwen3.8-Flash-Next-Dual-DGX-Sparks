@@ -14,13 +14,14 @@ over 15,776 positions of 8 fixed texts. Turn TTFT = a 9.5k-token session.
 - **`MTP_DISABLE_BLOCK_DROP=1`, on in `.env.sample`** (vllm#53388 backport,
   `files/patch_block_drop.py`, from the single-Spark kit). MTP drops the last
   matched prefix-cache block on lookup, so the second turn of a session missed
-  the cache entirely (#62). Turn 1 TTFT **3.24 -> 0.58 s**, turn 2 1.12 ->
-  0.57 s, turn after a 4k tool output 2.61 -> 1.94 s. Decode, prefill and NLL
+  the cache entirely (#62). Medians of 3 sessions: turn 1 TTFT **3.25 -> 0.63 s**,
+  turn 2 1.12 -> 0.59 s, turn after a 4k tool output 2.55 -> 1.98 s. Decode, prefill and NLL
   unchanged. Only the three core files are overlaid; the connector files do
   not apply without a KV connector and would clash in `/tmp/vllm-overlay`.
 - **`MTP_INDEX_SHARE=true`, on in `.env.sample`** (`index_share_for_mtp_iteration`,
   #28, #65). Drafter-only. Code +6.1 / +4.6 / +21.3 / +26.6% at S=1/2/4/8, prose
-  +0.3 / +5.3 / -0.1 / -1.8% (noise). NLL 1.328 vs 1.334, HumanEval 156/164.
+  +0.3 / +5.3 / -0.1 / -1.8% (noise). NLL 1.328 vs 1.334 (NLL does not see the
+  drafter), HumanEval 156/164 on that arm (no dual baseline).
 - **`VLLM_QSA_DET_TOPK=1` / `VLLM_MOE_DET_FINALIZE=1`** (opt-in,
   `files/patch_determinism.py`). Identical requests: prompt-logprob spread
   median 0.25 / max 6.07 nats -> **0 / 0** across TP2+EP; greedy outputs 5/5
