@@ -1,0 +1,8 @@
+{
+  "upstream_pr": "https://github.com/vllm-project/vllm/pull/58449",
+  "upstream_head": "848dbf89ecb00408351e00c39689d3a8c2f1a4c9",
+  "base_vllm_commit": "ced6857afa0ea7b2e3f0846a62e1394e90f15607",
+  "image_path": "/usr/local/lib/python3.12/dist-packages/vllm/models/qwen4_exp/common/qsa_cache.py",
+  "orig_sha256": "c6651a0cf27e2ffb23b90eafe21e044df5609ce976f52ebffa7a4fbea688fc04",
+  "patched_sha256": "ee658ad3d7b32995c8483540f2e43370244734821fce12ed078f01708a5c5139"
+}

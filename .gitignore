@@ -50,6 +50,8 @@ files/qsa_nvidia_patched.py
 files/overlay/*.py
 files/qsa_gb10/qsa.py
 files/block_drop/
+# Generated from orig/ + pr58449.patch by patch_qsa_draft_fusion.py (hash-pinned).
+files/qsa_draft_fusion/qsa_cache.py
 files/determinism/
 
 # Draft vocabularies are built from a corpus (files/build_draft_vocab.py);

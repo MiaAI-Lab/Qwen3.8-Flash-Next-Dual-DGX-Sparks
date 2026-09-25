@@ -154,6 +154,9 @@ if [[ -n "$MTP_DRAFT_VOCAB" && "$MTP_DRAFT_VOCAB" != /* ]]; then
 fi
 # QSA Triton launch profile: stock | gb10 | path to JSON from files/qsa_gb10/bench_qsa_kernels.py
 QSA_PROFILE="${QSA_PROFILE:-stock}"
+# Opt-in: overlay the fused QSA side-cache metadata builder (vllm#58449
+# backport, files/qsa_draft_fusion/) on the vLLM 0.30 lane. See README.
+QSA_DRAFT_FUSION="${QSA_DRAFT_FUSION:-false}"
 MTP_DISABLE_BLOCK_DROP="${MTP_DISABLE_BLOCK_DROP:-0}"
 MTP_INDEX_SHARE="${MTP_INDEX_SHARE:-false}"
 VLLM_QSA_DET_TOPK="${VLLM_QSA_DET_TOPK:-}"
@@ -784,6 +787,23 @@ if $DO_LAUNCH && [[ "$VLLM_QSA_DET_TOPK" == "1" || "$VLLM_MOE_DET_FINALIZE" == "
         OVERLAY_ENV+=("-e VLLM_MOE_DET_FINALIZE=1" "-e VLLM_FLASHINFER_MOE_FUSED_FINALIZE=0")
         OVERLAY_ENV+=("-e VLLM_FLASHINFER_AUTOTUNE_CACHE_DIR=/root/.cache/vllm/flashinfer_autotune_cache_unfused")
     fi
+fi
+
+# ---------------------------------------------------------------------------
+# 4j. QSA draft-fusion overlay (vLLM 0.30 lane only, opt-in).
+#     vllm#58449 teaches the QSA side-cache metadata builder the in-place
+#     draft-decode update, so an MTP draft step rebuilds only the changed
+#     row instead of rebuilding whole metadata buffers (plus a per-step
+#     query_start_loc_cpu sync). files/qsa_draft_fusion/ patches from the
+#     pristine upstream source pinned by SHA-256 and fails closed on drift.
+#     Credit: vllm-project/vllm#58449 (upstream author); this step is
+#     recipe integration + regression validation, not new optimization work.
+# ---------------------------------------------------------------------------
+if $DO_LAUNCH && [[ "$QSA_DRAFT_FUSION" == "true" ]]; then
+    [[ "$V030" == "true" ]] || err "QSA_DRAFT_FUSION is only supported on the vLLM 0.30 lane."
+    info "=== Step 4j: QSA draft-fusion overlay (vllm#58449 backport) ==="
+    python3 "$SCRIPT_DIR/files/qsa_draft_fusion/patch_qsa_draft_fusion.py" || err "patch_qsa_draft_fusion.py failed"
+    add_overlay "$SCRIPT_DIR/files/qsa_draft_fusion/qsa_cache.py" "$VLLM_PKG/models/qwen4_exp/common/qsa_cache.py"
 fi
 
 # ---------------------------------------------------------------------------

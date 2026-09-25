@@ -2,6 +2,19 @@
 
 Notable changes to this deployment. Format follows [Keep a Changelog](https://keepachangelog.com/1.1.0/).
 
+## 2026-09-26 (QSA draft-fusion overlay, opt-in)
+
+### Added
+
+- **`QSA_DRAFT_FUSION=true`** (vLLM 0.30 lane only) overlays the fused QSA
+  side-cache metadata builder from vllm-project/vllm#58449. MTP draft steps
+  update one row in place instead of rebuilding whole metadata buffers.
+  `files/qsa_draft_fusion/` carries the pristine pinned source, the upstream
+  patch and SHA-256 provenance; the generated overlay fails closed on any
+  base drift. CPU tests (`tests/test_qsa_draft_fusion.py`) plus a GPU
+  regression comparing fused updates against fresh rebuilds for plain /
+  compressed / circular layouts. Off by default.
+
 ## 2026-09-25 (vLLM 0.30 lane, update)
 
 ### Changed
