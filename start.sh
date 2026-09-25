@@ -606,7 +606,16 @@ fi
 if $DO_LAUNCH && [[ "$V030" == "true" ]]; then
     [[ "$FP8_DENSE" == "true" ]] && err "V030: FP8_DENSE is not supported on the vLLM 0.30 lane."
     [[ "$QSA_PROFILE" == "stock" ]] || err "V030: QSA_PROFILE=$QSA_PROFILE is not supported on the vLLM 0.30 lane."
-    [[ "$KV_CACHE_DTYPE" == fp8* ]] && err "V030: vLLM 0.30's QSA supports only BF16 KV. Set KV_CACHE_DTYPE=auto."
+    if [[ "$KV_CACHE_DTYPE" == fp8* ]]; then
+        mkdir -p "$SCRIPT_DIR/files/v030_fp8kv/orig/ops"
+        extract_from_image "$VLLM_PKG/models/qwen4_exp/nvidia/qsa.py" "$SCRIPT_DIR/files/v030_fp8kv/orig/qsa.py"
+        extract_from_image "$VLLM_PKG/models/qwen4_exp/nvidia/ops/qsa.py" "$SCRIPT_DIR/files/v030_fp8kv/orig/ops/qsa.py"
+        python3 "$SCRIPT_DIR/files/patch_qsa_fp8_kv_v030.py" || err "patch_qsa_fp8_kv_v030.py failed"
+        cp "$SCRIPT_DIR/files/v030_fp8kv/qsa.py" "$SCRIPT_DIR/files/v030_fp8kv/qsa_nvidia_v030.py"
+        cp "$SCRIPT_DIR/files/v030_fp8kv/ops/qsa.py" "$SCRIPT_DIR/files/v030_fp8kv/qsa_ops_v030.py"
+        add_overlay "$SCRIPT_DIR/files/v030_fp8kv/qsa_nvidia_v030.py" "$VLLM_PKG/models/qwen4_exp/nvidia/qsa.py"
+        add_overlay "$SCRIPT_DIR/files/v030_fp8kv/qsa_ops_v030.py" "$VLLM_PKG/models/qwen4_exp/nvidia/ops/qsa.py"
+    fi
     [[ "$VLLM_QSA_DET_TOPK" == "1" || "$VLLM_MOE_DET_FINALIZE" == "1" ]] && err "V030: the determinism knobs are not ported to vLLM 0.30."
     OVERLAY_ENV+=("-e VLLM_FLASHINFER_AUTOTUNE_CACHE_DIR=/tmp/fi_autotune")
 fi
