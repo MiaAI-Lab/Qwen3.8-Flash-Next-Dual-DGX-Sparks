@@ -23,7 +23,37 @@ That container runs `GPU_MEMORY_UTILIZATION=0.835`, i.e. the value `.env` / `.en
 - 2 DGX Spark nodes (GB10, 128 GB unified memory, sm_121) connected via ConnectX RoCE/IB
 - Passwordless SSH between nodes
 - Docker on both nodes
+- The kernel free-page reserve on **both** nodes (recommended, see [Kernel memory reserve](#kernel-memory-reserve-recommended))
 - ~126 GiB free **on each node** for the checkpoint. By default both nodes keep their own copy in `~/.cache/huggingface`; `start.sh` rsyncs the worker copy from the head once. Enable [NFS weight sharing](#nfs-weight-sharing-optional) to skip the worker copy entirely.
+
+## Kernel memory reserve (recommended)
+
+GB10's GPU and CPU share one memory pool. Linux keeps most idle RAM as file
+cache and, by default, only about 45 MB truly free. The NVIDIA driver cannot
+always wait for cache to be reclaimed: when free pages run out it fails the
+allocation (`NV_ERR_NO_MEMORY` in `journalctl -k`), even with many GiB
+"available". Usually vLLM retries; near the memory limit it has taken whole
+Sparks down. `files/sysctl-spark3.conf` keeps about 4 GiB genuinely free and
+starts reclaim earlier. `start.sh` warns at launch when either node still has
+the defaults.
+
+Apply on **both** nodes (copy the file to the worker first):
+
+```bash
+sudo sysctl -p files/sysctl-spark3.conf                        # head
+scp files/sysctl-spark3.conf <worker>:
+ssh -t <worker> sudo sysctl -p sysctl-spark3.conf                # worker
+```
+
+This lasts until reboot. To keep it:
+
+```bash
+sudo cp files/sysctl-spark3.conf /etc/sysctl.d/90-spark3-vllm.conf   # on each node
+```
+
+Cost: about 4 GiB less file cache per node, and MemAvailable reads about
+4 GiB lower. Undo with a reboot (or `sudo sysctl vm.min_free_kbytes=45167
+vm.watermark_scale_factor=10 vm.swappiness=60` if you did not persist it).
 
 ## Quick Start
 
