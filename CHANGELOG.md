@@ -2,6 +2,36 @@
 
 Notable changes to this deployment. Format follows [Keep a Changelog](https://keepachangelog.com/1.1.0/).
 
+## Unreleased (persistent Triton cache)
+
+### Added
+
+- **`start.sh` persists each node's Triton compile cache.** `/root/.triton`
+  inside the container (where Triton writes compiled kernels as root) is now
+  bind-mounted from `$HOME/.cache/triton/<image-key>` on the head and the
+  worker's own `$HOME/.cache/triton/<image-key>` on the worker — per-node,
+  never shared, same ownership model as the existing `~/.cache/vllm` mount.
+  `<image-key>` prefers the locally resolved `docker image inspect` ID (the
+  exact content digest) and falls back to the image reference, sanitised to
+  `[A-Za-z0-9._-]`; a rebuilt/retagged image therefore starts a fresh lane
+  instead of loading stale binaries. `TRITON_CACHE_DIR=/root/.triton` is
+  pinned on both launches. No `.env` knob, no engine-argument changes, no
+  automatic migration or deletion of old lanes (prune by hand).
+- **CPU-only regression tests** (`tests/test_persistent_triton_cache.py`):
+  execute the actual heredoc-rendered head/worker launch scripts under
+  stubbed ssh/docker/scp and assert the recorded `docker run` argv — mounts,
+  distinct per-node cache homes, image-ID-keyed isolation, preserved
+  `~/.cache/vllm` mount and `/tmp/fi_autotune` FlashInfer setting, unchanged
+  engine arguments. Static template checks cover the stock (day-0) lane.
+
+### Not measured
+
+- **No startup or decode timing was captured for this change in isolation.**
+  It previously existed only inside a bundled set of deployment changes whose
+  per-item contributions were never separated. Do not read it as a
+  performance win; the two-node launch itself was also not exercised by the
+  CPU tests. See README "Persistent Triton compile cache".
+
 ## 2026-09-25 (vLLM 0.30 lane, update)
 
 ### Changed

@@ -182,6 +182,52 @@ sets `OVERRIDE_MODEL_ID`.
 
 Both containers are named **`vllm-fn`** (head and worker); `./stop.sh` removes both.
 
+## Persistent Triton compile cache
+
+Triton writes its compiled-kernel cache to `/root/.triton` inside the
+container. Containers are recreated on every launch (`docker rm -f vllm-fn`),
+so without a mount that cache dies with each container and the next launch
+recompiles from scratch. `start.sh` now bind-mounts it, on both nodes,
+following the same ownership model as the existing `~/.cache/vllm` mount:
+
+| Node | Host path | Container path |
+|------|-----------|----------------|
+| head   | `$HOME/.cache/triton/<image-key>`       | `/root/.triton` |
+| worker | worker `$HOME/.cache/triton/<image-key>` | `/root/.triton` |
+
+* **Per-node, never shared.** Each node keeps the cache under **its own**
+  HOME. The two nodes are not pinned to a lane by the head: GPU/stack
+  binaries are node-local, and sharing one directory over the network (as NFS
+  does for weights) is explicitly not done here.
+* **Keyed by image identity.** `<image-key>` is the locally resolved
+  `docker image inspect` ID of `$IMAGE` (the exact content digest) when
+  available, falling back to the image reference, sanitised to
+  `[A-Za-z0-9._-]`. The mutable tag is deliberately not the key: retagging or
+  rebuilding an image moves it to a fresh lane instead of risking stale
+  binaries being loaded from the old one. `TRITON_CACHE_DIR` is pinned to
+  `/root/.triton` on both launches so Triton cannot write elsewhere.
+* **Ownership.** The container runs as root, so cache files land root-owned
+  under your home — exactly like the existing `/root/.cache/vllm` mount.
+* **No automatic migration, no automatic deletion.** Old lanes from previous
+  images are left in place and consume disk. Nothing in this repo moves or
+  prunes them; when disk matters, delete specific old lanes yourself
+  (`du -sh ~/.cache/triton/*`, then `rm -rf` a lane you know is dead).
+
+The existing `~/.cache/vllm` mount and the v0.30 lane's
+`VLLM_FLASHINFER_AUTOTUNE_CACHE_DIR=/tmp/fi_autotune` (deliberately ephemeral,
+per the deadlock noted in CHANGELOG 2026-09-25) are unchanged by this.
+
+> **No timing claim.** This change has **not** been measured in isolation for
+> startup or decode effect — it shipped inside a larger bundled set of changes
+> where its contribution was never quantified on its own. Treat it as a
+> hygiene/cache-persistence improvement (avoid recompiling warm kernels after
+> a container recreate), not a performance win; do not attribute the decode
+> percentages elsewhere in this README to it. The regression suite
+> (`tests/test_persistent_triton_cache.py`) verifies launch *composition* on
+> CPU — mounts, per-node homes, image-key isolation, unchanged engine
+> arguments — by executing the real heredoc-rendered launch scripts under
+> stubs; it is not a two-node launch test and records no timings.
+
 ## NFS weight sharing (optional)
 
 **Off by default.** By default each node keeps its own copy of the checkpoint in
@@ -492,7 +538,8 @@ Env injected by `start.sh`: `PLE_QUANT_OVERRIDE=fp8`, `HF_HUB_OFFLINE=1`, `TRANS
 `{GLOO,NCCL,TP}_SOCKET_IFNAME=$IFACE`, `NCCL_DEBUG=WARN`.
 Mounts: patched `ple_layer.py` → `/usr/local/lib/python3.12/dist-packages/vllm/models/qwen3_8_flash_next/nvidia/ple_layer.py:ro`,
 patched `modelopt.py` → `…/vllm/model_executor/layers/quantization/modelopt.py:ro`,
-`$HOME/.cache/vllm` → `/root/.cache/vllm` on each node. HuggingFace cache: head bind-mounts
+`$HOME/.cache/vllm` → `/root/.cache/vllm` on each node,
+`$HOME/.cache/triton/<image-id>` → `/root/.triton` on each node (see [Persistent Triton compile cache](#persistent-triton-compile-cache)). HuggingFace cache: head bind-mounts
 `$HF_CACHE_DIR`; the worker bind-mounts its own `~/.cache/huggingface` by default, or the NFS
 volume `vllm-fn-hf` read-only when `NFS_SHARE=true`.
 Container runs as root — the mount target must be `/root`, or offline HF lookups fail.
@@ -992,7 +1039,9 @@ reference; the numbers above supersede these.
   attention metadata per draft step). `MTP_NUM_SPECULATIVE_TOKENS=1` is the safe comparison point.
 - `./stop.sh` force-removes `vllm-fn` on both nodes. If the NFS share is in use it stays up
   so the next `--launch` does not rebuild it; `./stop.sh --nfs` tears it down too.
-  FlashInfer autotune cache in `~/.cache/vllm` is the only per-node state that carries over.
+  The per-node state that carries over is `~/.cache/vllm` and, since the Triton-cache
+  mount, `~/.cache/triton/<image-id>`; the v0.30 lane's FlashInfer autotune cache stays
+  in `/tmp` inside the container on purpose.
 - **`NFS_SHARE=true` only:** do not stop `vllm-fn-nfs` while vLLM is loading or running — the
   worker reads shards from it. Cold start streams ~126 GiB over CX7 (lazy safetensors); once
   weights are in GPU memory the share is idle.

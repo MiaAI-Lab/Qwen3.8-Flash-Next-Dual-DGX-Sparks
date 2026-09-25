@@ -809,6 +809,26 @@ if $DO_LAUNCH; then
         ok "Image already on worker."
     fi
 
+    # -----------------------------------------------------------------------
+    # Persistent Triton compile cache.
+    # Triton writes its compiled-kernel cache to /root/.triton inside the
+    # container (the container runs as root). Without a mount it is lost when
+    # `docker rm -f vllm-fn` recreates the container, so every launch
+    # recompiles from scratch. Each node keeps its OWN lane under its own
+    # HOME — $HEAD... / $WORKER... resolve per node, same layout the existing
+    # ~/.cache/vllm mount uses — keyed by the locally resolved image ID when
+    # docker reports one (the exact content digest), falling back to the
+    # image reference, sanitised to [A-Za-z0-9._-]. A rebuilt or retagged
+    # image therefore lands in a fresh lane instead of loading stale binaries.
+    # Old lanes are never migrated, reused, or deleted: pruning is manual
+    # (`rm -rf ~/.cache/triton/<old-key>`) once disk matters.
+    # -----------------------------------------------------------------------
+    TRITON_KEY_RAW="${LOCAL_ID:-$IMAGE}"
+    TRITON_KEY=$(printf '%s' "$TRITON_KEY_RAW" | tr -c 'A-Za-z0-9._-' '-')
+    HEAD_TRITON_DIR="$HOME/.cache/triton/$TRITON_KEY"
+    WORKER_TRITON_DIR="$REMOTE_HOME/.cache/triton/$TRITON_KEY"
+    info "  Triton cache: head $HEAD_TRITON_DIR | worker $WORKER_TRITON_DIR -> /root/.triton"
+
     # ---------------------------------------------------------------------------
     # 6. Prepare the PLE patch
     #    Mixed-quant NVFP4 checkpoints declare ple_embedding_dtype in config:
@@ -1003,6 +1023,8 @@ print(json.dumps({"text_config": tc}, separators=(",", ":")) if tc else "")
     DOCKER_ARGS+=("-e HF_HOME=/root/.cache/huggingface")
     DOCKER_ARGS+=("-v $HF_CACHE_DIR:/root/.cache/huggingface")
     DOCKER_ARGS+=("-v $HOME/.cache/vllm:/root/.cache/vllm")
+    DOCKER_ARGS+=("-e TRITON_CACHE_DIR=/root/.triton")
+    DOCKER_ARGS+=("-v $HEAD_TRITON_DIR:/root/.triton")
     if [[ -n "$EXTRA_DOCKER_ARGS" ]]; then
         # shellcheck disable=SC2206
         DOCKER_ARGS+=($EXTRA_DOCKER_ARGS)
@@ -1045,7 +1067,7 @@ print(json.dumps({"text_config": tc}, separators=(",", ":")) if tc else "")
     # ---- Worker (rank 1) ----
     info "--- Launching worker (rank 1) on $WORKER_IP ---"
     ssh_worker "docker rm -f vllm-fn >/dev/null 2>&1 || true"
-    ssh_worker "mkdir -p '$REMOTE_HF' ~/.cache/vllm"
+    ssh_worker "mkdir -p '$REMOTE_HF' ~/.cache/vllm '$WORKER_TRITON_DIR'"
     if [[ "$NFS_SHARE" == "true" ]]; then
         nfs_ensure_worker_volume recreate
         if nfs_worker_has_model "hub/models--${ORG}--${NAME}"; then
@@ -1112,6 +1134,7 @@ docker run \
     -e VLLM_HOST_IP=$WORKER_IP \
     ${VLLM_ALLOW_LONG_MAX_MODEL_LEN:+-e VLLM_ALLOW_LONG_MAX_MODEL_LEN=$VLLM_ALLOW_LONG_MAX_MODEL_LEN} \
     $PLE_OFFLOAD_ENV \
+    -e TRITON_CACHE_DIR=/root/.triton \
     -e HF_HOME=/root/.cache/huggingface \
     $WORKER_PLE_MOUNT \
     $WORKER_MODELOPT_MOUNT \
@@ -1119,6 +1142,7 @@ docker run \
     $OVERLAY_ENV_STR \
     $WORKER_HF_MOUNT \
     -v $REMOTE_HOME/.cache/vllm:/root/.cache/vllm \
+    -v $WORKER_TRITON_DIR:/root/.triton \
     $IMAGE \
     $MODEL_ID \
     $VLLM_ARGS_STR \
@@ -1150,7 +1174,7 @@ LAUNCH_EOF
     # ---- Head (rank 0) ----
     info "--- Launching head (rank 0) on $HEAD_IP ---"
     docker rm -f vllm-fn >/dev/null 2>&1 || true
-    mkdir -p "$HOME/.cache/vllm"
+    mkdir -p "$HOME/.cache/vllm" "$HEAD_TRITON_DIR"
 
     # Write head launch script (same approach as worker — avoids eval JSON issues)
     HEAD_SCRIPT=$(mktemp /tmp/vllm_head_XXXXXX.sh)
@@ -1174,6 +1198,7 @@ docker run \
     -e VLLM_HOST_IP=$HEAD_IP \
     ${VLLM_ALLOW_LONG_MAX_MODEL_LEN:+-e VLLM_ALLOW_LONG_MAX_MODEL_LEN=$VLLM_ALLOW_LONG_MAX_MODEL_LEN} \
     $PLE_OFFLOAD_ENV \
+    -e TRITON_CACHE_DIR=/root/.triton \
     -e HF_HOME=/root/.cache/huggingface \
     $HEAD_PLE_MOUNT \
     $HEAD_MODELOPT_MOUNT \
@@ -1181,6 +1206,7 @@ docker run \
     $OVERLAY_ENV_STR \
     -v $HF_CACHE_DIR:/root/.cache/huggingface \
     -v $HOME/.cache/vllm:/root/.cache/vllm \
+    -v $HEAD_TRITON_DIR:/root/.triton \
     $IMAGE \
     $MODEL_ID \
     $VLLM_ARGS_STR \
