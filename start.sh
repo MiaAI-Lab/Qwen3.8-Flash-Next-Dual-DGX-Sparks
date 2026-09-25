@@ -925,11 +925,9 @@ if $DO_LAUNCH; then
         [[ "$MTP_DISABLE_BLOCK_DROP" == "1" ]] && _SPEC_EXTRA+=',"disable_eagle_block_drop":true'
         [[ "$MTP_INDEX_SHARE" == "true" ]] && _SPEC_EXTRA+=',"index_share_for_mtp_iteration":true'
         if [[ "$MTP_DRAFT_SAMPLE_METHOD" == probabilistic ]]; then
-            # vLLM rejects the combination at config validation; fail the
-            # launch before the ranks do. Probabilistic drafting caches full
-            # draft logits per request slot (extra GPU memory) and leaves
-            # rejection_sample_method at its standard ratio-test default.
-            [[ -z "$MTP_DRAFT_VOCAB" ]] || err "MTP_DRAFT_SAMPLE_METHOD=probabilistic conflicts with MTP_DRAFT_VOCAB (use_local_argmax_reduction is greedy-only) - clear one."
+            # Probabilistic drafting caches full draft logits per request slot
+            # (extra GPU memory); the MTP_DRAFT_VOCAB conflict is already
+            # rejected at parse time above, before anything launches.
             _SPEC_EXTRA+=',"draft_sample_method":"probabilistic"'
         fi
         if [[ -n "$MTP_DRAFT_VOCAB" ]]; then
