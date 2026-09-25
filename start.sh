@@ -472,6 +472,17 @@ gpu_tenants() {  # prints "pid,name,mem" lines for compute apps, empty if idle
 }
 if $DO_LAUNCH && [[ "$REQUIRE_IDLE_GPU" == "true" ]]; then
     info "=== Step 4b: GPU preflight ==="
+    for _node in head worker; do
+        if [[ "$_node" == head ]]; then
+            _vm=$(cat /proc/sys/vm/min_free_kbytes /proc/sys/vm/watermark_scale_factor 2>/dev/null | tr '\n' ' ')
+        else
+            _vm=$(ssh_worker "cat /proc/sys/vm/min_free_kbytes /proc/sys/vm/watermark_scale_factor" 2>/dev/null | tr '\n' ' ')
+        fi
+        read -r _vm_min _vm_wsf <<< "${_vm:-0 0}"
+        if (( ${_vm_min:-0} < 1048576 || ${_vm_wsf:-0} < 100 )); then
+            warn "$_node: kernel VM tunables at defaults (vm.min_free_kbytes=${_vm_min}, vm.watermark_scale_factor=${_vm_wsf}): no free-page reserve for the NVIDIA driver. Not applied by this script (sudo). See files/sysctl-spark3.conf, then on each node: sudo sysctl -p files/sysctl-spark3.conf"
+        fi
+    done
     HEAD_TENANTS=$(gpu_tenants || true)
     WORKER_TENANTS=$(ssh_worker "nvidia-smi --query-compute-apps=pid,process_name,used_memory --format=csv,noheader 2>/dev/null | sed '/^\$/d'" || true)
     if [[ -n "$HEAD_TENANTS" || -n "$WORKER_TENANTS" ]]; then
