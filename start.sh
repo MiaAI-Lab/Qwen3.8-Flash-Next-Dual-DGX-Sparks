@@ -118,6 +118,10 @@ fi
 if [[ -n "${OVERRIDE_YARN_ENABLE:-}" ]]; then
     YARN_ENABLE="$OVERRIDE_YARN_ENABLE"
 fi
+[[ -n "${OVERRIDE_IMAGE:-}" ]] && IMAGE="$OVERRIDE_IMAGE"
+[[ -n "${OVERRIDE_KV_CACHE_DTYPE:-}" ]] && KV_CACHE_DTYPE="$OVERRIDE_KV_CACHE_DTYPE"
+[[ -n "${OVERRIDE_GPU_MEMORY_UTILIZATION:-}" ]] && GPU_MEMORY_UTILIZATION="$OVERRIDE_GPU_MEMORY_UTILIZATION"
+V030="${V030:-false}"
 SKIP_PLE_PATCH="${SKIP_PLE_PATCH:-false}"
 # FP8-dense hybrid checkpoint (NVFP4 experts + FP8 per-channel dense projections,
 # built by files/fp8dense/make_fp8_dense_checkpoint.py). Needs the vLLM overlay
@@ -599,7 +603,26 @@ fi
 #     bandwidth lever in a decode step. Output-safe: a draft outside the subset
 #     is rejected at verification, never emitted. See files/patch_mtp_draft_vocab.py.
 # ---------------------------------------------------------------------------
-if $DO_LAUNCH && [[ -n "$MTP_DRAFT_VOCAB" ]]; then
+if $DO_LAUNCH && [[ "$V030" == "true" ]]; then
+    [[ "$FP8_DENSE" == "true" ]] && err "V030: FP8_DENSE is not supported on the vLLM 0.30 lane."
+    [[ "$QSA_PROFILE" == "stock" ]] || err "V030: QSA_PROFILE=$QSA_PROFILE is not supported on the vLLM 0.30 lane."
+    [[ "$KV_CACHE_DTYPE" == fp8* ]] && err "V030: vLLM 0.30's QSA supports only BF16 KV. Set KV_CACHE_DTYPE=auto."
+    [[ "$VLLM_QSA_DET_TOPK" == "1" || "$VLLM_MOE_DET_FINALIZE" == "1" ]] && err "V030: the determinism knobs are not ported to vLLM 0.30."
+    OVERLAY_ENV+=("-e VLLM_FLASHINFER_AUTOTUNE_CACHE_DIR=/tmp/fi_autotune")
+fi
+if $DO_LAUNCH && [[ -n "$MTP_DRAFT_VOCAB" && "$V030" == "true" ]]; then
+    info "=== Step 4e: MTP reduced draft vocabulary (vLLM 0.30) ==="
+    [[ "$MTP_NUM_SPECULATIVE_TOKENS" == "0" ]] && err "MTP_DRAFT_VOCAB is set but MTP_NUM_SPECULATIVE_TOKENS=0 - nothing drafts."
+    [[ -f "$MTP_DRAFT_VOCAB" ]] || err "MTP_DRAFT_VOCAB file not found: $MTP_DRAFT_VOCAB"
+    extract_from_image "$VLLM_PKG/models/qwen4_exp/nvidia/mtp.py" \
+                       "$SCRIPT_DIR/files/mtp_v030_patched.py.orig"
+    python3 "$SCRIPT_DIR/files/patch_mtp_draft_vocab_v030.py" || err "patch_mtp_draft_vocab_v030.py failed"
+    add_overlay "$SCRIPT_DIR/files/mtp_v030_patched.py" \
+                "$VLLM_PKG/models/qwen4_exp/nvidia/mtp.py"
+    add_overlay "$MTP_DRAFT_VOCAB" "/etc/vllm-draft-vocab.txt"
+    OVERLAY_ENV+=("-e VLLM_MTP_DRAFT_VOCAB=/etc/vllm-draft-vocab.txt")
+    ok "Draft vocab: $(wc -l < "$MTP_DRAFT_VOCAB") ids from $MTP_DRAFT_VOCAB"
+elif $DO_LAUNCH && [[ -n "$MTP_DRAFT_VOCAB" ]]; then
     info "=== Step 4e: MTP reduced draft vocabulary ==="
     if [[ "$MTP_NUM_SPECULATIVE_TOKENS" == "0" ]]; then
         err "MTP_DRAFT_VOCAB is set but MTP_NUM_SPECULATIVE_TOKENS=0 - nothing drafts."
@@ -629,7 +652,7 @@ fi
 #     read an FP8-e4m3 cache with per-tensor scales applied after the dots.
 #     A capacity trade, not a free win - see the README before enabling.
 # ---------------------------------------------------------------------------
-if $DO_LAUNCH && [[ "$KV_CACHE_DTYPE" == fp8* ]]; then
+if $DO_LAUNCH && [[ "$KV_CACHE_DTYPE" == fp8* && "$V030" != "true" ]]; then
     info "=== Step 4f: FP8 KV cache patch ($KV_CACHE_DTYPE) ==="
     if [[ "$QSA_PROFILE" != "stock" ]]; then
         err "KV_CACHE_DTYPE=$KV_CACHE_DTYPE and QSA_PROFILE=$QSA_PROFILE both overlay ops/qsa.py - pick one."
@@ -656,7 +679,7 @@ fi
 #     bind-mount a config.json carrying both names (what the known-good
 #     local-inference-lab checkpoint ships) — the HF cache is left untouched.
 # ---------------------------------------------------------------------------
-if $DO_LAUNCH && [[ -n "${SNAPSHOT_SHA:-}" ]]; then
+if $DO_LAUNCH && [[ -n "${SNAPSHOT_SHA:-}" && "$V030" != "true" ]]; then
     info "=== Step 4g: MTP layer-index alias ==="
     CONTAINER_SNAPSHOT="/root/.cache/huggingface/hub/models--${ORG}--${NAME}/snapshots/${SNAPSHOT_SHA}"
     rm -f "$SCRIPT_DIR/files/config_patched.json" \
@@ -704,7 +727,7 @@ if $DO_LAUNCH && [[ -n "${SNAPSHOT_SHA:-}" ]]; then
     fi
 fi
 
-if $DO_LAUNCH && [[ "$MTP_DISABLE_BLOCK_DROP" == "1" && "$MTP_NUM_SPECULATIVE_TOKENS" -gt 0 ]]; then
+if $DO_LAUNCH && [[ "$MTP_DISABLE_BLOCK_DROP" == "1" && "$MTP_NUM_SPECULATIVE_TOKENS" -gt 0 && "$V030" != "true" ]]; then
     info "=== Step 4h: vllm#53388 block-drop backport ==="
     BD="$SCRIPT_DIR/files/block_drop"
     for f in $(python3 "$SCRIPT_DIR/files/patch_block_drop.py" --list); do
@@ -813,6 +836,9 @@ if $DO_LAUNCH; then
     WORKER_MODELOPT_MOUNT=""
     MODEL_OPT_PKG="$VLLM_PKG/model_executor/layers/quantization/modelopt.py"
 
+    if [[ "$V030" == "true" ]]; then
+    info "=== Step 6b: MXFP8 kernel-fallback patch skipped (vLLM 0.30) ==="
+    else
     info "=== Step 6b: Prepare MXFP8 kernel-fallback patch ==="
     if [[ ! -f "$MODELOPT_ORIG" ]]; then
         info "Extracting modelopt.py from image..."
@@ -829,6 +855,7 @@ if $DO_LAUNCH; then
     ok "MXFP8 fallback patch ready: $PATCHED_MODELOPT"
     HEAD_MODELOPT_MOUNT="-v $PATCHED_MODELOPT:$MODEL_OPT_PKG:ro"
     WORKER_MODELOPT_MOUNT="-v /tmp/modelopt_patched.py:$MODEL_OPT_PKG:ro"
+    fi
 
     # ---------------------------------------------------------------------------
     # 7. Build vLLM args (shared between head and worker)
@@ -886,6 +913,7 @@ if $DO_LAUNCH; then
     # setattr'd onto the parent and NEVER reaches text_config -- i.e. YaRN was
     # silently a no-op. Everything the model reads lives under text_config, so
     # nest both the rope override and the PLE dtype there.
+    [[ "$V030" == "true" ]] && PLE_EMBEDDING_DTYPE=""
     HF_OVERRIDES_JSON=$(
         PLE_DTYPE="$PLE_EMBEDDING_DTYPE" \
         YARN="$YARN_ENABLE" YARN_FACTOR="${YARN_FACTOR:-}" \

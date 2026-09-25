@@ -2,6 +2,38 @@
 
 Notable changes to this deployment. Format follows [Keep a Changelog](https://keepachangelog.com/1.1.0/).
 
+## 2026-09-25 (vLLM 0.30 lane)
+
+### Added
+
+- **`./start-v030.sh`**: the same two-node launch on stock `vllm/vllm-openai:v0.30.0`
+  (arm64, CUDA 13.0). The nvidia checkpoint loads natively (`Qwen4Exp*`). Every
+  day-0 overlay is skipped: FP8 KV, PLE, MXFP8, the MTP layer alias, and the
+  block-drop backport. v0.30 has `disable_eagle_block_drop` and
+  `index_share_for_mtp_iteration` natively. One overlay remains:
+  `files/patch_mtp_draft_vocab_v030.py` ports the reduced draft vocabulary to
+  v0.30's `qwen4_exp/nvidia/mtp.py`.
+- The lane runs BF16 KV (v0.30's QSA accepts only BF16) at GMU 0.80: 1,467,072
+  KV tokens, 5.6x a 262k request. FlashInfer autotunes into `/tmp` inside each
+  container. A persisted per-node cache that differs between the nodes
+  deadlocked TP2 at the autotune collective (measured once).
+
+### Measured (same pair, same harness as the entry below)
+
+| | day-0 + #66 defaults | v0.30 stock | v0.30 lane |
+|---|---|---|---|
+| Decode S=1 prose / code | 56.1 / 75.8 | 52.5 / 61.5 | 57.6 / 71.5 |
+| Decode S=4 prose / code | 146.5 / 244.1 | 135.7 / 197.0 | 141.0 / 247.3 |
+| Decode S=8 prose / code | 225.8 / 421.9 | 194.4 / 316.5 | 219.8 / 420.7 |
+| Turn 1 TTFT, 9.5k session (median of 3) | 0.63 s | 0.28 s | not measured |
+| First identical repeat, 7.9k prompt (#62) | 2.70 s (miss) | 0.25 s (hit) | not measured |
+| NLL (15,776 positions) | 1.331 | 1.333 | 1.333 |
+
+- Stock v0.30 is 5-15% slower in decode because it drafts over the full
+  248k vocabulary: 58.3 ms per step at S=1, which is the day-0 full-vocab step
+  time. The draft-vocab port brings decode back to day-0 parity (within +-4%).
+- v0.30 fixes both parts of #62 without a patch (vllm#54713, vllm#53945).
+
 ## 2026-09-25
 
 All measured on this kit's pair (spark head + gigabyte worker, CX7 RoCE, NFS

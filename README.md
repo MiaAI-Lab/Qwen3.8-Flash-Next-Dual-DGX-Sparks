@@ -63,6 +63,27 @@ docker logs vllm-fn 2>&1 | grep -E "Available KV cache memory|GPU KV cache size"
 | `--no-nfs` | Force rsync distribution even if `NFS_SHARE=true` in `.env` |
 | `ABLIT=1` | Env/`.env` flag: serve the gated Keys house QSA L3–47 checkpoint (see [Abliterated checkpoint](#abliterated-checkpoint-ablit)) |
 
+## vLLM 0.30 lane (optional)
+
+`./start-v030.sh` runs the same two-node launch on stock `vllm/vllm-openai:v0.30.0`.
+Both nodes need the image. The worker has no internet here, so copy the image
+over the CX7 link: `docker save vllm/vllm-openai:v0.30.0 | ssh <worker> docker load`.
+
+```bash
+docker pull vllm/vllm-openai:v0.30.0
+./stop.sh
+./start-v030.sh --launch
+```
+
+- **Same decode speed** as the day-0 lane, **2x faster multi-turn TTFT**
+  (0.28 s vs 0.63 s), and the #62 first-repeat miss is fixed. See CHANGELOG
+  2026-09-25.
+- **One overlay** instead of seven: the reduced draft vocabulary
+  (`files/patch_mtp_draft_vocab_v030.py`).
+- **BF16 KV only** (1.47M tokens at GMU 0.80). v0.30's QSA has no FP8 KV path.
+- **Not supported on this lane**: `FP8_DENSE`, `QSA_PROFILE`, the
+  determinism knobs.
+
 ## Official FP8 checkpoint (optional)
 
 Same two-Spark launch as `./start.sh`, but serve
