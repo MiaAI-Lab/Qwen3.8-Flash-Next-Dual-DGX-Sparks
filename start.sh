@@ -92,6 +92,15 @@ KV_CACHE_DTYPE="${KV_CACHE_DTYPE:-fp8}"   # fp8 needs files/patch_qsa_fp8_kv.py,
 # vLLM pick a smaller attention block. Empty keeps the checkpoint's float32.
 MAMBA_SSM_CACHE_DTYPE="${MAMBA_SSM_CACHE_DTYPE:-}"
 PLE_OFFLOAD="${PLE_OFFLOAD:-false}"
+# vLLM 0.30 defaults VLLM_PLE_CPU_OFFLOAD to 1 (envs.py: os.getenv(...,"1")).
+# Omitting the override when PLE_OFFLOAD=false therefore does NOT mean "GPU":
+# the 51B n-gram table stays pinned in CPU RAM. Resolve the boolean to an
+# explicit 0/1 here; both rank templates render the flag unconditionally.
+case "$PLE_OFFLOAD" in
+    true)  PLE_CPU_OFFLOAD_VALUE=1 ;;
+    false) PLE_CPU_OFFLOAD_VALUE=0 ;;
+    *) err "PLE_OFFLOAD must be true or false" ;;
+esac
 # Vision MLP intermediate_size=4304 is not divisible by 16 after TP split (4304/2=2152).
 # NVFP4 kernels require input features % 16 == 0, so replicate the encoder on each GPU.
 MM_ENCODER_TP_MODE="${MM_ENCODER_TP_MODE:-data}"
@@ -988,9 +997,7 @@ print(json.dumps({"text_config": tc}, separators=(",", ":")) if tc else "")
     if [[ -n "$VLLM_ALLOW_LONG_MAX_MODEL_LEN" ]]; then
         DOCKER_ARGS+=(-e "VLLM_ALLOW_LONG_MAX_MODEL_LEN=$VLLM_ALLOW_LONG_MAX_MODEL_LEN")
     fi
-    if [[ "$PLE_OFFLOAD" == "true" ]]; then
-        DOCKER_ARGS+=(-e "VLLM_PLE_CPU_OFFLOAD=1")
-    fi
+    DOCKER_ARGS+=(-e "VLLM_PLE_CPU_OFFLOAD=$PLE_CPU_OFFLOAD_VALUE")
     # Volumes — single elements (flag + value together) for eval to parse correctly
     # NOTE: the container runs as root (HOME=/root), so cache mounts must target /root,
     # not the host user's $HOME — otherwise offline HF lookups fail.
@@ -1085,10 +1092,10 @@ print(json.dumps({"text_config": tc}, separators=(",", ":")) if tc else "")
     fi
     HEAD_OVERLAY_MOUNTS="${OVERLAY_MOUNTS[*]:-}"
 
-    # PLE offload env flag (only set when explicitly true — avoids the ${VAR:+}
-    # pitfall where "false" is non-empty and would wrongly enable the flag)
-    PLE_OFFLOAD_ENV=""
-    [[ "$PLE_OFFLOAD" == "true" ]] && PLE_OFFLOAD_ENV="-e VLLM_PLE_CPU_OFFLOAD=1"
+    # PLE table placement: render BOTH states explicitly (see the resolution
+    # block near PLE_OFFLOAD above). Omission lets vLLM's default-on CPU
+    # offload silently win over the documented "false".
+    PLE_OFFLOAD_ENV="-e VLLM_PLE_CPU_OFFLOAD=$PLE_CPU_OFFLOAD_VALUE"
 
     # Write worker launch script to a temp file and scp it (avoids SSH JSON quoting issues)
     WORKER_SCRIPT=$(mktemp /tmp/vllm_worker_XXXXXX.sh)

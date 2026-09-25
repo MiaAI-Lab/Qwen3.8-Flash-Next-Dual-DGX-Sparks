@@ -935,6 +935,18 @@ reference; the numbers above supersede these.
 
 ## Gotchas
 
+- **`PLE_OFFLOAD=false` used to be a silent lie on vLLM 0.30.** `start.sh`
+  only emitted `-e VLLM_PLE_CPU_OFFLOAD=1` when the value was `true`, and
+  omitting the variable lets vLLM's own default (`"1"` in `envs.py`) win —
+  the 51 GB FP8 n-gram table then sits in **pinned CPU RAM** even though the
+  config says GPU-resident. On a pair we ran this way, the pinned allocation
+  rounded up to 32 GiB of the 128 GB unified pool per node, leaving
+  ~1 / ~2.4 GiB `MemAvailable` with 7.6 / 3.6 GiB parked in swap. `start.sh`
+  now renders `VLLM_PLE_CPU_OFFLOAD=0/1` explicitly on both ranks and rejects
+  non-boolean values. After the fix, the same launch reported the table
+  GPU-resident (`cpu_offload=False`, `weight_device=cuda`, `pinned=False`)
+  and ~6.7 / ~9.5 GiB available post-1M-test where before it was
+  0.98 / 2.38 GiB.
 - **`PLE_OFFLOAD=true` needs ~51 GB of free CPU RAM.** The launch log reported
   `Available RAM: 44.92 GiB` at target-weight load and `41.71 GiB` before the MTP drafter
   loads on this box — offloading will OOM or thrash swap. Keep it `false`
