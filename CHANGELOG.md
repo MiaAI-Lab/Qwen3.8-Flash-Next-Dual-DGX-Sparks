@@ -2,6 +2,43 @@
 
 Notable changes to this deployment. Format follows [Keep a Changelog](https://keepachangelog.com/1.1.0/).
 
+## 2026-09-25
+
+All measured on this kit's pair (spark head + gigabyte worker, CX7 RoCE, NFS
+weights), `.env.sample` profile, one launch per arm. Decode = `bench/sweep.py`
+aggregate tok/s, 3 repeats (2 for the determinism arm). NLL = mean prompt NLL
+over 15,776 positions of 8 fixed texts. Turn TTFT = a 9.5k-token session.
+
+### Added
+
+- **`MTP_DISABLE_BLOCK_DROP=1`, on in `.env.sample`** (vllm#53388 backport,
+  `files/patch_block_drop.py`, from the single-Spark kit). MTP drops the last
+  matched prefix-cache block on lookup, so the second turn of a session missed
+  the cache entirely (#62). Turn 1 TTFT **3.24 -> 0.58 s**, turn 2 1.12 ->
+  0.57 s, turn after a 4k tool output 2.61 -> 1.94 s. Decode, prefill and NLL
+  unchanged. Only the three core files are overlaid; the connector files do
+  not apply without a KV connector and would clash in `/tmp/vllm-overlay`.
+- **`MTP_INDEX_SHARE=true`, on in `.env.sample`** (`index_share_for_mtp_iteration`,
+  #28, #65). Drafter-only. Code +6.1 / +4.6 / +21.3 / +26.6% at S=1/2/4/8, prose
+  +0.3 / +5.3 / -0.1 / -1.8% (noise). NLL 1.328 vs 1.334, HumanEval 156/164.
+- **`VLLM_QSA_DET_TOPK=1` / `VLLM_MOE_DET_FINALIZE=1`** (opt-in,
+  `files/patch_determinism.py`). Identical requests: prompt-logprob spread
+  median 0.25 / max 6.07 nats -> **0 / 0** across TP2+EP; greedy outputs 5/5
+  distinct -> 1/5, also cold and after another prompt. Cost: prose decode
+  about -4%, prefill about -4%.
+- **`--enable-prompt-tokens-details`** (#63).
+
+### Measured, not adopted
+
+- **`VLLM_PREFIX_CACHE_RETENTION_INTERVAL=1664`** (the vllm#53504 workaround):
+  no change on top of block drop.
+- **First identical repeat of a short prompt still misses** (#62): a prompt that
+  fits in one 8,192-token prefill chunk misses on the first repeat and hits
+  from the second (7.9k: 2.70 s then 0.58 s). At 9.5k the first repeat hits.
+- **MTP 4 was not tried**: the head idles at about 1.9 GiB `MemAvailable` at
+  GMU 0.835 with other services running, and wider graph capture is the known
+  hard-reset risk on GB10.
+
 ## 2026-09-16
 
 ### Added
