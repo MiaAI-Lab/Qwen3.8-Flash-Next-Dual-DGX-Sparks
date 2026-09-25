@@ -15,7 +15,8 @@ import unittest
 SOURCE = (Path(__file__).resolve().parents[1] / "start.sh").read_text()
 DEFAULTS = SOURCE[SOURCE.index('PLE_OFFLOAD="${PLE_OFFLOAD:-false}"'):
                   SOURCE.index('# Vision MLP')]
-RENDER = '    PLE_OFFLOAD_ENV="-e VLLM_PLE_CPU_OFFLOAD=$PLE_CPU_OFFLOAD_VALUE"'
+RENDER = SOURCE[SOURCE.index('    # PLE table placement'):
+               SOURCE.index('    # Write worker launch script')]
 TEMPLATES = re.findall(
     r'cat > "\$(WORKER|HEAD)_SCRIPT" <<LAUNCH_EOF\n(.*?)\nLAUNCH_EOF',
     SOURCE, re.S,
@@ -41,6 +42,12 @@ class PleOffloadTests(unittest.TestCase):
                 result = self.shell(value, 'printf "%s" "$PLE_OFFLOAD_ENV"')
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertEqual(result.stdout, "-e VLLM_PLE_CPU_OFFLOAD=" + expected)
+
+    def test_docker_args_mirror_renders_explicitly(self):
+        # The head-side DOCKER_ARGS mirror must carry the same unconditional
+        # rendering as the rank heredocs.
+        self.assertIn('DOCKER_ARGS+=(-e "VLLM_PLE_CPU_OFFLOAD=$PLE_CPU_OFFLOAD_VALUE")', SOURCE)
+        self.assertNotIn('if [[ "$PLE_OFFLOAD" == "true" ]]; then', SOURCE)
 
     def test_invalid_values_fail_before_rendering(self):
         for value in ["0", "1", "False", "TRUE", "garbage", "false "]:
