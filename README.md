@@ -818,6 +818,43 @@ full-vocabulary argmax restricted to the draft set — run it after touching the
 > upstream refuses to engage at `tp_size != 1`, since its reduced head is a plain matmul rather
 > than a vocab-parallel one. FR-Spec is the general technique.
 
+## QSA draft-fusion overlay (`QSA_DRAFT_FUSION=true`, vLLM 0.30 lane)
+
+An MTP draft step normally **rebuilds** the whole QSA side-cache metadata
+(slot mapping, per-token request ids, visible-block counts…) every draft step.
+[vllm-project/vllm#58449](https://github.com/vllm-project/vllm/pull/58449)
+adds an in-place update path for the draft-decode step: one row per request is
+rewritten instead of relaunching the builders (and dropping a per-step
+`query_start_loc_cpu` sync). The upstream author reports a per-decode-step
+win of roughly 1-3 %; it is a drafter-only bookkeeping change — the target model verifies
+every token.
+
+`QSA_DRAFT_FUSION=true` bind-mounts the patched `qsa_cache.py` over the
+vLLM 0.30 package on **both** ranks. The file is **generated, never
+committed**: `files/qsa_draft_fusion/patch_qsa_draft_fusion.py` applies the
+pinned upstream diff to `files/qsa_draft_fusion/orig/qsa_cache.py` (the
+pristine source at `vllm` tag `ced6857a`) and fails closed if either input's
+SHA-256, or the patch output hash, does not match `provenance.json`. So the
+overlay can never silently ride onto a drifted base image.
+
+Credit: the optimization is vllm#58449's author's; this recipe adds the
+gated integration and the regression harness.
+
+Validation before enabling on your box:
+
+```bash
+python3 -m unittest tests.test_qsa_draft_fusion -v            # CPU: hashes, fail-closed, wiring
+docker run --rm --gpus all -v $PWD/files/qsa_draft_fusion:/f -v \
+  <path-to-patched-qsa-cache.py>:/usr/local/lib/python3.12/dist-packages/vllm/models/qwen4_exp/common/qsa_cache.py:ro \
+  vllm/vllm-openai:v0.30.0 python3 /f/gpu_regression.py       # GPU: fused update == fresh rebuild (3 layouts)
+```
+
+Our two-node run: `gpu_regression.py` passed plain/compressed/circular on both
+GB10s, and the fused builder served production inside a bundle that measured
+**+9.4 to +20.0 % aggregate decode** on a matched 1,752-token/1,024-output
+thinking sweep — but that bundle also changed PLE placement and draft sampling,
+so do not attribute the gain to this overlay alone.
+
 ## YaRN (1M context)
 
 ```bash
