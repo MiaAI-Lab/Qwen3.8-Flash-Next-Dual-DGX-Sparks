@@ -150,6 +150,10 @@ if [[ -n "$MTP_DRAFT_VOCAB" && "$MTP_DRAFT_VOCAB" != /* ]]; then
 fi
 # QSA Triton launch profile: stock | gb10 | path to JSON from files/qsa_gb10/bench_qsa_kernels.py
 QSA_PROFILE="${QSA_PROFILE:-stock}"
+MTP_DISABLE_BLOCK_DROP="${MTP_DISABLE_BLOCK_DROP:-0}"
+MTP_INDEX_SHARE="${MTP_INDEX_SHARE:-false}"
+VLLM_QSA_DET_TOPK="${VLLM_QSA_DET_TOPK:-}"
+VLLM_MOE_DET_FINALIZE="${VLLM_MOE_DET_FINALIZE:-}"
 # Refuse to launch when another process already holds the GPU (both nodes).
 REQUIRE_IDLE_GPU="${REQUIRE_IDLE_GPU:-true}"
 
@@ -700,6 +704,44 @@ if $DO_LAUNCH && [[ -n "${SNAPSHOT_SHA:-}" ]]; then
     fi
 fi
 
+if $DO_LAUNCH && [[ "$MTP_DISABLE_BLOCK_DROP" == "1" && "$MTP_NUM_SPECULATIVE_TOKENS" -gt 0 ]]; then
+    info "=== Step 4h: vllm#53388 block-drop backport ==="
+    BD="$SCRIPT_DIR/files/block_drop"
+    for f in $(python3 "$SCRIPT_DIR/files/patch_block_drop.py" --list); do
+        mkdir -p "$(dirname "$BD/orig/$f")"
+        extract_from_image "$VLLM_PKG/$f" "$BD/orig/$f"
+    done
+    python3 "$SCRIPT_DIR/files/patch_block_drop.py" || err "patch_block_drop.py failed"
+    for f in config/speculative.py v1/core/kv_cache_utils.py v1/core/sched/scheduler.py; do
+        [[ -f "$BD/$f" ]] && add_overlay "$BD/$f" "$VLLM_PKG/$f"
+    done
+fi
+if $DO_LAUNCH && [[ "$VLLM_QSA_DET_TOPK" == "1" || "$VLLM_MOE_DET_FINALIZE" == "1" ]]; then
+    info "=== Step 4i: reproducible greedy decoding ==="
+    if [[ "$KV_CACHE_DTYPE" != fp8* ]]; then
+        [[ "$QSA_PROFILE" == "stock" ]] || err "VLLM_QSA_DET_TOPK and QSA_PROFILE=$QSA_PROFILE both overlay ops/qsa.py - pick one."
+        extract_from_image "$VLLM_PKG/models/qwen3_8_flash_next/nvidia/ops/qsa.py" \
+                           "$SCRIPT_DIR/files/qsa_ops_patched.py.orig"
+        extract_from_image "$VLLM_PKG/models/qwen3_8_flash_next/nvidia/qsa.py" \
+                           "$SCRIPT_DIR/files/qsa_nvidia_patched.py.orig"
+        python3 "$SCRIPT_DIR/files/patch_qsa_fp8_kv.py"
+        add_overlay "$SCRIPT_DIR/files/qsa_ops_patched.py" \
+                    "$VLLM_PKG/models/qwen3_8_flash_next/nvidia/ops/qsa.py"
+        add_overlay "$SCRIPT_DIR/files/qsa_nvidia_patched.py" \
+                    "$VLLM_PKG/models/qwen3_8_flash_next/nvidia/qsa.py"
+    fi
+    MOE_CUTLASS="model_executor/layers/fused_moe/experts/flashinfer_cutlass_moe.py"
+    mkdir -p "$SCRIPT_DIR/files/determinism/orig"
+    extract_from_image "$VLLM_PKG/$MOE_CUTLASS" "$SCRIPT_DIR/files/determinism/orig/flashinfer_cutlass_moe.py"
+    python3 "$SCRIPT_DIR/files/patch_determinism.py" || err "patch_determinism.py failed"
+    add_overlay "$SCRIPT_DIR/files/determinism/flashinfer_cutlass_moe.py" "$VLLM_PKG/$MOE_CUTLASS"
+    [[ "$VLLM_QSA_DET_TOPK" == "1" ]] && OVERLAY_ENV+=("-e VLLM_QSA_DET_TOPK=1")
+    if [[ "$VLLM_MOE_DET_FINALIZE" == "1" ]]; then
+        OVERLAY_ENV+=("-e VLLM_MOE_DET_FINALIZE=1" "-e VLLM_FLASHINFER_MOE_FUSED_FINALIZE=0")
+        OVERLAY_ENV+=("-e VLLM_FLASHINFER_AUTOTUNE_CACHE_DIR=/root/.cache/vllm/flashinfer_autotune_cache_unfused")
+    fi
+fi
+
 # ---------------------------------------------------------------------------
 # 5. Ensure Docker image on both nodes
 # ---------------------------------------------------------------------------
@@ -822,13 +864,16 @@ if $DO_LAUNCH; then
 
     # JSON args: use printf to build properly quoted strings for the heredoc
     if [[ "$MTP_NUM_SPECULATIVE_TOKENS" -gt 0 ]]; then
+        _SPEC_EXTRA=""
+        [[ "$MTP_DISABLE_BLOCK_DROP" == "1" ]] && _SPEC_EXTRA+=',"disable_eagle_block_drop":true'
+        [[ "$MTP_INDEX_SHARE" == "true" ]] && _SPEC_EXTRA+=',"index_share_for_mtp_iteration":true'
         if [[ -n "$MTP_DRAFT_VOCAB" ]]; then
             # get_top_tokens (added by patch_mtp_draft_vocab.py) is only reached
             # through this flag; it also cuts the draft all-gather from
             # O(vocab_size) to O(2*tp_size) per token.
-            VLLM_ARGS+=("--speculative-config" "$(printf "'{\"method\":\"mtp\",\"num_speculative_tokens\":%s,\"use_local_argmax_reduction\":true}'" "$MTP_NUM_SPECULATIVE_TOKENS")")
+            VLLM_ARGS+=("--speculative-config" "$(printf "'{\"method\":\"mtp\",\"num_speculative_tokens\":%s,\"use_local_argmax_reduction\":true%s}'" "$MTP_NUM_SPECULATIVE_TOKENS" "$_SPEC_EXTRA")")
         else
-            VLLM_ARGS+=("--speculative-config" "$(printf "'{\"method\":\"mtp\",\"num_speculative_tokens\":%s}'" "$MTP_NUM_SPECULATIVE_TOKENS")")
+            VLLM_ARGS+=("--speculative-config" "$(printf "'{\"method\":\"mtp\",\"num_speculative_tokens\":%s%s}'" "$MTP_NUM_SPECULATIVE_TOKENS" "$_SPEC_EXTRA")")
         fi
     fi
 
