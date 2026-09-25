@@ -2,6 +2,30 @@
 
 Notable changes to this deployment. Format follows [Keep a Changelog](https://keepachangelog.com/1.1.0/).
 
+## 2026-09-25 (vLLM 0.30 lane, update)
+
+### Changed
+
+- **The lane sets `VLLM_USE_BREAKABLE_CUDAGRAPH=0`.** vLLM 0.30 enables it
+  for Qwen4Exp. On this pair it made decode vary 10-18% between identical
+  runs (prose S=4: 118 / 149 / 138 / 109) and averaged 13-19% below #66 at
+  S>=2. With it off: about 2% variation, prose 60.0 / 95.5 / 145.2 / 234.8 and
+  code 76.5 / 140.2 / 248.0 / 441.2 tok/s at S=1/2/4/8. NLL and prefix-cache
+  hits unchanged.
+- **Opt-in FP8 KV** (`OVERRIDE_KV_CACHE_DTYPE=fp8`) via a backport of
+  vllm#55557: 2.64M KV tokens, NLL 1.328 / 1.334, needles 3/3 at 200k, decode
+  about 5% slower than BF16. BF16 stays the default.
+- **Launch warns when either node lacks the driver free-page reserve**
+  (`vm.min_free_kbytes` / `vm.watermark_scale_factor` at kernel defaults), with
+  `files/sysctl-spark3.conf` from the single-Spark kit. In a 1-hour soak the
+  worker logged one `NV_ERR_NO_MEMORY` at MemFree ~1.0 GiB, MemAvailable
+  11.6 GiB, with the default reserve; no request failed.
+
+### Measured
+
+- 1-hour soak on the lane defaults, 6 workers: 1,349 requests, 1,348 correct,
+  0 server errors, 0 preemptions, 0 tracebacks on either node.
+
 ## 2026-09-25 (vLLM 0.30 lane)
 
 ### Added
