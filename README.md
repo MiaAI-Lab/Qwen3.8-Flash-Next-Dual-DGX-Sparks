@@ -818,6 +818,39 @@ full-vocabulary argmax restricted to the draft set — run it after touching the
 > upstream refuses to engage at `tp_size != 1`, since its reduced head is a plain matmul rather
 > than a vocab-parallel one. FR-Spec is the general technique.
 
+## Probabilistic MTP drafting (`MTP_DRAFT_SAMPLE_METHOD`, vLLM 0.30 lane)
+
+By default the MTP drafter picks its argmax token at every step and the
+rejection test treats the draft as a one-hot distribution. Setting
+`MTP_DRAFT_SAMPLE_METHOD=probabilistic` switches the drafter to sampling
+from its own distribution (temperature-aware Gumbel, logits cached per
+request slot) with the standard probability-ratio rejection. That is
+vLLM's `draft_sample_method` field — configuration only, no new source
+overlay; `spec_decode/speculator.py` pre-allocates the cached logits and
+`autoregressive/speculator.py` feeds them into the Gumbel sampler.
+
+Read the trade honestly:
+
+- **Mutually exclusive with reduced-vocabulary drafting.**
+  `MTP_DRAFT_VOCAB` turns on `use_local_argmax_reduction`, which vLLM
+  rejects together with probabilistic sampling. The launcher fails early
+  with both set instead of dying at engine config. The 47k vocab is a
+  ~+9.6 % win on this kit (see above) — only switch if you also clear the
+  vocab, and expect to re-measure.
+- **Extra GPU memory**: full draft logits are cached per request slot.
+  At our 32-GiB KV budget the launch still fit; check your own headroom.
+- **Payoff depends on traffic**: stochastic drafts only differ from
+  greedy at nonzero sampling temperature.
+- **Our number, with a caveat**: on our 1M/FP8-KV pair, probabilistic
+  drafting shipped *inside* a bundle that measured **+9.4-20.0 %**
+  aggregate whole-wave decode (matched 1,752-token prompts, 1,024 outputs,
+  thinking on, C1/2/4/6/8). We never A/B'd it alone, so this knob is
+  offered as a plausible piece of that bundle — not as an isolated win.
+
+Default stays `greedy`. `tests/test_draft_sample_method.py` executes the
+real spec-config block and the real validation lines and checks every
+payload and conflict guard.
+
 ## YaRN (1M context)
 
 ```bash
