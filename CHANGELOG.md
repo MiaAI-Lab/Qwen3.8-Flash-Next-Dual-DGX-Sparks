@@ -2,6 +2,18 @@
 
 Notable changes to this deployment. Format follows [Keep a Changelog](https://keepachangelog.com/1.1.0/).
 
+## 2026-09-26 (opt-in probabilistic MTP drafting)
+
+### Added
+
+- **`MTP_DRAFT_SAMPLE_METHOD=greedy|probabilistic`** (default `greedy`,
+  vLLM 0.30 lane only). Adds `draft_sample_method` to the speculative
+  config; standard rejection stays vLLM's default. Fails early on invalid
+  values, non-v030 lanes, and the mutually exclusive
+  `MTP_DRAFT_VOCAB`+probabilistic combination (`use_local_argmax_reduction`
+  is greedy-only). `tests/test_draft_sample_method.py` executes the real
+  config block and validation lines.
+
 ## 2026-09-25 (vLLM 0.30 lane, update)
 
 ### Changed

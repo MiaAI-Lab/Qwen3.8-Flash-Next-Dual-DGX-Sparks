@@ -155,6 +155,15 @@ fi
 # QSA Triton launch profile: stock | gb10 | path to JSON from files/qsa_gb10/bench_qsa_kernels.py
 QSA_PROFILE="${QSA_PROFILE:-stock}"
 MTP_DISABLE_BLOCK_DROP="${MTP_DISABLE_BLOCK_DROP:-0}"
+# How the MTP drafter picks tokens: greedy = argmax (one-hot during rejection
+# sampling); probabilistic = sample from the draft distribution and run the
+# full probability-ratio test (vllm draft_sample_method). Probabilistic costs
+# extra GPU memory for cached draft logits and is mutually exclusive with
+# MTP_DRAFT_VOCAB (use_local_argmax_reduction). vLLM 0.30 lane only.
+MTP_DRAFT_SAMPLE_METHOD="${MTP_DRAFT_SAMPLE_METHOD:-greedy}"
+case "$MTP_DRAFT_SAMPLE_METHOD" in greedy|probabilistic) ;; *) err "MTP_DRAFT_SAMPLE_METHOD must be greedy or probabilistic" ;; esac
+[[ "$MTP_DRAFT_SAMPLE_METHOD" == probabilistic && "$V030" != true ]] && err "MTP_DRAFT_SAMPLE_METHOD=probabilistic requires the vLLM 0.30 lane (V030=true / start-v030.sh)."
+[[ "$MTP_DRAFT_SAMPLE_METHOD" == probabilistic && -n "$MTP_DRAFT_VOCAB" ]] && err "MTP_DRAFT_SAMPLE_METHOD=probabilistic conflicts with MTP_DRAFT_VOCAB (use_local_argmax_reduction is greedy-only) - clear MTP_DRAFT_VOCAB or keep greedy drafting."
 MTP_INDEX_SHARE="${MTP_INDEX_SHARE:-false}"
 VLLM_QSA_DET_TOPK="${VLLM_QSA_DET_TOPK:-}"
 VLLM_MOE_DET_FINALIZE="${VLLM_MOE_DET_FINALIZE:-}"
@@ -915,6 +924,12 @@ if $DO_LAUNCH; then
         _SPEC_EXTRA=""
         [[ "$MTP_DISABLE_BLOCK_DROP" == "1" ]] && _SPEC_EXTRA+=',"disable_eagle_block_drop":true'
         [[ "$MTP_INDEX_SHARE" == "true" ]] && _SPEC_EXTRA+=',"index_share_for_mtp_iteration":true'
+        if [[ "$MTP_DRAFT_SAMPLE_METHOD" == probabilistic ]]; then
+            # Probabilistic drafting caches full draft logits per request slot
+            # (extra GPU memory); the MTP_DRAFT_VOCAB conflict is already
+            # rejected at parse time above, before anything launches.
+            _SPEC_EXTRA+=',"draft_sample_method":"probabilistic"'
+        fi
         if [[ -n "$MTP_DRAFT_VOCAB" ]]; then
             # get_top_tokens (added by patch_mtp_draft_vocab.py) is only reached
             # through this flag; it also cuts the draft all-gather from
