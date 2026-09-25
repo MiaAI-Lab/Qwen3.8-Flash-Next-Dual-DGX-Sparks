@@ -45,6 +45,7 @@ files/mtp_patched.py
 files/modelopt_patched.py
 files/qsa_ops_patched.py
 files/mtp_v030_patched.py
+files/v030_fp8kv/
 files/qsa_nvidia_patched.py
 files/overlay/*.py
 files/qsa_gb10/qsa.py
