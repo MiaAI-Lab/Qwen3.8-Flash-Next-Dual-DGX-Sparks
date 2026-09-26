@@ -13,6 +13,32 @@ Notable changes to this deployment. Format follows [Keep a Changelog](https://ke
   at 0.80 kept 4.5 GiB (head) and 7.8 GiB (worker) through a 1-hour soak. The KV
   pool shrinks by about 4 GiB per node; decode speed does not depend on GMU.
 
+## 2026-09-25 (vLLM 0.30 lane, update)
+
+### Changed
+
+- **The lane sets `VLLM_USE_BREAKABLE_CUDAGRAPH=0`.** vLLM 0.30 enables it
+  for Qwen4Exp. On this pair it made decode vary 10-18% between identical
+  runs (prose S=4: 118 / 149 / 138 / 109) and averaged 13-19% below #66 at
+  S>=2. With it off: about 2% variation, prose 60.0 / 95.5 / 145.2 / 234.8 and
+  code 76.5 / 140.2 / 248.0 / 441.2 tok/s at S=1/2/4/8. NLL and prefix-cache
+  hits unchanged.
+- **Opt-in FP8 KV** (`OVERRIDE_KV_CACHE_DTYPE=fp8`) via a backport of
+  vllm#55557: 2.64M KV tokens, NLL 1.328 / 1.334, needles 3/3 at 200k, decode
+  about 5% slower than BF16. BF16 stays the default.
+- **Kernel free-page reserve: measured, not recommended here.** The single
+  kit's `sysctl-spark3.conf` (`vm.min_free_kbytes=4 GiB`,
+  `watermark_scale_factor=300`) on both nodes cost 7-14% decode (code S=8
+  417 -> 360 tok/s), made MemAvailable read 0 GiB under load (false
+  low-memory alarms) and still logged one `NV_ERR_NO_MEMORY` in 25 minutes.
+  Without it the 1-hour soak logged one on the worker (MemFree ~1.0 GiB) with
+  no failed request.
+
+### Measured
+
+- 1-hour soak on the lane defaults, 6 workers: 1,349 requests, 1,348 correct,
+  0 server errors, 0 preemptions, 0 tracebacks on either node.
+
 ## 2026-09-25 (vLLM 0.30 lane)
 
 ### Added

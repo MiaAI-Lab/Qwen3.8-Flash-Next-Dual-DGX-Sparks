@@ -75,12 +75,19 @@ docker pull vllm/vllm-openai:v0.30.0
 ./start-v030.sh --launch
 ```
 
-- **Same decode speed** as the day-0 lane, **2x faster multi-turn TTFT**
-  (0.28 s vs 0.63 s), and the #62 first-repeat miss is fixed. See CHANGELOG
-  2026-09-25.
-- **One overlay** instead of seven: the reduced draft vocabulary
-  (`files/patch_mtp_draft_vocab_v030.py`).
-- **BF16 KV only** (1.47M tokens at GMU 0.80). v0.30's QSA has no FP8 KV path.
+- **Decode at or above the day-0 lane** (prose 60.0 vs 56.3 tok/s at 1
+  stream, code 441 vs 422 at 8), **2x faster multi-turn TTFT** (0.28-0.40 s vs
+  0.63 s), and the #62 first-repeat miss is fixed. See CHANGELOG 2026-09-25.
+- **Breakable CUDA graphs off.** vLLM 0.30 turns `VLLM_USE_BREAKABLE_CUDAGRAPH`
+  on for this model; on GB10 that made decode vary 10-18% between identical
+  runs and lose 13-19% at S>=2. The lane sets it to 0
+  (`V030_BREAKABLE_CUDAGRAPH=1` restores the upstream default).
+- **BF16 KV by default** (1.52M tokens at GMU 0.80, 5.8x a 262k request).
+  `OVERRIDE_KV_CACHE_DTYPE=fp8 ./start-v030.sh --launch` gives 2.64M tokens
+  through a backport of vllm#55557 (`files/patch_qsa_fp8_kv_v030.py`, delete it
+  once the image is vLLM 0.31+), at about 5% slower decode.
+- **Overlays:** the reduced draft vocabulary
+  (`files/patch_mtp_draft_vocab_v030.py`), plus the FP8 backport when enabled.
 - **Not supported on this lane**: `FP8_DENSE`, `QSA_PROFILE`, the
   determinism knobs.
 
