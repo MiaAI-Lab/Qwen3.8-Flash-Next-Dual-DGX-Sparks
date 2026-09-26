@@ -2,6 +2,17 @@
 
 Notable changes to this deployment. Format follows [Keep a Changelog](https://keepachangelog.com/1.1.0/).
 
+## 2026-09-26
+
+### Changed
+
+- **`.env.sample` ships `GPU_MEMORY_UTILIZATION=0.80` (was 0.835).** At 0.835 the
+  driver held 114.5 GiB per node, and a 6-worker mixed-traffic soak ran both nodes
+  at 0.3-0.9 GiB `MemAvailable`, where GB10 boxes hard-reset. Stopped nodes
+  returned to 116-117 GiB free, so this is the budget, not a leak. The v0.30 lane
+  at 0.80 kept 4.5 GiB (head) and 7.8 GiB (worker) through a 1-hour soak. The KV
+  pool shrinks by about 4 GiB per node; decode speed does not depend on GMU.
+
 ## 2026-09-25
 
 All measured on this kit's pair (spark head + gigabyte worker, CX7 RoCE, NFS

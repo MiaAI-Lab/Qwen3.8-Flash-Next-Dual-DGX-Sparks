@@ -16,7 +16,7 @@ Based on [getrefined/Qwen3.8-Flash-Next-NVFP4-vLLM-DGX-Spark](https://github.com
 
 All numbers in **KV cache budget** and **Default runtime** below were read from the running
 server (`docker logs vllm-fn`, `docker inspect vllm-fn`) — they are measurements, not estimates.
-That container runs `GPU_MEMORY_UTILIZATION=0.835`, i.e. the value `.env` / `.env.sample` ship today.
+That container runs `GPU_MEMORY_UTILIZATION=0.835`, the value `.env.sample` shipped until 2026-09-26 (now 0.80, see CHANGELOG).
 
 ## Prerequisites
 
@@ -188,7 +188,7 @@ every measurement in this README.
 | `MAX_MODEL_LEN` | `1000000` | `1000000` | Context length (262144 = native, no YaRN) |
 | `YARN_ENABLE` | `true` | `true` | Extend context via YaRN rope scaling — **auto force-disabled when `MAX_MODEL_LEN` ≤ 262144** |
 | `YARN_FACTOR` | `4.0` | `4.0` | 262144 × 4.0 ≈ 1M |
-| `GPU_MEMORY_UTILIZATION` | `0.835` | `0.835` | Fraction of the 121.69 GiB budgeted by vLLM (see [KV cache budget](#kv-cache-budget)) |
+| `GPU_MEMORY_UTILIZATION` | `0.80` | `0.835` | Fraction of the 121.69 GiB budgeted by vLLM (see [KV cache budget](#kv-cache-budget)) |
 | `MAX_NUM_SEQS` | `8` | `8` | Max concurrent sequences |
 | `MAX_NUM_BATCHED_TOKENS` | `8192` | `8192` | Prefill chunk / cudagraph ceiling |
 | `PORT` | `8888` | `8888` | API server port (`--network host`) |
