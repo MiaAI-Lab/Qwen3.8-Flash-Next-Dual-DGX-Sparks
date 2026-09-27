@@ -712,7 +712,7 @@ The decaying per-position acceptance curve is the check that matters: a wrong bl
 shape would show up as near-random acceptance, not as a crash.
 
 Concurrency and prefill numbers for this configuration are in
-[Performance](#performance-nvidiaqwen38-flash-next-nvfp4-tp2ep-mtp3-262144-ctx-gmu-0835).
+[Performance](#day-0-lane-gmu-0835).
 
 ## Reduced-vocabulary MTP drafting
 
@@ -848,9 +848,42 @@ answers, and fall back to `MAX_MODEL_LEN=262144` / `YARN_ENABLE=false` for compa
 > `ple_embedding_dtype`), so `YARN_ENABLE=true` changes rope for the first time — treat 1M as
 > **unvalidated** on this kit and benchmark it before trusting long-context answers.
 
-## Performance (nvidia/Qwen3.8-Flash-Next-NVFP4, TP2+EP, MTP=3, 262144 ctx, GMU 0.835)
+## Performance (nvidia/Qwen3.8-Flash-Next-NVFP4, TP2+EP, MTP=3, 262144 ctx)
 
 Measured with [**sparkDash**](https://github.com/MiaAI-Lab/sparkDash) against the running server.
+
+### vLLM 0.30 lane (2026-09-27)
+
+`vllm/vllm-openai:v0.30.0`, GMU 0.80, BF16 KV (1,340,476 tokens), `MAX_NUM_SEQS=8`, 47k draft
+vocab, breakable CUDA graphs off. sparkDash decode bench, 512 tokens per stream, one run per
+prompt type. Aggregate / per-stream decode tok/s:
+
+| Concurrency | structured | prose | code |
+|---|---|---|---|
+| ×1 | 76.0 / 76.0 | 59.2 / 59.2 | 66.6 / 66.6 |
+| ×2 | 126.6 / 63.9 | 75.1 / 37.7 | 140.8 / 70.4 |
+| ×4 | 165.9 / 42.4 | 118.5 / 29.9 | 245.6 / 61.4 |
+| ×8 | 258.5 / 32.5 | 216.4 / 28.8 | **313.6** / 39.2 |
+| ×16 | 326.3 / 41.5 | 194.9 / 25.5 | 327.5 / 42.7 |
+
+×16 is over `MAX_NUM_SEQS=8`: half the streams queue, so mean TTFT jumps to 6.5-9.7 s (vs
+0.1-0.4 s at ×1-×8) and aggregate is not a batch-16 number. Code drafts best, prose worst.
+A structured run earlier the same session gave 210.9 at ×4 and 308.1 at ×8, so expect ±20%
+between single runs at mid concurrency.
+
+| Prompt | Tokens | Throughput | TTFT |
+|---|---|---|---|
+| 1k | 1,060 | 2791.3 tok/s | 0.38 s |
+| 4k | 4,133 | 3313.5 tok/s | 1.25 s |
+| 16k | 16,421 | **3489.8 tok/s** | 4.71 s |
+| 32k | 32,804 | 2982.3 tok/s | 11.00 s |
+| 64k | 65,576 | 2045.7 tok/s | 32.05 s |
+| 128k | 131,107 | 2897.6 tok/s | 45.25 s |
+
+128k reading faster than 64k reproduced across two runs; it is not explained yet.
+
+### Day-0 lane (GMU 0.835)
+
 Configuration at capture: **fp8 KV** (the shipped default) **plus the 65,536-id balanced MTP draft
 vocabulary** — at capture time the draft vocab was *not* a default, it was passed via
 `MTP_DRAFT_VOCAB` (see
@@ -860,7 +893,7 @@ draft vocab and expect the decode column to move further; the prefill column sho
 47k-default A/B on this kit (measured on the nvidia checkpoint, NFS weights) is tabulated in
 the draft-vocab section above.
 
-### Decode — prose, concurrency sweep
+#### Decode — prose, concurrency sweep
 
 | Concurrency | Aggregate | Per stream | TTFT |
 |---|---|---|---|
@@ -876,7 +909,7 @@ per-stream cost only starts to bite once the batch itself fills the step. (Specu
 normally contributes to that decay — drafts compete with real tokens for the step budget — but
 acceptance was not measured per concurrency level here, so treat the split as unattributed.)
 
-### Prefill
+#### Prefill
 
 | Prompt | Tokens | Throughput | TTFT |
 |---|---|---|---|
@@ -889,7 +922,7 @@ acceptance was not measured per concurrency level here, so treat the split as un
 Prefill is flat at ~2.96k tok/s from 16k to 64k and sheds 8% by 128k — QSA keeps attention from
 dominating at long context, so TTFT stays close to linear in prompt length.
 
-### Against the previous bf16-KV, full-vocabulary run
+#### Against the previous bf16-KV, full-vocabulary run
 
 Same kit, same checkpoint, same GMU. Both changes (fp8 KV, reduced draft vocab) are folded in, so
 the deltas are not individually attributable — the per-lever measurements are in
