@@ -59,3 +59,15 @@ files/draft_vocab_*.txt
 # MTP_DRAFT_VOCAB default in .env.sample work out of the box. Generated
 # vocabularies stay untracked.
 !files/draft_vocab_en_code_47k.txt
+# Language-extended variants (65,536 rows each, the 47k floor + that
+# language's Wikipedia; built by files/build_draft_vocab_extend.py, the
+# single-Spark recipe's ES method). For deployments serving that language's
+# traffic; see README "Reduced-vocabulary MTP drafting".
+!/files/draft_vocab_es_en_code_65k.txt
+!/files/draft_vocab_zh_en_code_65k.txt
+!/files/draft_vocab_ja_en_code_65k.txt
+!/files/draft_vocab_de_en_code_65k.txt
+!/files/draft_vocab_pt_en_code_65k.txt
+!/files/draft_vocab_fr_en_code_65k.txt
+!/files/draft_vocab_ru_en_code_65k.txt
+!/files/build_draft_vocab_extend.py
