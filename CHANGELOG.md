@@ -2,6 +2,31 @@
 
 Notable changes to this deployment. Format follows [Keep a Changelog](https://keepachangelog.com/1.1.0/).
 
+## 2026-09-28
+
+### Added
+
+- **Language-extended draft vocabularies for es, zh, ja, de, pt, fr, ru** —
+  `files/draft_vocab_<lang>_en_code_65k.txt` (65,536 rows each) and
+  `files/build_draft_vocab_extend.py` (the single-Spark recipe's ES method,
+  ported with a per-shard spread report). Each file: this kit's 47,149-id
+  47k file whole as a floor (verified: all present in every file), all 400
+  byte-fallback ids pinned unconditionally, 18,387 ids added by frequency
+  over 668 MiB of that language's Wikipedia. Switch with
+  `MTP_DRAFT_VOCAB=files/draft_vocab_<lang>_en_code_65k.txt`.
+  Held-out Wikipedia coverage (68 MiB disjoint tail per language):
+  es 63.8→99.3%, zh 34.7→96.7%, ja 30.0→99.7%, de 60.2→99.5%,
+  pt 65.4→99.2%, fr 69.4→99.5%, ru 31.5→99.7%. At TP=2 the slowest rank's
+  draft shard grows ~0.22 → 0.23–0.29 GiB per draft step (the language ids
+  land mostly in rank 0's range); correctness is unchanged either way
+  (rejection sampling). **Measured (2026-09-29, one boot per arm, temp 0,
+  thinking off, accepted/draft from /metrics):** es 50.7 → 60.5 tok/s
+  (acc 1.35 → 1.88), zh 41.5 → 56.4 (0.96 → 1.65), ja acc 0.84 → 1.34;
+  English control 58.8 → 57.3–64.0, acc 2.13 flat. Baseline accepted/draft
+  by language — ru 0.79, ja 0.84, zh 0.96, de 1.19, fr 1.31, es 1.35,
+  pt 1.41, en 2.13. de/ru arms and a matched second baseline still in
+  flight; see the README section.
+
 ## 2026-09-26
 
 ### Changed

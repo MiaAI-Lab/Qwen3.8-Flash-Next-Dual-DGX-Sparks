@@ -818,6 +818,61 @@ full-vocabulary argmax restricted to the draft set — run it after touching the
 > upstream refuses to engage at `tp_size != 1`, since its reduced head is a plain matmul rather
 > than a vocab-parallel one. FR-Spec is the general technique.
 
+
+### Serving other languages: 65k draft vocabs
+
+`files/draft_vocab_{es,zh,ja,de,pt,fr,ru}_en_code_65k.txt` — the single-Spark
+recipe's language-extend method (`files/build_draft_vocab_extend.py`, ported
+here) applied to this kit's 47k floor: the 47,149-id file whole as a floor
+(verified in every file), all 400 byte-fallback ids pinned unconditionally,
+then 18,387 ids by frequency over 668 MiB of that language's Wikipedia,
+65,536 rows. Switch with `MTP_DRAFT_VOCAB=files/draft_vocab_<lang>_en_code_65k.txt`.
+
+The 47k floor covers other languages poorly. Measured on 68 MiB of held-out
+(disjoint) Wikipedia per language, 12–20M token occurrences each:
+
+| language | 47k coverage | 65k coverage |
+|---|---|---|
+| Spanish | 63.8% | 99.3% |
+| Chinese | 34.7% | 96.7% |
+| Japanese | 30.0% | 99.7% |
+| German | 60.2% | 99.5% |
+| Portuguese | 65.4% | 99.2% |
+| French | 69.4% | 99.5% |
+| Russian | 31.5% | 99.7% |
+
+Correctness is identical either way (rejection sampling); poor coverage only
+costs speed. The TP=2 cost of a language file, stated honestly: the added
+language ids land mostly in rank 0's id range, so the *slowest* rank's draft
+shard grows from ~0.22 GiB (47k, 97% on rank 0) to 0.23–0.29 GiB (65k)
+against the full 0.57 GiB per-rank head — about 20% of the byte saving at
+the waiting rank. zh Wikipedia alone spans 152k distinct ids, so zh tops out
+at 96.7% even at 65,536 rows.
+
+Wikipedia-only build (no model-output corpus; see the single-Spark README
+section for the rebuild path if acceptance measures low). Watch
+`spec_decode_num_accepted_tokens_per_pos_total` in `/metrics` after switching.
+
+**Measured on this kit** (2026-09-29, one boot per arm through `lmswitch`,
+`.env.sample` profile, medians over 400-token completions, temperature 0,
+thinking off; `accepted/draft` from `/metrics` deltas):
+
+| language | 47k tok/s | lang 65k tok/s | 47k acc/draft | lang 65k acc/draft |
+|---|---|---|---|---|
+| Spanish | 50.7 | **60.5** (+19%) | 1.35 | **1.88** |
+| Chinese | 41.5 | **56.4** (+36%) | 0.96 | **1.65** |
+| Japanese | 36.8 | 39.4 *(trimmed protocol)* | 0.84 | **1.34** |
+| English (control) | 58.8 | 57.3–64.0 | 2.13 | 2.09–2.14 |
+
+German and Russian arms, and a matched second 47k baseline, are in flight;
+this table is the first block of the run and the PR will carry the rest.
+
+The baseline's own accepted/draft per language is the whole story in one
+line — **ru 0.79, ja 0.84, zh 0.96, de 1.19, fr 1.31, es 1.35, pt 1.41,
+en 2.13**: the three languages with the worst 47k coverage are the three
+drafting at ≈0.8 accepted tokens per proposal, i.e. barely speculative
+decoding at all. The gain tracks that ordering.
+
 ## YaRN (1M context)
 
 ```bash
