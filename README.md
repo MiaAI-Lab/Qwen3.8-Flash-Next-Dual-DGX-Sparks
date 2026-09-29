@@ -869,18 +869,21 @@ baseline measured with the same set.
 | Chinese | 24.3 | **32.7** | **+35%** | 0.45 | **1.14** |
 | Chinese (full set) | 41.5 | **56.4** | **+36%** | 0.96 | **1.65** |
 | Spanish | 50.7 | **60.5** | **+19%** | 1.35 | **1.88** |
+| French | 34.0 | **42.3** | **+24%** | 0.92 | **1.34** |
+| Portuguese | 33.0 | **38.4** | **+16%** | 0.96 | **1.39** |
 | German | 31.2 | 32.0 | +3% *(within noise)* | 0.80 | **1.28** |
 | English (control) | 56.3 | 49.4–64.0 | ~flat | 2.12 | 1.98–2.15 |
 
-Two honest readings. **Acceptance is the robust signal**: every language arm
-raises accepted tokens per proposal substantially (ru 0.39 → 1.55,
-zh 0.45 → 1.14, ja 0.45 → 1.34, de 0.80 → 1.28, es 1.35 → 1.88) while the
-English control sits at 1.98–2.15 in every arm. **tok/s is noisier**: the
-English control alone spans 49.4–64.0 tok/s across seven boots of the same
-configuration (±12% boot-to-boot), so German's +3% is inside the noise and its
-acceptance gain (0.80 → 1.28) is the better evidence for it; the other four
-languages clear the noise by a wide margin. Portuguese and French have files
-but were not benchmarked (their single-Spark deltas were +10% and +14%).
+Two honest readings. **Acceptance is the robust signal**: every one of the
+seven language arms raises accepted tokens per proposal substantially
+(ru 0.39 → 1.55, zh 0.45 → 1.14, ja 0.45 → 1.34, de 0.80 → 1.28,
+pt 0.96 → 1.39, fr 0.92 → 1.34, es 1.35 → 1.88) while the English control
+sits at 1.98–2.15 in every arm. **tok/s is noisier**: the English control
+alone spans 49.4–64.0 tok/s across nine boots of the same configuration
+(±12% boot-to-boot), so German's +3% is inside the noise and its acceptance
+gain (0.80 → 1.28) is the better evidence for it; the other six languages
+clear the noise by a wide margin, and the ordering tracks baseline coverage
+exactly.
 
 The trimmed-set baseline's accepted/draft per language is the mechanism in
 one line: **ru 0.39, zh 0.45, ja 0.45, de 0.80, pt 0.96, fr 0.92, es 0.94,
