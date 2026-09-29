@@ -875,22 +875,26 @@ Raw is kept alongside for transparency.
 | Japanese | 25.4 | **39.4** | +55% | **+37%** | 0.45 | **1.34** |
 | Chinese | 24.3 | **32.7** | +35% | **+19%** | 0.45 | **1.14** |
 | Chinese (full set) | 41.5 | **56.4** | +36% | **+39%** | 0.96 | **1.65** |
-| German | 31.2 | 32.0 | +3% | **+17%** | 0.80 | **1.28** |
+| German | 30.4 / 32.8 † | **40.1** † | +27% | **+31…+36%** † | 0.78 / 0.85 | **1.30 / 1.50** |
 | Spanish | 50.7 | **60.5** | +19% | **+20%** | 1.35 | **1.88** |
 | French | 34.0 | **42.3** | +24% | **+10%** | 0.92 | **1.34** |
 | Portuguese | 33.0 | **38.4** | +16% | **+9%** | 0.96 | **1.39** |
 | English (control) | 56.3 | 49.4–64.0 | ~flat | ~flat | 2.12 | 1.98–2.15 |
 
-**German is the case that proves the normalization is needed.** Its arm booted
-at 49.4 tok/s on the English control — the slowest of the ten — so its raw +3%
-is the vocabulary gain buried under a slow boot, not a small gain. Normalized,
-it is +17%, which agrees with the +14…+16% measured for German on the
-single-Spark recipe (TP=1). The same correction trims ru, ja, zh, fr and pt,
-whose raw numbers were partly riding on fast boots.
+**German was re-measured with an ABBA protocol** (de-65k / 47k / 47k /
+de-65k, four boots, baseline measured *inside* the same window) because its
+first single-boot cell came from the slowest boot of the whole project. Result:
+**+31…+36% normalized, acceptance 0.81 → 1.40** — the original +3% raw and the
++17% normalized estimate were both too low. The pair is what settles it: the
+two de-65k arms read 29% apart raw (31.10 and 40.13 tok/s) but agree at +31%
+and +36% once each is divided by its own English control, so the disagreement
+was boot speed, not the vocabulary. The two 47k arms agreed to 8% de / 0.7%
+control. † those four cells are the ABBA run, not the first pass; the other
+rows are the first pass and have not been re-run.
 
 **Acceptance is the mechanism, and it needs no normalization**: every one of
 the seven language arms raises accepted tokens per proposal substantially
-(ru 0.39 → 1.55, zh 0.45 → 1.14, ja 0.45 → 1.34, de 0.80 → 1.28,
+(ru 0.39 → 1.55, zh 0.45 → 1.14, ja 0.45 → 1.34, de 0.81 → 1.40,
 pt 0.96 → 1.39, fr 0.92 → 1.34, es 1.35 → 1.88) while the English control sits
 at 1.98–2.15 in every arm. The normalized ordering still tracks baseline
 coverage: the three deepest holes (ru 31.5%, ja 30.0%, zh 34.7% held-out) take
@@ -900,11 +904,14 @@ smallest.
 **Caveat on the method.** Normalizing against a control from a *different*
 workload (English prose) assumes the boot's speed difference transfers to the
 language prompts; it is a correction, not a substitute for a clean
-measurement. The proper protocol treats the English control as a validity
-check per boot and **re-runs** an arm whose control falls outside the
-established band, the way the Spanish A/B used interleaved ABBA ordering. That
-harness change is not in this PR; the German arm in particular deserves a
-re-boot before its +17% is quoted as final.
+measurement. German now has the clean measurement (ABBA, two arms each side,
+agreements reported above), which is why its caveat is retired and it exceeds
+the single-Spark figure (+18% normalized, +14…+16% raw) rather than matching
+it — at TP=2 the larger recovered headroom shows up more in tok/s. The other
+six rows remain single-boot normalized values and deserve the same treatment
+before being quoted as final. The proper harness change, not in this PR: treat
+the English control as a per-boot validity check and **re-run** any arm whose
+control falls outside the established band.
 
 
 ## YaRN (1M context)
