@@ -855,23 +855,40 @@ section for the rebuild path if acceptance measures low). Watch
 
 **Measured on this kit** (2026-09-29, one boot per arm through `lmswitch`,
 `.env.sample` profile, medians over 400-token completions, temperature 0,
-thinking off; `accepted/draft` from `/metrics` deltas):
+thinking off; `accepted/draft` from `/metrics` deltas). Two prompt sets were
+used: the full one (5 prompts × 2 reps) for the first baseline, the es arm and
+the first zh arm, and a trimmed one (3 prompts × 1 rep, dropping the
+mechanical counting and JSON prompts, which draft near-perfectly and flatter
+the baseline) for the rest — so each language is compared **only** against the
+baseline measured with the same set.
 
-| language | 47k tok/s | lang 65k tok/s | 47k acc/draft | lang 65k acc/draft |
-|---|---|---|---|---|
-| Spanish | 50.7 | **60.5** (+19%) | 1.35 | **1.88** |
-| Chinese | 41.5 | **56.4** (+36%) | 0.96 | **1.65** |
-| Japanese | 36.8 | 39.4 *(trimmed protocol)* | 0.84 | **1.34** |
-| English (control) | 58.8 | 57.3–64.0 | 2.13 | 2.09–2.14 |
+| language | 47k tok/s | lang 65k tok/s | change | 47k acc/draft | lang 65k acc/draft |
+|---|---|---|---|---|---|
+| Russian | 24.3 | **40.5** | **+67%** | 0.39 | **1.55** |
+| Japanese | 25.4 | **39.4** | **+55%** | 0.45 | **1.34** |
+| Chinese | 24.3 | **32.7** | **+35%** | 0.45 | **1.14** |
+| Chinese (full set) | 41.5 | **56.4** | **+36%** | 0.96 | **1.65** |
+| Spanish | 50.7 | **60.5** | **+19%** | 1.35 | **1.88** |
+| German | 31.2 | 32.0 | +3% *(within noise)* | 0.80 | **1.28** |
+| English (control) | 56.3 | 49.4–64.0 | ~flat | 2.12 | 1.98–2.15 |
 
-German and Russian arms, and a matched second 47k baseline, are in flight;
-this table is the first block of the run and the PR will carry the rest.
+Two honest readings. **Acceptance is the robust signal**: every language arm
+raises accepted tokens per proposal substantially (ru 0.39 → 1.55,
+zh 0.45 → 1.14, ja 0.45 → 1.34, de 0.80 → 1.28, es 1.35 → 1.88) while the
+English control sits at 1.98–2.15 in every arm. **tok/s is noisier**: the
+English control alone spans 49.4–64.0 tok/s across seven boots of the same
+configuration (±12% boot-to-boot), so German's +3% is inside the noise and its
+acceptance gain (0.80 → 1.28) is the better evidence for it; the other four
+languages clear the noise by a wide margin. Portuguese and French have files
+but were not benchmarked (their single-Spark deltas were +10% and +14%).
 
-The baseline's own accepted/draft per language is the whole story in one
-line — **ru 0.79, ja 0.84, zh 0.96, de 1.19, fr 1.31, es 1.35, pt 1.41,
-en 2.13**: the three languages with the worst 47k coverage are the three
-drafting at ≈0.8 accepted tokens per proposal, i.e. barely speculative
-decoding at all. The gain tracks that ordering.
+The trimmed-set baseline's accepted/draft per language is the mechanism in
+one line: **ru 0.39, zh 0.45, ja 0.45, de 0.80, pt 0.96, fr 0.92, es 0.94,
+en 2.12** — the worst-covered languages draft at well under one accepted
+token per proposal, i.e. barely speculative decoding at all, and they are the
+arms with the large gains. (On the full prompt set the same ordering holds at
+higher absolute values: ru 0.79, ja 0.84, zh 0.96, de 1.19, fr 1.31, es 1.35,
+pt 1.41, en 2.13.)
 
 ## YaRN (1M context)
 
