@@ -27,12 +27,17 @@ Notable changes to this deployment. Format follows [Keep a Changelog](https://ke
   tok/s against the English tok/s of the same boot — with the raw figure in
   the README: ru +53% (raw +67%, acc 0.39 → 1.55), ja +37% (+55%, 0.45 →
   1.34), zh +19% / +39% on the full set (+35% / +36%, 0.45 → 1.14 and
-  0.96 → 1.65), de +17% (raw +3% — that arm's control was the slowest of the
-  ten at 49.4, and +17% agrees with the +14…+16% measured for German on the
-  single-Spark recipe; acc 0.80 → 1.28), es +20% (+19%, 1.35 → 1.88),
+  0.96 → 1.65), es +20% (+19%, 1.35 → 1.88),
   fr +10% (+24%, 0.92 → 1.34), pt +9% (+16%, 0.96 → 1.39). English control
-  flat at acc 1.98–2.15. All seven languages measured; the German arm deserves
-  a re-boot before +17% is final (see the README method caveat).
+  flat at acc 1.98–2.15. **German re-measured with an ABBA protocol**
+  (de-65k / 47k / 47k / de-65k, baseline inside the same window): **+31…+36%
+  normalized, acceptance 0.81 → 1.40** — its first cell came from the slowest
+  boot of the run (raw +3%, normalized estimate +17%), both too low. The two
+  de-65k arms read 29% apart raw but agree at +31% / +36% normalized, so the
+  disagreement was boot speed; the 47k pair agreed to 8% de / 0.7% control.
+  At TP=2 German now exceeds the single-Spark figure (+18% normalized).
+  The other six rows are single-boot normalized values; see the README
+  method caveat.
 
 ## 2026-09-26
 
