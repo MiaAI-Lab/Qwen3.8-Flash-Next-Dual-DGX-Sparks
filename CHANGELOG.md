@@ -21,14 +21,18 @@ Notable changes to this deployment. Format follows [Keep a Changelog](https://ke
   land mostly in rank 0's range); correctness is unchanged either way
   (rejection sampling). **Measured (2026-09-29, one boot per arm, temp 0,
   thinking off, accepted/draft from /metrics; each language compared only
-  against the baseline measured with the same prompt set):** ru 24.3 → 40.5
-  (acc 0.39 → 1.55), ja 25.4 → 39.4 (0.45 → 1.34),
-  zh 24.3 → 32.7 (0.45 → 1.14; 41.5 → 56.4 and 0.96 → 1.65 on the full
-  prompt set), fr 34.0 → 42.3 (0.92 → 1.34), es 50.7 → 60.5 (1.35 → 1.88),
-  pt 33.0 → 38.4 (0.96 → 1.39), de 31.2 → 32.0 (+3%, inside the ±12%
-  boot-to-boot spread the English control showed across nine boots;
-  acc 0.80 → 1.28), English control flat at acc 1.98–2.15. All seven
-  languages measured; see the README section.
+  against the baseline measured with the same prompt set).** The English
+  control spans 49.4–64.0 tok/s across ten boots of the same configuration
+  (±12%), so the quoted figure is **control-normalized** — the language's
+  tok/s against the English tok/s of the same boot — with the raw figure in
+  the README: ru +53% (raw +67%, acc 0.39 → 1.55), ja +37% (+55%, 0.45 →
+  1.34), zh +19% / +39% on the full set (+35% / +36%, 0.45 → 1.14 and
+  0.96 → 1.65), de +17% (raw +3% — that arm's control was the slowest of the
+  ten at 49.4, and +17% agrees with the +14…+16% measured for German on the
+  single-Spark recipe; acc 0.80 → 1.28), es +20% (+19%, 1.35 → 1.88),
+  fr +10% (+24%, 0.92 → 1.34), pt +9% (+16%, 0.96 → 1.39). English control
+  flat at acc 1.98–2.15. All seven languages measured; the German arm deserves
+  a re-boot before +17% is final (see the README method caveat).
 
 ## 2026-09-26
 
