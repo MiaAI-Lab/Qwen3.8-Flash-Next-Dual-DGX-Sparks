@@ -2,6 +2,12 @@
 
 Notable changes to this deployment. Format follows [Keep a Changelog](https://keepachangelog.com/1.1.0/).
 
+## 2026-09-30
+
+### Fixed
+
+- **HTML gallery verifier.** `html/verify100.py` treated every `src` or `href` that starts with `d` as a data URI. `src="draw.js"` and `href="docs/style.css"` were reported clean. A real `data:` URI, a `#fragment`, and `javascript:` are still ignored. `src="app.js"` was already reported.
+
 ## 2026-09-28
 
 ### Added
