@@ -35,7 +35,7 @@ ALLOWED_URI = re.compile(
 SCHEME = re.compile(r"https?://", re.I)
 CSS_BAD = re.compile(r"""@import|(?<![A-Za-z-])url\(\s*(?=["']?(?!#|data:))""", re.I)
 TAG_BAD = re.compile(
-    r"""(?:src|href)\s*=\s*["'](?![\#d]|javascript:|\{\{)[^"']*["']""", re.I
+    r"""(?:src|href)\s*=\s*["'](?!#|data:|javascript:|\{\{)[^"']*["']""", re.I
 )
 
 
