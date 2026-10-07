@@ -821,7 +821,7 @@ full-vocabulary argmax restricted to the draft set — run it after touching the
 
 ### Serving other languages: 65k draft vocabs
 
-`files/draft_vocab_{es,zh,ja,de,pt,fr,ru}_en_code_65k.txt` — the single-Spark
+`files/draft_vocab_{es,zh,ja,de,pt,fr,ru,tr}_en_code_65k.txt` — the single-Spark
 recipe's language-extend method (`files/build_draft_vocab_extend.py`, ported
 here) applied to this kit's 47k floor: the 47,149-id file whole as a floor
 (verified in every file), all 400 byte-fallback ids pinned unconditionally,
@@ -829,7 +829,7 @@ then 18,387 ids by frequency over 668 MiB of that language's Wikipedia,
 65,536 rows. Switch with `MTP_DRAFT_VOCAB=files/draft_vocab_<lang>_en_code_65k.txt`.
 
 The 47k floor covers other languages poorly. Measured on 68 MiB of held-out
-(disjoint) Wikipedia per language, 12–20M token occurrences each:
+(disjoint) Wikipedia per language, 12–21M token occurrences each:
 
 | language | 47k coverage | 65k coverage |
 |---|---|---|
@@ -840,6 +840,7 @@ The 47k floor covers other languages poorly. Measured on 68 MiB of held-out
 | Portuguese | 65.4% | 99.2% |
 | French | 69.4% | 99.5% |
 | Russian | 31.5% | 99.7% |
+| Turkish | 61.5% | 99.5% |
 
 Correctness is identical either way (rejection sampling); poor coverage only
 costs speed. The TP=2 cost of a language file, stated honestly: the added
@@ -879,6 +880,7 @@ Raw is kept alongside for transparency.
 | Spanish | 50.7 | **60.5** | +19% | **+20%** | 1.35 | **1.88** |
 | French | 34.0 | **42.3** | +24% | **+10%** | 0.92 | **1.34** |
 | Portuguese | 33.0 | **38.4** | +16% | **+9%** | 0.96 | **1.39** |
+| Turkish ‡ | 33.6 | **45.8 / 45.9** ‡ | +36…+37% | **+32…+33%** ‡ | 0.62 | **1.26 / 1.25** |
 | English (control) | 56.3 | 49.4–64.0 | ~flat | ~flat | 2.12 | 1.98–2.15 |
 
 **German was re-measured with an ABBA protocol** (de-65k / 47k / 47k /
@@ -891,6 +893,8 @@ and +36% once each is divided by its own English control, so the disagreement
 was boot speed, not the vocabulary. The two 47k arms agreed to 8% de / 0.7%
 control. † those four cells are the ABBA run, not the first pass; the other
 rows are the first pass and have not been re-run.
+
+**Turkish was measured A-B-A on a downstream install** (2026-10-07, 65k-tr / 47k / 65k-tr, three boots, same `.env`; MAX_MODEL_LEN 262144, MAX_NUM_SEQS 8, MTP k=3). ‡ This row uses its **own** prompt set, so read it only against itself: one prose prompt per language ("Write a detailed essay about the history of maritime navigation." and its Turkish translation), 3 reps, 400 tokens, `ignore_eos`, temperature 0, thinking off, after one discarded cold request; `accepted/draft` from `/metrics` deltas. Its English control reads 43.3 / 44.5 / 44.7 tok/s at 1.12 / 1.26 / 1.21 acc/draft — lower than the table's control because there are no near-perfect-draft prompts in it. The two 65k-tr arms agree within 0.2% raw and 0.01 acceptance. Built with `files/build_draft_vocab_extend.py` over 668 MiB of `wikimedia/wikipedia` `20231101.tr`: 47,149-id floor, 417 pinned, 18,363 added, 99.646% corpus coverage, rank spread [57764, 7772]; held-out coverage on 68 MiB disjoint articles (21.4M tokens). Turkish is agglutinative: at 61.5% held-out coverage — close to German's 60.2% — its 47k acceptance (0.62) sits well below German's (0.81), because the missing ids are inflectional suffixes (`asyon`, `unun`, ` tarihi`) that recur in nearly every word.
 
 **Acceptance is the mechanism, and it needs no normalization**: every one of
 the seven language arms raises accepted tokens per proposal substantially
